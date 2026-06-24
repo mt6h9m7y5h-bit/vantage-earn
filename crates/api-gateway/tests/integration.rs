@@ -463,6 +463,43 @@ async fn admin_stats_requires_secret() {
     std::env::remove_var("ADMIN_SECRET");
 }
 
+/// Optional Postgres smoke test — requires running DB:
+/// `DATABASE_URL=postgres://... cargo test -p api-gateway --test integration postgres_health_and_register -- --ignored --nocapture`
+#[tokio::test]
+#[ignore = "requires DATABASE_URL and running postgres (see scripts/test-postgres.sh)"]
+async fn postgres_health_and_register() {
+    let url = match std::env::var("DATABASE_URL") {
+        Ok(u) if !u.is_empty() => u,
+        _ => {
+            eprintln!("skip: set DATABASE_URL to run this test");
+            return;
+        }
+    };
+    std::env::set_var("DATABASE_URL", &url);
+
+    let state = AppState::connect().await;
+    assert!(state.store_healthy().await, "postgres ping failed");
+
+    let app = app(state);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["database"], true);
+
+    let (_user_id, _token) = register(&app).await;
+}
+
 #[tokio::test]
 async fn daily_challenge_bonus_on_fifth_watch() {
     let app = app(AppState::new());

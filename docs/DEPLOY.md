@@ -1,5 +1,35 @@
 # VANTAGE-EARN — Production (jedes Handy)
 
+## Lokal mit PostgreSQL (heute Abend testen)
+
+Docker muss laufen. Credentials wie in `.env.example`:
+
+```bash
+cd vantage-earn
+cp .env.example .env          # DATABASE_URL ist voreingestellt
+./scripts/dev-with-db.sh      # startet Postgres + API
+```
+
+Oder Schritt für Schritt:
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL=postgres://vantage:vantage@localhost:5432/vantage_earn
+cargo run -p api-gateway
+```
+
+Prüfen:
+
+```bash
+curl -s http://localhost:3000/health | jq
+# → "database": true
+./scripts/test-e2e.sh
+```
+
+Migrationen laufen automatisch beim API-Start (oder `./scripts/db-migrate.sh`).
+
+---
+
 ## Warum localhost nicht reicht
 
 | URL | Wer kann zugreifen |
@@ -9,6 +39,32 @@
 | **`https://deine-domain.de`** | **Jedes Handy weltweit** |
 
 Handys brauchen eine **öffentliche HTTPS-URL**. PWA-Installation funktioniert auf iPhone/Android nur mit HTTPS (Ausnahme: `localhost` beim Entwickeln).
+
+---
+
+## Render.com (morgen — mit PostgreSQL)
+
+Repo auf GitHub pushen, dann im [Render Dashboard](https://dashboard.render.com):
+
+```bash
+# Lokal: letzten Stand committen & pushen
+git push origin main
+```
+
+1. **New → Blueprint** → Repo auswählen → `render.yaml` erkennt Web + Postgres automatisch
+2. Deploy abwarten (~5–10 Min beim ersten Mal)
+3. Prüfen:
+
+```bash
+curl -s https://DEIN-SERVICE.onrender.com/health | jq
+# → "database": true, "status": "ok"
+```
+
+Demo-URL: `https://DEIN-SERVICE.onrender.com/demo`
+
+Migrationen laufen beim ersten API-Start automatisch (`sqlx::migrate!` in `PgStore::connect`).
+
+**Hinweis:** Free-Tier-Postgres und Web-Service schlafen nach Inaktivität — erster Request kann ~30 s dauern.
 
 ---
 

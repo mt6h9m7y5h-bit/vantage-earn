@@ -10,6 +10,10 @@ path = "src/lib.rs"
 name = "vantage-earn"
 path = "src/main.rs"
 
+[[bin]]
+name = "db-migrate"
+path = "src/bin/db-migrate.rs"
+
 [dependencies]
 ai-engine = { path = "../ai-engine" }
 axum.workspace = true

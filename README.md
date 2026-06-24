@@ -2,15 +2,30 @@
 
 AI-powered Watch-to-Earn platform — Rust monorepo (Phase 1 MVP).
 
-## Quick Start
+## Quick Start (mit PostgreSQL — empfohlen)
 
 ```bash
 cd vantage-earn
-cp .env.example .env   # optional
+cp .env.example .env
+./scripts/dev-with-db.sh
+```
+
+Oder manuell:
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL=postgres://vantage:vantage@localhost:5432/vantage_earn
 cargo run -p api-gateway
 ```
 
-Server: `http://localhost:3000`
+Server: `http://localhost:3000` — `/health` zeigt `"database": true` wenn Postgres verbunden ist.
+
+**Ohne Postgres** (nur schneller Smoke-Test, Daten gehen beim Neustart verloren):
+
+```bash
+unset DATABASE_URL
+cargo run -p api-gateway
+```
 
 **Web-App (PWA):** [http://localhost:3000/demo](http://localhost:3000/demo) — im Browser nutzen oder **zum Home-Bildschirm hinzufügen** (kein App Store nötig).
 
@@ -25,15 +40,14 @@ Für Production ist **HTTPS** erforderlich — dann funktioniert die App auf **j
 **Kostenlos jetzt:** [docs/FREE_HOSTING.md](./docs/FREE_HOSTING.md) (Cloudflare Tunnel, 0 €)  
 **Später 24/7:** [docs/DEPLOY.md](./docs/DEPLOY.md) (Fly.io / Render)
 
-### With PostgreSQL
+### DB-Hilfsskripte
 
-```bash
-docker compose up -d postgres
-export DATABASE_URL=postgres://vantage:vantage@localhost:5432/vantage_earn
-cargo run -p api-gateway
-```
-
-Without `DATABASE_URL`, the API uses an in-memory store (fine for local dev).
+| Skript | Zweck |
+|--------|--------|
+| `./scripts/db-up.sh` | Postgres per Docker starten |
+| `./scripts/db-migrate.sh` | Migrationen anwenden |
+| `./scripts/dev-with-db.sh` | DB + API in einem Schritt |
+| `./scripts/test-postgres.sh` | Smoke-Test mit Postgres |
 
 ### AI Copilot (optional)
 

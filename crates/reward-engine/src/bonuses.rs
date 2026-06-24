@@ -43,6 +43,31 @@ pub struct BonusCatalogItem {
     pub status: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct WatchBonusInput {
+    pub is_first_watch_today: bool,
+    pub last_daily_bonus_date: Option<NaiveDate>,
+    pub today: NaiveDate,
+    pub total_watches: u32,
+    pub milestones_claimed: u8,
+    pub streak_days: i32,
+    pub streak_7_bonus_claimed: bool,
+    pub watches_today: u32,
+    pub last_challenge_bonus_date: Option<NaiveDate>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CatalogInput {
+    pub streak_bonus_percent: u32,
+    pub total_watches: u32,
+    pub milestones_claimed: u8,
+    pub daily_bonus_claimed_today: bool,
+    pub streak_days: i32,
+    pub streak_7_bonus_claimed: bool,
+    pub challenge_watches_today: u32,
+    pub challenge_bonus_claimed_today: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct WatchBonusResult {
     pub flat_bonuses: Vec<BonusEarned>,
@@ -112,23 +137,24 @@ impl BonusEngine {
     }
 
     /// Evaluate one-time / flat bonuses after a completed watch.
-    pub fn evaluate_watch_bonuses(
-        is_first_watch_today: bool,
-        last_daily_bonus_date: Option<NaiveDate>,
-        today: NaiveDate,
-        total_watches: u32,
-        milestones_claimed: u8,
-        streak_days: i32,
-        streak_7_bonus_claimed: bool,
-        watches_today: u32,
-        last_challenge_bonus_date: Option<NaiveDate>,
-    ) -> (
+    pub fn evaluate_watch_bonuses(input: WatchBonusInput) -> (
         WatchBonusResult,
         u8,
         bool,
         Option<NaiveDate>,
         Option<NaiveDate>,
     ) {
+        let WatchBonusInput {
+            is_first_watch_today,
+            last_daily_bonus_date,
+            today,
+            total_watches,
+            milestones_claimed,
+            streak_days,
+            streak_7_bonus_claimed,
+            watches_today,
+            last_challenge_bonus_date,
+        } = input;
         let mut result = WatchBonusResult::default();
         let mut claimed = milestones_claimed;
         let mut streak_7_claimed = streak_7_bonus_claimed;
@@ -176,16 +202,17 @@ impl BonusEngine {
         (result, claimed, streak_7_claimed, daily_date, challenge_date)
     }
 
-    pub fn build_catalog(
-        streak_bonus_percent: u32,
-        total_watches: u32,
-        milestones_claimed: u8,
-        daily_bonus_claimed_today: bool,
-        streak_days: i32,
-        streak_7_bonus_claimed: bool,
-        challenge_watches_today: u32,
-        challenge_bonus_claimed_today: bool,
-    ) -> Vec<BonusCatalogItem> {
+    pub fn build_catalog(input: CatalogInput) -> Vec<BonusCatalogItem> {
+        let CatalogInput {
+            streak_bonus_percent,
+            total_watches,
+            milestones_claimed,
+            daily_bonus_claimed_today,
+            streak_days,
+            streak_7_bonus_claimed,
+            challenge_watches_today,
+            challenge_bonus_claimed_today,
+        } = input;
         let mut items = Vec::new();
 
         items.push(BonusCatalogItem {
@@ -212,9 +239,7 @@ impl BonusEngine {
 
         for (i, &threshold) in MILESTONE_THRESHOLDS.iter().enumerate() {
             let claimed = Self::is_milestone_claimed(milestones_claimed, i);
-            let status = if claimed {
-                "claimed".into()
-            } else if total_watches >= threshold {
+            let status = if claimed || total_watches >= threshold {
                 "claimed".into()
             } else {
                 "locked".into()
@@ -311,28 +336,52 @@ mod tests {
     use super::*;
     use chrono::NaiveDate;
 
+    fn watch_input(
+        is_first_watch_today: bool,
+        last_daily_bonus_date: Option<NaiveDate>,
+        today: NaiveDate,
+        total_watches: u32,
+        milestones_claimed: u8,
+        streak_days: i32,
+        streak_7_bonus_claimed: bool,
+        watches_today: u32,
+        last_challenge_bonus_date: Option<NaiveDate>,
+    ) -> WatchBonusInput {
+        WatchBonusInput {
+            is_first_watch_today,
+            last_daily_bonus_date,
+            today,
+            total_watches,
+            milestones_claimed,
+            streak_days,
+            streak_7_bonus_claimed,
+            watches_today,
+            last_challenge_bonus_date,
+        }
+    }
+
     #[test]
     fn daily_bonus_only_on_first_watch_of_day() {
         let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
-        let (r, _, _, date, _) = BonusEngine::evaluate_watch_bonuses(
+        let (r, _, _, date, _) = BonusEngine::evaluate_watch_bonuses(watch_input(
             true, None, today, 1, 0, 1, false, 1, None,
-        );
+        ));
         assert_eq!(r.flat_bonuses.len(), 1);
         assert_eq!(r.flat_bonuses[0].id, "daily_login");
         assert_eq!(date, Some(today));
 
-        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(watch_input(
             false, Some(today), today, 2, 0, 1, false, 2, None,
-        );
+        ));
         assert!(r2.flat_bonuses.iter().all(|b| b.id != "daily_login"));
     }
 
     #[test]
     fn milestone_unlocks_at_threshold() {
         let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
-        let (r, claimed, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+        let (r, claimed, _, _, _) = BonusEngine::evaluate_watch_bonuses(watch_input(
             false, Some(today), today, 10, 0, 3, false, 1, None,
-        );
+        ));
         assert!(r.flat_bonuses.iter().any(|b| b.id == "milestone_10"));
         assert!(BonusEngine::is_milestone_claimed(claimed, 0));
         assert!(!BonusEngine::is_milestone_claimed(claimed, 1));
@@ -341,15 +390,15 @@ mod tests {
     #[test]
     fn streak_7_bonus_once_per_cycle() {
         let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
-        let (r, _, claimed, _, _) = BonusEngine::evaluate_watch_bonuses(
+        let (r, _, claimed, _, _) = BonusEngine::evaluate_watch_bonuses(watch_input(
             false, Some(today), today, 5, 0, 7, false, 1, None,
-        );
+        ));
         assert!(r.flat_bonuses.iter().any(|b| b.id == "streak_7"));
         assert!(claimed);
 
-        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(watch_input(
             false, Some(today), today, 6, 0, 8, true, 1, None,
-        );
+        ));
         assert!(!r2.flat_bonuses.iter().any(|b| b.id == "streak_7"));
     }
 
@@ -385,21 +434,30 @@ mod tests {
     #[test]
     fn daily_challenge_bonus_on_fifth_watch() {
         let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
-        let (r, _, _, _, challenge_date) = BonusEngine::evaluate_watch_bonuses(
+        let (r, _, _, _, challenge_date) = BonusEngine::evaluate_watch_bonuses(watch_input(
             false, Some(today), today, 5, 0, 2, false, 5, None,
-        );
+        ));
         assert!(r.flat_bonuses.iter().any(|b| b.id == "daily_challenge"));
         assert_eq!(challenge_date, Some(today));
 
-        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(watch_input(
             false, Some(today), today, 6, 0, 2, false, 6, Some(today),
-        );
+        ));
         assert!(!r2.flat_bonuses.iter().any(|b| b.id == "daily_challenge"));
     }
 
     #[test]
     fn catalog_includes_all_bonus_types() {
-        let catalog = BonusEngine::build_catalog(5, 3, 0, false, 2, false, 2, false);
+        let catalog = BonusEngine::build_catalog(CatalogInput {
+            streak_bonus_percent: 5,
+            total_watches: 3,
+            milestones_claimed: 0,
+            daily_bonus_claimed_today: false,
+            streak_days: 2,
+            streak_7_bonus_claimed: false,
+            challenge_watches_today: 2,
+            challenge_bonus_claimed_today: false,
+        });
         let ids: Vec<_> = catalog.iter().map(|c| c.id.as_str()).collect();
         assert!(ids.contains(&"daily_login"));
         assert!(ids.contains(&"milestone_10"));

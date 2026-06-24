@@ -11,7 +11,8 @@ use fraud_engine::{FraudEngine, WatchSessionCheck, MAX_WATCHES_PER_DAY};
 use liquidity_engine::LiquidityEngine;
 use referral_engine::ReferralEngine;
 use reward_engine::{
-    BonusCatalogItem, BonusEarned, BonusEngine, DAILY_CHALLENGE_TARGET, RewardEngine,
+    BonusCatalogItem, BonusEarned, BonusEngine, CatalogInput, DAILY_CHALLENGE_TARGET,
+    RewardEngine,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -232,16 +233,16 @@ async fn get_stats(
     let daily_challenge_completed_today = AppState::challenge_bonus_claimed_today(&profile);
     let next_milestone =
         BonusEngine::next_milestone(profile.total_watches, profile.milestones_claimed);
-    let bonus_catalog = BonusEngine::build_catalog(
+    let bonus_catalog = BonusEngine::build_catalog(CatalogInput {
         streak_bonus_percent,
-        profile.total_watches,
-        profile.milestones_claimed,
+        total_watches: profile.total_watches,
+        milestones_claimed: profile.milestones_claimed,
         daily_bonus_claimed_today,
-        profile.streak_days,
-        profile.streak_7_bonus_claimed,
-        watches_today,
-        daily_challenge_completed_today,
-    );
+        streak_days: profile.streak_days,
+        streak_7_bonus_claimed: profile.streak_7_bonus_claimed,
+        challenge_watches_today: watches_today,
+        challenge_bonus_claimed_today: daily_challenge_completed_today,
+    });
 
     Ok(Json(UserStatsResponse {
         streak_days: profile.streak_days,
@@ -263,7 +264,7 @@ async fn get_stats(
         payout_first_time_note_de: PAYOUT_FIRST_TIME_NOTE_DE,
         challenge_watches_today: watches_today,
         challenge_target: DAILY_CHALLENGE_TARGET,
-        daily_challenge_completed_today: daily_challenge_completed_today,
+        daily_challenge_completed_today,
         bonus_catalog,
     }))
 }
@@ -392,15 +393,12 @@ async fn watch_complete(
     };
 
     let mut bonuses = bonus_result.flat_bonuses;
-    if bonus_result.surprise_multiplier.is_some() {
+    if let Some(multiplier) = bonus_result.surprise_multiplier {
         bonuses.insert(
             0,
             BonusEarned {
                 id: "surprise".into(),
-                title: format!(
-                    "Überraschung {}×",
-                    bonus_result.surprise_multiplier.unwrap()
-                ),
+                title: format!("Überraschung {multiplier}×"),
                 amount_usdt: bonus_result.surprise_extra_usdt,
             },
         );

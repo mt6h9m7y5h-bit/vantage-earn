@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use event_bus::EventBus;
-use reward_engine::{BonusEngine, RewardEngine, WatchBonusResult};
+use reward_engine::{BonusEngine, RewardEngine, WatchBonusInput, WatchBonusResult};
 use rust_decimal::Decimal;
 use referral_engine::ReferralEngine;
 use shared::{
@@ -373,17 +373,17 @@ impl AppState {
         profile.total_watches += 1;
 
         let (bonus_result, milestones_claimed, streak_7_claimed, daily_date, challenge_date) =
-            BonusEngine::evaluate_watch_bonuses(
+            BonusEngine::evaluate_watch_bonuses(WatchBonusInput {
                 is_first_watch_today,
-                profile.last_daily_bonus_date,
+                last_daily_bonus_date: profile.last_daily_bonus_date,
                 today,
-                profile.total_watches,
-                profile.milestones_claimed,
-                profile.streak_days,
-                profile.streak_7_bonus_claimed,
-                profile.watches_today,
-                profile.last_challenge_bonus_date,
-            );
+                total_watches: profile.total_watches,
+                milestones_claimed: profile.milestones_claimed,
+                streak_days: profile.streak_days,
+                streak_7_bonus_claimed: profile.streak_7_bonus_claimed,
+                watches_today: profile.watches_today,
+                last_challenge_bonus_date: profile.last_challenge_bonus_date,
+            });
 
         profile.milestones_claimed = milestones_claimed;
         profile.streak_7_bonus_claimed = streak_7_claimed;

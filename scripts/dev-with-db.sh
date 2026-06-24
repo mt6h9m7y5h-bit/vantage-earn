@@ -13,4 +13,4 @@ echo "→ Applying migrations..."
 "$ROOT/scripts/db-migrate.sh"
 
 echo "→ Starting api-gateway with PostgreSQL..."
-exec cargo run -p api-gateway
+exec cargo run -p api-gateway --bin vantage-earn

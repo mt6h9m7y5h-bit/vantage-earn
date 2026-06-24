@@ -2,6 +2,7 @@
 name = "api-gateway"
 version.workspace = true
 edition.workspace = true
+default-run = "vantage-earn"
 
 [lib]
 path = "src/lib.rs"

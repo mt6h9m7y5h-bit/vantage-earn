@@ -45,11 +45,16 @@ cargo run -p api-gateway
 
 See [docs/AI_COPILOT.md](./docs/AI_COPILOT.md) for architecture details.
 
+### Rewarded video ads
+
+Default is a **mock timer** (no real ads). For live AppLixir integration, set `AD_PROVIDER=applixir` and `APPLIXIR_API_KEY`. See [docs/ADS.md](./docs/ADS.md).
+
 ## API Endpoints
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/health` | — | Health check |
+| GET | `/config` | — | Public ad provider config (no secrets) |
 | POST | `/auth/register` | — | Create account (`referral_code` optional), returns JWT |
 | POST | `/auth/login` | — | Login with `user_id`, returns JWT |
 | GET | `/users/me/wallet` | JWT | Balance + trust score |

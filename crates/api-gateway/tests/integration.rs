@@ -77,6 +77,26 @@ async fn health_returns_ok() {
 }
 
 #[tokio::test]
+async fn public_config_returns_mock_by_default() {
+    let app = app(AppState::new());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["ad_provider"], "mock");
+    assert!(json["applixir_app_id"].is_null());
+    assert_eq!(json["watch_duration_secs"], 30);
+}
+
+#[tokio::test]
 async fn register_and_login_issue_tokens() {
     let app = app(AppState::new());
     let (user_id, token) = register(&app).await;

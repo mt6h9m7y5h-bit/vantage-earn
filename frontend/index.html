@@ -239,6 +239,12 @@
     }
     .ad-placeholder span { font-size: 2.5rem; }
     .ad-placeholder p { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.8rem; }
+    #applixir-ad-container {
+      min-height: 200px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .timer-ring.hidden { display: none; }
     .timer-ring {
       font-size: 2.5rem;
       font-weight: 700;
@@ -564,9 +570,10 @@
 
   <div id="ad-overlay" class="ad-overlay hidden">
     <div class="ad-box">
-      <div class="ad-placeholder">
+      <div class="ad-placeholder" id="ad-placeholder">
         <span>📺</span>
-        <p>Werbung — später echtes Ad-Netzwerk</p>
+        <p id="ad-provider-label">Werbung wird geladen…</p>
+        <div id="applixir-ad-container"></div>
       </div>
       <div class="timer-ring" id="ad-timer">30</div>
       <div class="timer-sub" id="ad-status">Bitte bis zum Ende schauen</div>
@@ -576,7 +583,12 @@
 
   <script>
     const API = window.location.origin;
-    const WATCH_DURATION_SECS = 30;
+    let adConfig = {
+      ad_provider: 'mock',
+      applixir_app_id: null,
+      watch_duration_secs: 30,
+      applixir_sdk_url: 'https://cdn.applixir.com/applixir.app.v6.0.1.js',
+    };
     const PAYOUT_METHOD_LABELS = {
       crypto: 'Krypto (USDT)',
       amazon_gift_card: 'Amazon Gutschein',
@@ -620,69 +632,218 @@
     }
 
     const AdPlayer = {
-      _remaining: 0,
-      _elapsed: 0,
-      _paused: false,
-      _raf: null,
-      _lastTs: 0,
-      _onTick: null,
-      _onComplete: null,
-      _visibilityHandler: null,
+      _cancelFn: null,
 
-      async play({ durationSecs, onTick, onComplete }) {
-        this.cancel();
-        this._remaining = durationSecs;
-        this._elapsed = 0;
-        this._paused = false;
-        this._onTick = onTick;
-        this._onComplete = onComplete;
-        this._lastTs = performance.now();
+      providers: {
+        mock: {
+          _raf: null,
+          _visibilityHandler: null,
 
-        this._visibilityHandler = () => {
-          if (document.hidden) {
-            this._paused = true;
-            if (this._onTick) this._onTick(this._remaining, true);
-          } else {
+          async play({ durationSecs, onTick, onComplete, onLoading }) {
+            if (onLoading) onLoading(false);
+            this._remaining = durationSecs;
+            this._elapsed = 0;
             this._paused = false;
             this._lastTs = performance.now();
-          }
-        };
-        document.addEventListener('visibilitychange', this._visibilityHandler);
 
-        return new Promise((resolve) => {
-          this._resolve = resolve;
-          const tick = (ts) => {
-            if (!this._paused) {
-              const delta = (ts - this._lastTs) / 1000;
-              this._lastTs = ts;
-              this._elapsed += delta;
-              this._remaining = Math.max(0, durationSecs - Math.floor(this._elapsed));
-              if (this._onTick) this._onTick(this._remaining, false);
-              if (this._elapsed >= durationSecs) {
-                this.cancel();
-                if (this._onComplete) this._onComplete();
-                resolve();
-                return;
+            this._visibilityHandler = () => {
+              if (document.hidden) {
+                this._paused = true;
+                if (onTick) onTick(this._remaining, true);
+              } else {
+                this._paused = false;
+                this._lastTs = performance.now();
               }
-            } else {
-              this._lastTs = ts;
+            };
+            document.addEventListener('visibilitychange', this._visibilityHandler);
+
+            return new Promise((resolve) => {
+              const tick = (ts) => {
+                if (!this._paused) {
+                  const delta = (ts - this._lastTs) / 1000;
+                  this._lastTs = ts;
+                  this._elapsed += delta;
+                  this._remaining = Math.max(0, durationSecs - Math.floor(this._elapsed));
+                  if (onTick) onTick(this._remaining, false);
+                  if (this._elapsed >= durationSecs) {
+                    this.cancel();
+                    if (onComplete) onComplete({ provider: 'mock' });
+                    resolve({ provider: 'mock' });
+                    return;
+                  }
+                } else {
+                  this._lastTs = ts;
+                }
+                this._raf = requestAnimationFrame(tick);
+              };
+              this._raf = requestAnimationFrame(tick);
+              if (onTick) onTick(this._remaining, false);
+            });
+          },
+
+          cancel() {
+            if (this._raf) cancelAnimationFrame(this._raf);
+            this._raf = null;
+            if (this._visibilityHandler) {
+              document.removeEventListener('visibilitychange', this._visibilityHandler);
+              this._visibilityHandler = null;
             }
-            this._raf = requestAnimationFrame(tick);
-          };
-          this._raf = requestAnimationFrame(tick);
-          if (this._onTick) this._onTick(this._remaining, false);
-        });
+          },
+        },
+
+        applixir: {
+          _scriptLoaded: false,
+          _sessionId: null,
+          _settled: false,
+
+          _loadSdk(url) {
+            if (window.initializeAndOpenPlayer) return Promise.resolve();
+            if (this._scriptLoaded) {
+              return new Promise((resolve, reject) => {
+                const check = () => {
+                  if (window.initializeAndOpenPlayer) resolve();
+                  else setTimeout(check, 50);
+                };
+                check();
+              });
+            }
+            return new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = url;
+              script.async = true;
+              script.onload = () => {
+                this._scriptLoaded = true;
+                resolve();
+              };
+              script.onerror = () => reject(new Error('AppLixir SDK konnte nicht geladen werden'));
+              document.head.appendChild(script);
+            });
+          },
+
+          _isRewarded(status) {
+            if (!status) return false;
+            if (typeof status === 'string') return status === 'ad-watched' || status === 'complete';
+            const t = status.type || status.status;
+            return t === 'complete' || t === 'ad-watched';
+          },
+
+          async play({ apiKey, sdkUrl, userId, onLoading, onComplete, onError }) {
+            this._settled = false;
+            this._sessionId = crypto.randomUUID();
+            if (onLoading) onLoading(true);
+
+            try {
+              await this._loadSdk(sdkUrl);
+            } catch (err) {
+              if (onLoading) onLoading(false);
+              if (onError) onError(err.message || 'SDK-Fehler');
+              throw err;
+            }
+
+            const container = document.getElementById('applixir-ad-container');
+            if (container) container.innerHTML = '';
+
+            return new Promise((resolve, reject) => {
+              const finish = (err, result) => {
+                if (this._settled) return;
+                this._settled = true;
+                if (onLoading) onLoading(false);
+                if (err) {
+                  if (onError) onError(err);
+                  reject(new Error(err));
+                } else {
+                  if (onComplete) onComplete(result);
+                  resolve(result);
+                }
+              };
+
+              const options = {
+                apiKey,
+                injectionElementId: 'applixir-ad-container',
+                userId: userId || 'anonymous',
+                customData: { sessionId: this._sessionId },
+                adStatusCallbackFn: (status) => {
+                  if (this._isRewarded(status)) {
+                    const tid = status?.tid || status?.transactionId || this._sessionId;
+                    finish(null, { provider: 'applixir', ad_session_id: tid });
+                  } else if (status && (status.type === 'noAd' || status === 'no-ad' || status.type === 'error')) {
+                    const msg = status.error?.message || 'Keine Werbung verfügbar';
+                    finish(msg);
+                  }
+                },
+                adErrorCallbackFn: (error) => {
+                  const msg = error?.getError?.()?.data || error?.message || 'Werbung fehlgeschlagen';
+                  finish(msg);
+                },
+              };
+
+              try {
+                window.initializeAndOpenPlayer(options);
+              } catch (err) {
+                finish(err.message || 'Player-Start fehlgeschlagen');
+              }
+            });
+          },
+
+          cancel() {
+            this._settled = true;
+          },
+        },
+      },
+
+      getProviderName() {
+        return adConfig.ad_provider === 'applixir' && adConfig.applixir_app_id
+          ? 'applixir'
+          : 'mock';
+      },
+
+      getProvider() {
+        const name = this.getProviderName();
+        return this.providers[name] || this.providers.mock;
+      },
+
+      async play(opts) {
+        this.cancel();
+        const provider = this.getProvider();
+        this._cancelFn = () => provider.cancel?.call(provider);
+        return provider.play(opts);
       },
 
       cancel() {
-        if (this._raf) cancelAnimationFrame(this._raf);
-        this._raf = null;
-        if (this._visibilityHandler) {
-          document.removeEventListener('visibilitychange', this._visibilityHandler);
-          this._visibilityHandler = null;
-        }
+        if (this._cancelFn) this._cancelFn();
+        this._cancelFn = null;
       },
     };
+
+    function adProviderLabel() {
+      const name = AdPlayer.getProviderName();
+      if (name === 'applixir') return 'Belohnte Video-Werbung (AppLixir)';
+      return 'Entwicklungsmodus — Timer-Werbung (Mock)';
+    }
+
+    function updateAdProviderUi() {
+      const label = document.getElementById('ad-provider-label');
+      if (label) label.textContent = adProviderLabel();
+    }
+
+    async function loadAdConfig() {
+      const meta = document.querySelector('meta[name="ad-provider"]');
+      if (meta) {
+        adConfig.ad_provider = meta.content || adConfig.ad_provider;
+        const appId = document.querySelector('meta[name="applixir-app-id"]');
+        if (appId) adConfig.applixir_app_id = appId.content || null;
+      }
+      try {
+        const res = await fetch(API + '/config');
+        if (res.ok) {
+          const cfg = await res.json();
+          adConfig = { ...adConfig, ...cfg };
+        }
+      } catch {
+        /* offline / dev — keep defaults */
+      }
+      updateAdProviderUi();
+    }
 
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches
@@ -1079,33 +1240,73 @@
       const overlay = document.getElementById('ad-overlay');
       const timerEl = document.getElementById('ad-timer');
       const statusEl = document.getElementById('ad-status');
+      const placeholder = document.getElementById('ad-placeholder');
+      const providerName = AdPlayer.getProviderName();
+      const durationSecs = adConfig.watch_duration_secs || 30;
 
       watchActive = true;
       btn.disabled = true;
       overlay.classList.remove('hidden');
-      timerEl.classList.remove('paused');
-      statusEl.textContent = 'Bitte bis zum Ende schauen';
+      updateAdProviderUi();
+
+      if (providerName === 'applixir') {
+        timerEl.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        statusEl.textContent = 'Werbung wird geladen…';
+      } else {
+        timerEl.classList.remove('hidden');
+        timerEl.classList.remove('paused');
+        timerEl.textContent = durationSecs;
+        statusEl.textContent = 'Bitte bis zum Ende schauen';
+      }
+
+      let adResult = null;
 
       try {
-        await AdPlayer.play({
-          durationSecs: WATCH_DURATION_SECS,
-          onTick: (remaining, paused) => {
-            timerEl.textContent = remaining;
-            if (paused) {
-              timerEl.classList.add('paused');
-              statusEl.textContent = 'Pausiert — Tab wieder öffnen';
-            } else {
-              timerEl.classList.remove('paused');
-              statusEl.textContent = 'Bitte bis zum Ende schauen';
-            }
-          },
-          onComplete: () => {},
-        });
+        if (providerName === 'applixir') {
+          adResult = await AdPlayer.play({
+            apiKey: adConfig.applixir_app_id,
+            sdkUrl: adConfig.applixir_sdk_url,
+            userId: stats?.user_id || undefined,
+            onLoading: (loading) => {
+              statusEl.textContent = loading ? 'Werbung wird geladen…' : 'Video läuft — bis zum Ende schauen';
+            },
+            onError: (msg) => {
+              showError(msg);
+              log('Werbung fehlgeschlagen: ' + msg);
+            },
+          });
+        } else {
+          adResult = await AdPlayer.play({
+            durationSecs,
+            onTick: (remaining, paused) => {
+              timerEl.textContent = remaining;
+              if (paused) {
+                timerEl.classList.add('paused');
+                statusEl.textContent = 'Pausiert — Tab wieder öffnen';
+              } else {
+                timerEl.classList.remove('paused');
+                statusEl.textContent = 'Bitte bis zum Ende schauen';
+              }
+            },
+          });
+        }
+
+        if (!adResult) {
+          throw new Error('Keine Belohnung — Werbung nicht vollständig');
+        }
 
         overlay.classList.add('hidden');
+        const body = {
+          watch_duration_secs: durationSecs,
+          ad_provider: adResult.provider || providerName,
+        };
+        if (adResult.ad_session_id) {
+          body.ad_session_id = adResult.ad_session_id;
+        }
         const data = await api('/users/me/watch/complete', {
           method: 'POST',
-          body: JSON.stringify({ watch_duration_secs: WATCH_DURATION_SECS }),
+          body: JSON.stringify(body),
         });
         log(data.message);
         if (data.bonuses && data.bonuses.length) {
@@ -1113,11 +1314,17 @@
         }
         await refresh();
       } catch (e) {
-        if (e.message !== 'network' && e.message !== 'offline') log('Fehler: ' + e.message);
+        if (e.message !== 'network' && e.message !== 'offline') {
+          if (!document.getElementById('error-banner').textContent) {
+            showError(e.message || 'Werbung abgebrochen — kein Reward');
+          }
+          log('Fehler: ' + e.message);
+        }
       } finally {
         watchActive = false;
         btn.disabled = false;
         overlay.classList.add('hidden');
+        timerEl.classList.remove('hidden');
       }
     }
 
@@ -1143,6 +1350,8 @@
         btn.disabled = false;
       }
     }
+
+    loadAdConfig();
 
     if (token) {
       document.getElementById('auth-card').classList.add('hidden');

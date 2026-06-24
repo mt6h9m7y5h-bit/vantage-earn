@@ -13,6 +13,10 @@ H=$(curl -sf -m 5 "$BASE/health") || fail "health unreachable"
 echo "$H" | grep -q '"status":"ok"' || fail "health status"
 ok "health"
 
+CFG=$(curl -sf -m 5 "$BASE/config") || fail "config"
+echo "$CFG" | grep -q '"ad_provider"' || fail "config ad_provider"
+ok "config"
+
 curl -sf -m 5 -o /dev/null "$BASE/demo" || fail "demo page"
 ok "demo"
 

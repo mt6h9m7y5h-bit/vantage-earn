@@ -21,6 +21,7 @@ use shared::{
 };
 use uuid::Uuid;
 
+use crate::ad_config::AdConfig;
 use crate::error::{map_ai_error, ApiError};
 use crate::extractors::AuthUser;
 use crate::pwa;
@@ -34,6 +35,7 @@ pub fn router() -> Router<AppState> {
     let public = Router::new()
         .route("/", get(pwa::root))
         .route("/health", get(health))
+        .route("/config", get(public_config))
         .route("/demo", get(pwa::demo_page))
         .route("/manifest.webmanifest", get(pwa::manifest))
         .route("/sw.js", get(pwa::service_worker))
@@ -65,6 +67,10 @@ pub fn router() -> Router<AppState> {
         ));
 
     public.merge(protected)
+}
+
+async fn public_config() -> impl IntoResponse {
+    Json(AdConfig::default().public_json())
 }
 
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
@@ -277,6 +283,12 @@ struct WatchCompleteRequest {
     is_emulator: bool,
     #[serde(default)]
     is_vpn: bool,
+    /// Client-reported ad provider (`mock` | `applixir`). Reserved for future SSV validation.
+    #[serde(default)]
+    ad_provider: Option<String>,
+    /// AppLixir transaction / session id from ad completion callback (future SSV stub).
+    #[serde(default)]
+    ad_session_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -344,9 +356,16 @@ async fn watch_complete(
     let flat_total = bonus_result.flat_total();
     let total_reward = watch_reward + flat_total;
 
+    let session_id = body
+        .ad_session_id
+        .as_deref()
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .unwrap_or_else(Uuid::new_v4);
+    let _ad_provider = body.ad_provider.as_deref();
+
     let payload = WatchCompletedPayload {
         user_id,
-        session_id: Uuid::new_v4(),
+        session_id,
         watch_duration_secs: body.watch_duration_secs,
         reward_usdt: total_reward,
         occurred_at: Utc::now(),

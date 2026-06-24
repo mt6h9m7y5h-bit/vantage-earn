@@ -121,6 +121,10 @@ impl WalletEngine {
             .cloned()
             .collect()
     }
+
+    pub async fn all_ledger(&self) -> Vec<LedgerEntry> {
+        self.ledger.read().await.clone()
+    }
 }
 
 impl Default for WalletEngine {

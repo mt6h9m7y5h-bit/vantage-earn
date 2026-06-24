@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::state::UserProfile;
+use crate::store::week_start_utc;
 use crate::store::LedgerItem;
 
 #[derive(Clone)]
@@ -80,6 +81,7 @@ impl PgStore {
                    payout_history, sessions_last_hour, sessions_window_started,
                    last_active_date, watches_today, total_watches, milestones_claimed,
                    last_daily_bonus_date, streak_7_bonus_claimed,
+                   last_challenge_bonus_date,
                    referred_by, referral_bonus_paid
             FROM users WHERE id = $1
             "#,
@@ -108,8 +110,9 @@ impl PgStore {
                 milestones_claimed = $11,
                 last_daily_bonus_date = $12,
                 streak_7_bonus_claimed = $13,
-                referred_by = $14,
-                referral_bonus_paid = $15
+                last_challenge_bonus_date = $14,
+                referred_by = $15,
+                referral_bonus_paid = $16
             WHERE id = $1
             "#,
         )
@@ -126,6 +129,7 @@ impl PgStore {
         .bind(profile.milestones_claimed as i16)
         .bind(profile.last_daily_bonus_date)
         .bind(profile.streak_7_bonus_claimed)
+        .bind(profile.last_challenge_bonus_date)
         .bind(profile.referred_by)
         .bind(profile.referral_bonus_paid)
         .execute(&self.pool)
@@ -385,6 +389,51 @@ impl PgStore {
 
         Ok(rows.into_iter().map(Into::into).collect())
     }
+
+    pub async fn weekly_leaderboard(&self) -> AppResult<Vec<(Uuid, Decimal)>> {
+        let week_start = week_start_utc();
+        let rows = sqlx::query_as::<_, LeaderboardRow>(
+            r#"
+            SELECT user_id, SUM(amount_usdt) AS weekly_earnings
+            FROM ledger_entries
+            WHERE kind = 'credit' AND created_at >= $1
+            GROUP BY user_id
+            ORDER BY weekly_earnings DESC, user_id
+            LIMIT 10
+            "#,
+        )
+        .bind(week_start)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.user_id, r.weekly_earnings))
+            .collect())
+    }
+
+    pub async fn user_count(&self) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn recent_payout_count(&self, days: i64) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM payout_requests
+            WHERE created_at >= NOW() - make_interval(days => $1)
+            "#,
+        )
+        .bind(days as i32)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -409,6 +458,12 @@ impl From<LedgerRow> for LedgerItem {
 }
 
 #[derive(sqlx::FromRow)]
+struct LeaderboardRow {
+    user_id: Uuid,
+    weekly_earnings: Decimal,
+}
+
+#[derive(sqlx::FromRow)]
 struct UserRow {
     created_at: DateTime<Utc>,
     locale: String,
@@ -423,6 +478,7 @@ struct UserRow {
     milestones_claimed: i16,
     last_daily_bonus_date: Option<NaiveDate>,
     streak_7_bonus_claimed: bool,
+    last_challenge_bonus_date: Option<NaiveDate>,
     referred_by: Option<Uuid>,
     referral_bonus_paid: bool,
 }
@@ -443,6 +499,7 @@ impl From<UserRow> for UserProfile {
             milestones_claimed: row.milestones_claimed as u8,
             last_daily_bonus_date: row.last_daily_bonus_date,
             streak_7_bonus_claimed: row.streak_7_bonus_claimed,
+            last_challenge_bonus_date: row.last_challenge_bonus_date,
             referred_by: row.referred_by,
             referral_bonus_paid: row.referral_bonus_paid,
         }

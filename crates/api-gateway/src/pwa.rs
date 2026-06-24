@@ -11,6 +11,10 @@ pub async fn demo_page() -> Html<&'static str> {
     Html(include_str!("../../../frontend/index.html"))
 }
 
+pub async fn admin_page() -> Html<&'static str> {
+    Html(include_str!("../../../frontend/admin.html"))
+}
+
 pub async fn manifest() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/manifest+json")],

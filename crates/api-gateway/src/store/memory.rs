@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use chrono::{DateTime, Duration, Utc};
 use referral_engine::ReferralEngine;
 use rust_decimal::Decimal;
 use shared::AppResult;
@@ -9,6 +10,7 @@ use uuid::Uuid;
 use wallet_engine::{LedgerKind, WalletEngine};
 
 use crate::state::UserProfile;
+use crate::store::week_start_utc;
 use crate::store::LedgerItem;
 
 #[derive(Clone)]
@@ -31,6 +33,7 @@ struct PayoutRecord {
     tier: String,
     status: String,
     payout_method: String,
+    created_at: DateTime<Utc>,
 }
 
 impl MemoryStore {
@@ -151,8 +154,40 @@ impl MemoryStore {
             tier: tier.into(),
             status: status.into(),
             payout_method: payout_method.into(),
+            created_at: Utc::now(),
         });
         Ok(())
+    }
+
+    pub async fn weekly_leaderboard(&self) -> AppResult<Vec<(Uuid, Decimal)>> {
+        let week_start = week_start_utc();
+        let entries = self.wallet.all_ledger().await;
+        let mut totals: HashMap<Uuid, Decimal> = HashMap::new();
+        for entry in entries {
+            if entry.kind == LedgerKind::Credit && entry.created_at >= week_start {
+                *totals.entry(entry.user_id).or_insert(Decimal::ZERO) += entry.amount_usdt;
+            }
+        }
+        let mut ranked: Vec<(Uuid, Decimal)> = totals.into_iter().collect();
+        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        ranked.truncate(10);
+        Ok(ranked)
+    }
+
+    pub async fn user_count(&self) -> AppResult<i64> {
+        Ok(self.users.read().await.len() as i64)
+    }
+
+    pub async fn recent_payout_count(&self, days: i64) -> AppResult<i64> {
+        let cutoff = Utc::now() - Duration::days(days);
+        let count = self
+            .payout_requests
+            .read()
+            .await
+            .iter()
+            .filter(|p| p.created_at >= cutoff)
+            .count();
+        Ok(count as i64)
     }
 
     pub async fn find_user_by_referral_code(&self, code: &str) -> AppResult<Option<Uuid>> {

@@ -1,8 +1,9 @@
 mod bonuses;
 
 pub use bonuses::{
-    BonusCatalogItem, BonusEarned, BonusEngine, DAILY_LOGIN_BONUS_USDT, MILESTONE_THRESHOLDS,
-    STREAK_7_BONUS_USDT, SURPRISE_CHANCE_PERCENT, SURPRISE_MULTIPLIER, WatchBonusResult,
+    BonusCatalogItem, BonusEarned, BonusEngine, DAILY_CHALLENGE_BONUS_USDT, DAILY_CHALLENGE_TARGET,
+    DAILY_LOGIN_BONUS_USDT, MILESTONE_THRESHOLDS, STREAK_7_BONUS_USDT, SURPRISE_CHANCE_PERCENT,
+    SURPRISE_MULTIPLIER, WatchBonusResult,
 };
 
 use rust_decimal::Decimal;

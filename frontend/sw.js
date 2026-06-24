@@ -1,4 +1,4 @@
-const CACHE = 'vantage-earn-v1';
+const CACHE = 'vantage-earn-v2';
 const SHELL = ['/demo', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -30,6 +30,33 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       });
+    })
+  );
+});
+
+// Local notification stub — no VAPID/Web Push; page schedules reminders while open.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SHOW_STREAK_REMINDER') {
+    const title = event.data.title || 'VANTAGE-EARN';
+    const body = event.data.body || 'Dein Streak läuft heute ab!';
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: 'streak-reminder',
+        renotify: true,
+      })
+    );
+  }
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      if (list.length) return list[0].focus();
+      return clients.openWindow('/demo');
     })
   );
 });

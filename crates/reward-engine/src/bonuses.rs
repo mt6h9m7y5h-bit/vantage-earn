@@ -9,6 +9,12 @@ pub const DAILY_LOGIN_BONUS_USDT: &str = "0.0005";
 /// One-time bonus when the user reaches a 7-day streak.
 pub const STREAK_7_BONUS_USDT: &str = "0.005";
 
+/// Daily challenge: watch this many videos in one day for a flat bonus.
+pub const DAILY_CHALLENGE_TARGET: u32 = 5;
+
+/// Flat bonus for completing the daily video challenge.
+pub const DAILY_CHALLENGE_BONUS_USDT: &str = "0.002";
+
 /// Surprise multiplier applied to the base watch reward (not flat bonuses).
 pub const SURPRISE_MULTIPLIER: u32 = 3;
 
@@ -58,6 +64,10 @@ pub struct BonusEngine;
 impl BonusEngine {
     pub fn daily_bonus_amount() -> Decimal {
         Decimal::from_str_exact(DAILY_LOGIN_BONUS_USDT).unwrap()
+    }
+
+    pub fn challenge_amount() -> Decimal {
+        Decimal::from_str_exact(DAILY_CHALLENGE_BONUS_USDT).unwrap()
     }
 
     pub fn streak_7_amount() -> Decimal {
@@ -110,11 +120,20 @@ impl BonusEngine {
         milestones_claimed: u8,
         streak_days: i32,
         streak_7_bonus_claimed: bool,
-    ) -> (WatchBonusResult, u8, bool, Option<NaiveDate>) {
+        watches_today: u32,
+        last_challenge_bonus_date: Option<NaiveDate>,
+    ) -> (
+        WatchBonusResult,
+        u8,
+        bool,
+        Option<NaiveDate>,
+        Option<NaiveDate>,
+    ) {
         let mut result = WatchBonusResult::default();
         let mut claimed = milestones_claimed;
         let mut streak_7_claimed = streak_7_bonus_claimed;
         let mut daily_date = last_daily_bonus_date;
+        let mut challenge_date = last_challenge_bonus_date;
 
         if is_first_watch_today && last_daily_bonus_date != Some(today) {
             result.flat_bonuses.push(BonusEarned {
@@ -145,7 +164,16 @@ impl BonusEngine {
             });
         }
 
-        (result, claimed, streak_7_claimed, daily_date)
+        if watches_today >= DAILY_CHALLENGE_TARGET && last_challenge_bonus_date != Some(today) {
+            challenge_date = Some(today);
+            result.flat_bonuses.push(BonusEarned {
+                id: "daily_challenge".into(),
+                title: "Tägliche Challenge (5 Videos)".into(),
+                amount_usdt: Self::challenge_amount(),
+            });
+        }
+
+        (result, claimed, streak_7_claimed, daily_date, challenge_date)
     }
 
     pub fn build_catalog(
@@ -155,6 +183,8 @@ impl BonusEngine {
         daily_bonus_claimed_today: bool,
         streak_days: i32,
         streak_7_bonus_claimed: bool,
+        challenge_watches_today: u32,
+        challenge_bonus_claimed_today: bool,
     ) -> Vec<BonusCatalogItem> {
         let mut items = Vec::new();
 
@@ -237,6 +267,31 @@ impl BonusEngine {
             status: streak_7_status,
         });
 
+        let challenge_status = if challenge_bonus_claimed_today {
+            "claimed".into()
+        } else if challenge_watches_today >= DAILY_CHALLENGE_TARGET {
+            "available".into()
+        } else {
+            "locked".into()
+        };
+        let challenge_remaining = DAILY_CHALLENGE_TARGET.saturating_sub(challenge_watches_today);
+        let challenge_desc = if challenge_bonus_claimed_today {
+            format!(
+                "Heute {DAILY_CHALLENGE_TARGET} Videos geschafft — Bonus erhalten."
+            )
+        } else {
+            format!(
+                "Schau heute {DAILY_CHALLENGE_TARGET} Videos für einen Extra-Bonus. Noch {challenge_remaining} Videos."
+            )
+        };
+        items.push(BonusCatalogItem {
+            id: "daily_challenge".into(),
+            title: "Tägliche Challenge".into(),
+            description: challenge_desc,
+            amount: Self::challenge_amount(),
+            status: challenge_status,
+        });
+
         items
     }
 }
@@ -259,15 +314,15 @@ mod tests {
     #[test]
     fn daily_bonus_only_on_first_watch_of_day() {
         let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
-        let (r, _, _, date) = BonusEngine::evaluate_watch_bonuses(
-            true, None, today, 1, 0, 1, false,
+        let (r, _, _, date, _) = BonusEngine::evaluate_watch_bonuses(
+            true, None, today, 1, 0, 1, false, 1, None,
         );
         assert_eq!(r.flat_bonuses.len(), 1);
         assert_eq!(r.flat_bonuses[0].id, "daily_login");
         assert_eq!(date, Some(today));
 
-        let (r2, _, _, _) = BonusEngine::evaluate_watch_bonuses(
-            false, Some(today), today, 2, 0, 1, false,
+        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+            false, Some(today), today, 2, 0, 1, false, 2, None,
         );
         assert!(r2.flat_bonuses.iter().all(|b| b.id != "daily_login"));
     }
@@ -275,8 +330,8 @@ mod tests {
     #[test]
     fn milestone_unlocks_at_threshold() {
         let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
-        let (r, claimed, _, _) = BonusEngine::evaluate_watch_bonuses(
-            false, Some(today), today, 10, 0, 3, false,
+        let (r, claimed, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+            false, Some(today), today, 10, 0, 3, false, 1, None,
         );
         assert!(r.flat_bonuses.iter().any(|b| b.id == "milestone_10"));
         assert!(BonusEngine::is_milestone_claimed(claimed, 0));
@@ -286,14 +341,14 @@ mod tests {
     #[test]
     fn streak_7_bonus_once_per_cycle() {
         let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
-        let (r, _, claimed, _) = BonusEngine::evaluate_watch_bonuses(
-            false, Some(today), today, 5, 0, 7, false,
+        let (r, _, claimed, _, _) = BonusEngine::evaluate_watch_bonuses(
+            false, Some(today), today, 5, 0, 7, false, 1, None,
         );
         assert!(r.flat_bonuses.iter().any(|b| b.id == "streak_7"));
         assert!(claimed);
 
-        let (r2, _, _, _) = BonusEngine::evaluate_watch_bonuses(
-            false, Some(today), today, 6, 0, 8, true,
+        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+            false, Some(today), today, 6, 0, 8, true, 1, None,
         );
         assert!(!r2.flat_bonuses.iter().any(|b| b.id == "streak_7"));
     }
@@ -328,13 +383,29 @@ mod tests {
     }
 
     #[test]
+    fn daily_challenge_bonus_on_fifth_watch() {
+        let today = NaiveDate::from_ymd_opt(2026, 6, 24).unwrap();
+        let (r, _, _, _, challenge_date) = BonusEngine::evaluate_watch_bonuses(
+            false, Some(today), today, 5, 0, 2, false, 5, None,
+        );
+        assert!(r.flat_bonuses.iter().any(|b| b.id == "daily_challenge"));
+        assert_eq!(challenge_date, Some(today));
+
+        let (r2, _, _, _, _) = BonusEngine::evaluate_watch_bonuses(
+            false, Some(today), today, 6, 0, 2, false, 6, Some(today),
+        );
+        assert!(!r2.flat_bonuses.iter().any(|b| b.id == "daily_challenge"));
+    }
+
+    #[test]
     fn catalog_includes_all_bonus_types() {
-        let catalog = BonusEngine::build_catalog(5, 3, 0, false, 2, false);
+        let catalog = BonusEngine::build_catalog(5, 3, 0, false, 2, false, 2, false);
         let ids: Vec<_> = catalog.iter().map(|c| c.id.as_str()).collect();
         assert!(ids.contains(&"daily_login"));
         assert!(ids.contains(&"milestone_10"));
         assert!(ids.contains(&"surprise"));
         assert!(ids.contains(&"streak_7"));
         assert!(ids.contains(&"streak_percent"));
+        assert!(ids.contains(&"daily_challenge"));
     }
 }

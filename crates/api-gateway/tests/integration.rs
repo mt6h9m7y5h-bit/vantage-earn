@@ -243,7 +243,7 @@ async fn stats_returns_streak_and_estimates() {
     assert_eq!(json["total_watches"], 0);
     assert_eq!(json["daily_bonus_claimed_today"], false);
     assert_eq!(json["next_milestone"], 10);
-    assert!(json["bonus_catalog"].as_array().unwrap().len() >= 5);
+    assert!(json["bonus_catalog"].as_array().unwrap().len() >= 6);
     assert_eq!(json["watches_remaining_today"], 30);
     assert_eq!(json["reward_estimate_30s"], "0.001");
     assert_eq!(json["min_payout_eur"], "170");
@@ -340,4 +340,159 @@ async fn stats_reflect_bonus_progress_after_watch() {
     assert_eq!(json["daily_bonus_claimed_today"], true);
     assert_eq!(json["streak_bonus_percent"], 5);
     assert_eq!(json["next_milestone"], 10);
+}
+
+#[tokio::test]
+async fn weekly_leaderboard_is_public_and_anonymized() {
+    let state = AppState::new();
+    let app = app(state);
+    let (user_a, token_a) = register(&app).await;
+    let (_user_b, token_b) = register(&app).await;
+
+    for _ in 0..2 {
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/users/me/watch/complete",
+                &token_a,
+                Some(r#"{"watch_duration_secs": 60}"#),
+            ))
+            .await
+            .unwrap();
+    }
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token_b,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/leaderboard/weekly")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    let entries = json["entries"].as_array().unwrap();
+    assert!(!entries.is_empty());
+    let top = &entries[0];
+    assert_eq!(top["rank"], 1);
+    let name = top["display_name"].as_str().unwrap();
+    assert!(name.starts_with("User #"));
+    assert!(!name.contains(&user_a.to_string()));
+    assert!(top["weekly_earnings_usdt"].as_str().unwrap().parse::<f64>().unwrap() > 0.0);
+}
+
+#[tokio::test]
+async fn admin_stats_requires_secret() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+
+    let no_header = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/stats")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(no_header.status(), StatusCode::UNAUTHORIZED);
+
+    let wrong = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/stats")
+                .header("X-Admin-Secret", "wrong")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+
+    let ok = app
+        .oneshot(
+            Request::builder()
+                .uri("/admin/stats")
+                .header("X-Admin-Secret", "test-admin-secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+    let json = body_json(ok).await;
+    assert!(json["total_revenue"].is_string());
+    assert!(json["user_count"].as_i64().unwrap() >= 0);
+    assert!(json["recent_payout_count"].as_i64().unwrap() >= 0);
+
+    std::env::remove_var("ADMIN_SECRET");
+}
+
+#[tokio::test]
+async fn daily_challenge_bonus_on_fifth_watch() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    for _ in 0..4 {
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/users/me/watch/complete",
+                &token,
+                Some(r#"{"watch_duration_secs": 60}"#),
+            ))
+            .await
+            .unwrap();
+    }
+
+    let stats = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/stats", &token, None))
+        .await
+        .unwrap();
+    let stats_json = body_json(stats).await;
+    assert_eq!(stats_json["challenge_watches_today"], 4);
+    assert_eq!(stats_json["daily_challenge_completed_today"], false);
+
+    let fifth = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(fifth.status(), StatusCode::OK);
+    let fifth_json = body_json(fifth).await;
+    assert!(fifth_json["bonuses"].as_array().unwrap().iter().any(|b| {
+        b["id"] == "daily_challenge"
+    }));
+
+    let stats2 = app
+        .oneshot(authed("GET", "/users/me/stats", &token, None))
+        .await
+        .unwrap();
+    let stats2_json = body_json(stats2).await;
+    assert_eq!(stats2_json["daily_challenge_completed_today"], true);
+    assert!(stats2_json["bonus_catalog"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["id"] == "daily_challenge" && c["status"] == "claimed"));
 }

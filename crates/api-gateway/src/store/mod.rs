@@ -2,6 +2,7 @@ mod ledger;
 mod memory;
 mod postgres;
 
+use chrono::{DateTime, Datelike, Utc};
 use rust_decimal::Decimal;
 use shared::AppResult;
 use uuid::Uuid;
@@ -11,6 +12,17 @@ pub use memory::MemoryStore;
 pub use postgres::PgStore;
 
 use crate::state::UserProfile;
+
+/// Start of the current ISO calendar week (Monday 00:00 UTC).
+pub fn week_start_utc() -> DateTime<Utc> {
+    let today = Utc::now().date_naive();
+    let days_from_monday = today.weekday().num_days_from_monday();
+    let monday = today - chrono::Duration::days(days_from_monday as i64);
+    monday
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc()
+}
 
 #[derive(Clone)]
 pub enum Store {
@@ -172,6 +184,27 @@ impl Store {
         match self {
             Self::Memory(s) => s.ledger(user_id).await,
             Self::Postgres(s) => s.ledger(user_id).await,
+        }
+    }
+
+    pub async fn weekly_leaderboard(&self) -> AppResult<Vec<(Uuid, Decimal)>> {
+        match self {
+            Self::Memory(s) => s.weekly_leaderboard().await,
+            Self::Postgres(s) => s.weekly_leaderboard().await,
+        }
+    }
+
+    pub async fn user_count(&self) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.user_count().await,
+            Self::Postgres(s) => s.user_count().await,
+        }
+    }
+
+    pub async fn recent_payout_count(&self, days: i64) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.recent_payout_count(days).await,
+            Self::Postgres(s) => s.recent_payout_count(days).await,
         }
     }
 }

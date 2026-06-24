@@ -15,32 +15,69 @@
   <link rel="icon" href="/icons/icon-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="/icons/icon-180.png" />
   <style>
-    :root {
+    :root,
+    [data-theme="dark"] {
       --bg: #0b0f14;
       --card: #141b24;
       --accent: #00d4aa;
       --text: #e8eef5;
       --muted: #8b9cb3;
       --danger: #ff6b6b;
+      --border: #243044;
+      --input-bg: #0b0f14;
+      --gradient-top: #122033;
+      --referral-bg: linear-gradient(135deg, #1a2f28, #0f2a22);
+      --warning-bg: #3d2f00;
+      --warning-text: #ffd666;
+    }
+    [data-theme="light"] {
+      --bg: #eef2f7;
+      --card: #ffffff;
+      --accent: #00a884;
+      --text: #1a2332;
+      --muted: #5c6b7f;
+      --danger: #d64545;
+      --border: #d0dae6;
+      --input-bg: #f7f9fc;
+      --gradient-top: #dce8f5;
+      --referral-bg: linear-gradient(135deg, #e8faf5, #dff5ee);
+      --warning-bg: #fff8e6;
+      --warning-text: #9a6b00;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html { touch-action: manipulation; }
     body {
       margin: 0;
       font-family: system-ui, -apple-system, sans-serif;
-      background: radial-gradient(circle at top, #122033, var(--bg));
+      background: radial-gradient(circle at top, var(--gradient-top), var(--bg));
       color: var(--text);
       min-height: 100vh;
       padding: 2rem 1rem;
       padding-bottom: calc(2rem + env(safe-area-inset-bottom));
     }
     .wrap { max-width: 480px; margin: 0 auto; }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+    .theme-toggle {
+      width: auto;
+      min-height: 40px;
+      padding: 0.5rem 0.75rem;
+      margin: 0;
+      font-size: 0.85rem;
+      background: var(--border);
+      color: var(--text);
+    }
     h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
     h2 { font-size: 0.95rem; margin: 0 0 0.75rem; color: var(--muted); font-weight: 600; }
     .sub { color: var(--muted); margin-bottom: 1.5rem; font-size: 0.9rem; }
     .card {
       background: var(--card);
-      border: 1px solid #243044;
+      border: 1px solid var(--border);
       border-radius: 16px;
       padding: 1.25rem;
       margin-bottom: 1rem;
@@ -68,14 +105,14 @@
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .primary { background: var(--accent); color: #04241c; }
-    .secondary { background: #243044; color: var(--text); }
+    .secondary { background: var(--border); color: var(--text); }
     .danger { background: #3d1f1f; color: #ffb4b4; }
     input {
       width: 100%;
       padding: 0.75rem;
       border-radius: 10px;
-      border: 1px solid #243044;
-      background: #0b0f14;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
       color: var(--text);
       margin-bottom: 0.5rem;
       font-size: 16px;
@@ -111,7 +148,7 @@
       width: 100%;
       max-width: 400px;
       background: var(--card);
-      border: 1px solid #243044;
+      border: 1px solid var(--border);
       border-radius: 20px;
       padding: 1.5rem;
       text-align: center;
@@ -183,8 +220,8 @@
       width: 100%;
       padding: 0.75rem;
       border-radius: 10px;
-      border: 1px solid #243044;
-      background: #0b0f14;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
       color: var(--text);
       margin-bottom: 0.5rem;
       font-size: 16px;
@@ -200,7 +237,7 @@
       line-height: 1.45;
       margin: 0 0 0.75rem;
       padding: 0.65rem 0.75rem;
-      background: #0b0f14;
+      background: var(--input-bg);
       border: 1px solid #1e2a3a;
       border-radius: 10px;
     }
@@ -225,7 +262,36 @@
       color: var(--accent);
       margin: 0.25rem 0 0.75rem;
     }
+    .referral-banner {
+      border-color: var(--accent);
+      background: var(--referral-bg);
+    }
+    .referral-banner strong { color: var(--accent); font-size: 1.05rem; }
+    .referral-banner p { margin: 0.35rem 0 0.75rem; font-size: 0.9rem; color: var(--muted); line-height: 1.45; }
+    .streak-warning {
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-text);
+      color: var(--warning-text);
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      line-height: 1.45;
+    }
+    .leaderboard-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.45rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    .leaderboard-item:last-child { border-bottom: none; }
+    .leaderboard-rank { color: var(--muted); width: 2rem; }
+    .leaderboard-name { flex: 1; }
+    .leaderboard-earn { color: var(--accent); font-weight: 600; }
     .milestone-progress { margin-top: 0.5rem; }
+    #log {
       font-family: ui-monospace, monospace;
       font-size: 0.75rem;
       color: var(--muted);
@@ -237,10 +303,16 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>VANTAGE-EARN</h1>
-    <p class="sub">Watch-to-Earn App</p>
+    <div class="header-row">
+      <div>
+        <h1>VANTAGE-EARN</h1>
+        <p class="sub">Watch-to-Earn App</p>
+      </div>
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Theme wechseln">🌙</button>
+    </div>
 
     <div id="error-banner" class="hidden"></div>
+    <div id="streak-warning" class="streak-warning hidden"></div>
 
     <div id="install-card" class="card install-card hidden">
       <p><strong>App installieren</strong> — kein App Store nötig.</p>
@@ -256,6 +328,12 @@
     </div>
 
     <div id="app" class="hidden">
+      <div class="card referral-banner" id="referral-banner">
+        <strong>Freund einladen → Bonus für euch beide!</strong>
+        <p id="referral-banner-text">Lade Freunde ein und verdient gemeinsam USDT.</p>
+        <button class="primary" onclick="shareReferral()">Jetzt einladen &amp; teilen</button>
+      </div>
+
       <div class="card">
         <div class="balance" id="balance">0 USDT</div>
         <div class="local" id="local-balance"></div>
@@ -270,7 +348,24 @@
       <p class="reward-hint" id="reward-hint">Schau 30s → verdien ~0.001 USDT</p>
       <button class="primary" id="watch-btn" onclick="startWatch()">Werbung schauen (30s)</button>
       <button class="secondary" onclick="refresh()">Aktualisieren</button>
-      <button class="secondary" onclick="shareReferral()">Referral-Link teilen</button>
+      <button class="secondary" id="notify-btn" onclick="enableNotifications()">Benachrichtigungen aktivieren</button>
+
+      <div class="card" id="challenge-card">
+        <h2>Tägliche Challenge</h2>
+        <div class="progress-label">
+          <span>Videos heute</span>
+          <span id="challenge-progress-text">0/5 Videos heute</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="challenge-progress-fill" style="width: 0%"></div>
+        </div>
+        <p class="payout-hint" id="challenge-hint">5 Videos heute = Extra-Bonus!</p>
+      </div>
+
+      <div class="card" id="leaderboard-card">
+        <h2>Top dieser Woche</h2>
+        <div id="leaderboard-list"><p class="empty">Lade Rangliste…</p></div>
+      </div>
 
       <div class="card" id="bonuses-card">
         <h2>Boni &amp; Belohnungen</h2>
@@ -355,6 +450,30 @@
     let token = localStorage.getItem('ve_token');
     let deferredInstall = null;
     let stats = null;
+    let streakReminderTimer = null;
+    const REFERRER_BONUS = '0.001';
+    const REFEREE_BONUS = '0.001';
+
+    function initTheme() {
+      const theme = localStorage.getItem('ve_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      updateThemeButton(theme);
+    }
+
+    function updateThemeButton(theme) {
+      const btn = document.getElementById('theme-toggle');
+      if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('ve_theme', next);
+      updateThemeButton(next);
+    }
+
+    initTheme();
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
@@ -506,7 +625,104 @@
         const left = Math.max(0, 7 - (stats?.streak_days || 0));
         return '🔒 noch ' + left + ' Tage';
       }
+      if (status === 'locked' && item.id === 'daily_challenge') {
+        const left = Math.max(0, (stats?.challenge_target || 5) - (stats?.challenge_watches_today || 0));
+        return '🔒 noch ' + left + ' Videos';
+      }
       return '🔒 gesperrt';
+    }
+
+    function renderChallenge(statsData) {
+      const target = statsData.challenge_target || 5;
+      const watched = statsData.challenge_watches_today || 0;
+      const pct = Math.min(100, (watched / target) * 100);
+      document.getElementById('challenge-progress-text').textContent =
+        watched + '/' + target + ' Videos heute';
+      document.getElementById('challenge-progress-fill').style.width = pct + '%';
+      const hint = document.getElementById('challenge-hint');
+      if (statsData.daily_challenge_completed_today) {
+        hint.textContent = 'Challenge geschafft — Extra-Bonus erhalten! 🎉';
+      } else {
+        hint.textContent = target + ' Videos heute = Extra-Bonus 0.002 USDT';
+      }
+    }
+
+    function renderReferralBanner() {
+      const text = document.getElementById('referral-banner-text');
+      text.textContent =
+        'Freund einladen → du +' + REFERRER_BONUS + ' USDT, Freund +' + REFEREE_BONUS + ' USDT';
+    }
+
+    function renderLeaderboard(data) {
+      const el = document.getElementById('leaderboard-list');
+      const entries = data?.entries || [];
+      if (!entries.length) {
+        el.innerHTML = '<p class="empty">Noch keine Verdiener diese Woche</p>';
+        return;
+      }
+      el.innerHTML = entries.map(e => `
+        <div class="leaderboard-item">
+          <span class="leaderboard-rank">#${e.rank}</span>
+          <span class="leaderboard-name">${e.display_name}</span>
+          <span class="leaderboard-earn">${e.weekly_earnings_usdt} USDT</span>
+        </div>
+      `).join('');
+    }
+
+    function updateStreakWarning(statsData) {
+      const el = document.getElementById('streak-warning');
+      const hour = new Date().getHours();
+      const atRisk = statsData.streak_days > 0
+        && statsData.watches_today === 0
+        && hour >= 18;
+      if (atRisk) {
+        el.textContent = '⚠️ Dein Streak läuft heute ab! Schau noch ein Video, um '
+          + statsData.streak_days + (statsData.streak_days === 1 ? ' Tag' : ' Tage')
+          + ' Streak zu halten.';
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+
+    async function enableNotifications() {
+      if (!('Notification' in window)) {
+        showError('Benachrichtigungen werden von diesem Browser nicht unterstützt.');
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      const btn = document.getElementById('notify-btn');
+      if (perm === 'granted') {
+        btn.textContent = 'Benachrichtigungen aktiv ✓';
+        btn.disabled = true;
+        scheduleStreakReminder();
+        log('Streak-Erinnerungen aktiviert (lokal, kein Push-Server)');
+      } else {
+        showError('Benachrichtigungen abgelehnt — nutze die In-App-Warnung abends.');
+      }
+    }
+
+    function scheduleStreakReminder() {
+      if (streakReminderTimer) clearTimeout(streakReminderTimer);
+      const now = new Date();
+      const evening = new Date();
+      evening.setHours(20, 0, 0, 0);
+      if (evening <= now) return;
+      const ms = evening - now;
+      streakReminderTimer = setTimeout(() => {
+        if (!stats || stats.streak_days <= 0 || stats.watches_today > 0) return;
+        const body = 'Dein ' + stats.streak_days + '-Tage-Streak läuft heute ab!';
+        if (navigator.serviceWorker?.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_STREAK_REMINDER',
+            title: 'VANTAGE-EARN',
+            body,
+          });
+        } else if (Notification.permission === 'granted') {
+          new Notification('VANTAGE-EARN', { body, icon: '/icons/icon-192.png' });
+        }
+        updateStreakWarning(stats);
+      }, ms);
     }
 
     function renderBonuses(statsData) {
@@ -613,13 +829,20 @@
     }
 
     async function refresh() {
-      const [wallet, ref, statsData, ledger] = await Promise.all([
+      const [wallet, ref, statsData, ledger, leaderboard] = await Promise.all([
         api('/users/me/wallet'),
         api('/users/me/referral'),
         api('/users/me/stats'),
         api('/users/me/ledger'),
+        fetch(API + '/leaderboard/weekly').then(r => r.json()).catch(() => ({ entries: [] })),
       ]);
       stats = statsData;
+
+      renderReferralBanner();
+      renderChallenge(stats);
+      renderLeaderboard(leaderboard);
+      updateStreakWarning(stats);
+      if (Notification.permission === 'granted') scheduleStreakReminder();
 
       document.getElementById('balance').textContent = wallet.balance_usdt + ' USDT';
       document.getElementById('local-balance').textContent =
@@ -783,6 +1006,12 @@
     if (token) {
       document.getElementById('auth-card').classList.add('hidden');
       document.getElementById('app').classList.remove('hidden');
+      renderReferralBanner();
+      if (Notification.permission === 'granted') {
+        const btn = document.getElementById('notify-btn');
+        btn.textContent = 'Benachrichtigungen aktiv ✓';
+        btn.disabled = true;
+      }
       refresh().catch(() => { token = null; localStorage.removeItem('ve_token'); location.reload(); });
     } else {
       const ref = new URLSearchParams(location.search).get('ref');

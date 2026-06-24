@@ -32,6 +32,7 @@ pub struct UserProfile {
     pub milestones_claimed: u8,
     pub last_daily_bonus_date: Option<NaiveDate>,
     pub streak_7_bonus_claimed: bool,
+    pub last_challenge_bonus_date: Option<NaiveDate>,
     pub locale: String,
     pub referred_by: Option<Uuid>,
     pub referral_bonus_paid: bool,
@@ -53,6 +54,7 @@ impl Default for UserProfile {
             milestones_claimed: 0,
             last_daily_bonus_date: None,
             streak_7_bonus_claimed: false,
+            last_challenge_bonus_date: None,
             locale: "en_US".into(),
             referred_by: None,
             referral_bonus_paid: false,
@@ -370,7 +372,7 @@ impl AppState {
         let today = Utc::now().date_naive();
         profile.total_watches += 1;
 
-        let (bonus_result, milestones_claimed, streak_7_claimed, daily_date) =
+        let (bonus_result, milestones_claimed, streak_7_claimed, daily_date, challenge_date) =
             BonusEngine::evaluate_watch_bonuses(
                 is_first_watch_today,
                 profile.last_daily_bonus_date,
@@ -379,13 +381,21 @@ impl AppState {
                 profile.milestones_claimed,
                 profile.streak_days,
                 profile.streak_7_bonus_claimed,
+                profile.watches_today,
+                profile.last_challenge_bonus_date,
             );
 
         profile.milestones_claimed = milestones_claimed;
         profile.streak_7_bonus_claimed = streak_7_claimed;
         profile.last_daily_bonus_date = daily_date;
+        profile.last_challenge_bonus_date = challenge_date.or(profile.last_challenge_bonus_date);
 
         bonus_result
+    }
+
+    pub fn challenge_bonus_claimed_today(profile: &UserProfile) -> bool {
+        let today = Utc::now().date_naive();
+        profile.last_challenge_bonus_date == Some(today)
     }
 
     pub fn daily_bonus_claimed_today(profile: &UserProfile) -> bool {
@@ -488,6 +498,35 @@ impl AppState {
 
     pub fn payout_is_approved(status: &str) -> bool {
         status == "approved"
+    }
+
+    pub async fn weekly_leaderboard(&self) -> AppResult<Vec<(Uuid, Decimal)>> {
+        self.store.weekly_leaderboard().await
+    }
+
+    pub async fn user_count(&self) -> AppResult<i64> {
+        self.store.user_count().await
+    }
+
+    pub async fn recent_payout_count(&self) -> AppResult<i64> {
+        self.store.recent_payout_count(7).await
+    }
+
+    pub fn admin_secret_configured() -> bool {
+        std::env::var("ADMIN_SECRET")
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+    }
+
+    pub fn verify_admin_secret(provided: Option<&str>) -> AppResult<()> {
+        let expected = std::env::var("ADMIN_SECRET").unwrap_or_default();
+        if expected.is_empty() {
+            return Err(shared::AppError::Unauthorized);
+        }
+        match provided {
+            Some(s) if s == expected => Ok(()),
+            _ => Err(shared::AppError::Unauthorized),
+        }
     }
 }
 

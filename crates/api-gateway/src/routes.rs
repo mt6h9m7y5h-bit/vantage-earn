@@ -1,15 +1,18 @@
 use axum::{
     extract::State,
+    http::HeaderMap,
     middleware,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use fraud_engine::{FraudEngine, WatchSessionCheck, MAX_WATCHES_PER_DAY};
 use liquidity_engine::LiquidityEngine;
 use referral_engine::ReferralEngine;
-use reward_engine::{BonusCatalogItem, BonusEarned, BonusEngine, RewardEngine};
+use reward_engine::{
+    BonusCatalogItem, BonusEarned, BonusEngine, DAILY_CHALLENGE_TARGET, RewardEngine,
+};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use shared::{
@@ -39,6 +42,9 @@ pub fn router() -> Router<AppState> {
         .route("/icons/icon-512.png", get(pwa::icon_512))
         .route("/auth/register", post(register))
         .route("/auth/login", post(login))
+        .route("/leaderboard/weekly", get(weekly_leaderboard))
+        .route("/admin", get(pwa::admin_page))
+        .route("/admin/stats", get(admin_stats))
         .layer(middleware::from_fn_with_state(
             auth_limiter,
             rate_limit::middleware,
@@ -201,6 +207,9 @@ struct UserStatsResponse {
     payout_methods: Vec<&'static str>,
     payout_method_info: Vec<PayoutMethodInfo>,
     payout_first_time_note_de: &'static str,
+    challenge_watches_today: u32,
+    challenge_target: u32,
+    daily_challenge_completed_today: bool,
     bonus_catalog: Vec<BonusCatalogItem>,
 }
 
@@ -214,6 +223,7 @@ async fn get_stats(
     let min_payout = state.min_payout_usdt().await;
     let streak_bonus_percent = RewardEngine::streak_bonus_percent(profile.streak_days);
     let daily_bonus_claimed_today = AppState::daily_bonus_claimed_today(&profile);
+    let daily_challenge_completed_today = AppState::challenge_bonus_claimed_today(&profile);
     let next_milestone =
         BonusEngine::next_milestone(profile.total_watches, profile.milestones_claimed);
     let bonus_catalog = BonusEngine::build_catalog(
@@ -223,6 +233,8 @@ async fn get_stats(
         daily_bonus_claimed_today,
         profile.streak_days,
         profile.streak_7_bonus_claimed,
+        watches_today,
+        daily_challenge_completed_today,
     );
 
     Ok(Json(UserStatsResponse {
@@ -243,6 +255,9 @@ async fn get_stats(
         payout_methods: AppState::payout_methods(),
         payout_method_info: PayoutMethod::all_info(),
         payout_first_time_note_de: PAYOUT_FIRST_TIME_NOTE_DE,
+        challenge_watches_today: watches_today,
+        challenge_target: DAILY_CHALLENGE_TARGET,
+        daily_challenge_completed_today: daily_challenge_completed_today,
         bonus_catalog,
     }))
 }
@@ -528,4 +543,76 @@ async fn ai_chat(
         .map_err(map_ai_error)?;
 
     Ok(Json(AiChatResponse { reply }))
+}
+
+#[derive(Serialize)]
+struct LeaderboardEntry {
+    rank: u32,
+    display_name: String,
+    weekly_earnings_usdt: Decimal,
+}
+
+#[derive(Serialize)]
+struct WeeklyLeaderboardResponse {
+    week_start: DateTime<Utc>,
+    entries: Vec<LeaderboardEntry>,
+}
+
+fn anonymize_user(user_id: Uuid) -> String {
+    let hex = user_id.to_string().replace('-', "").to_uppercase();
+    let short: String = hex.chars().take(4).collect();
+    format!("User #{short}")
+}
+
+async fn weekly_leaderboard(
+    State(state): State<AppState>,
+) -> Result<Json<WeeklyLeaderboardResponse>, ApiError> {
+    let ranked = state.weekly_leaderboard().await?;
+    let entries = ranked
+        .into_iter()
+        .enumerate()
+        .map(|(i, (user_id, earnings))| LeaderboardEntry {
+            rank: (i + 1) as u32,
+            display_name: anonymize_user(user_id),
+            weekly_earnings_usdt: earnings,
+        })
+        .collect();
+
+    Ok(Json(WeeklyLeaderboardResponse {
+        week_start: crate::store::week_start_utc(),
+        entries,
+    }))
+}
+
+#[derive(Serialize)]
+struct AdminStatsResponse {
+    total_revenue: Decimal,
+    pending_payouts: Decimal,
+    held_payouts: Decimal,
+    user_count: i64,
+    recent_payout_count: i64,
+}
+
+async fn admin_stats(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<AdminStatsResponse>, ApiError> {
+    let secret = headers
+        .get("X-Admin-Secret")
+        .and_then(|v| v.to_str().ok());
+    AppState::verify_admin_secret(secret)?;
+
+    let total_revenue = state.total_revenue().await?;
+    let pending_payouts = state.pending_payouts().await?;
+    let held_payouts = state.held_payouts().await?;
+    let user_count = state.user_count().await?;
+    let recent_payout_count = state.recent_payout_count().await?;
+
+    Ok(Json(AdminStatsResponse {
+        total_revenue,
+        pending_payouts,
+        held_payouts,
+        user_count,
+        recent_payout_count,
+    }))
 }

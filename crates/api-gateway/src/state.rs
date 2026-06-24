@@ -6,8 +6,8 @@ use reward_engine::RewardEngine;
 use rust_decimal::Decimal;
 use referral_engine::ReferralEngine;
 use shared::{
-    AppEvent, AppResult, Currency, PayoutTier, RewardCreditedPayload, SafeAIContext,
-    TrustScoreUpdatedPayload,
+    AppEvent, AppResult, Currency, PayoutMethod, PayoutTier, RewardCreditedPayload, SafeAIContext,
+    TrustScoreUpdatedPayload, DEMO_MIN_PAYOUT_USDT, MIN_PAYOUT_EUR,
 };
 use trust_score_engine::TrustScoreEngine;
 use uuid::Uuid;
@@ -165,6 +165,25 @@ impl AppState {
             .unwrap_or_else(|| Decimal::new(10, 2))
     }
 
+    pub fn payout_demo_mode() -> bool {
+        if cfg!(test) {
+            return true;
+        }
+        std::env::var("PAYOUT_DEMO_MODE")
+            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false)
+    }
+
+    pub async fn min_payout_usdt(&self) -> Decimal {
+        if Self::payout_demo_mode() {
+            Decimal::from_str_exact(DEMO_MIN_PAYOUT_USDT).unwrap()
+        } else {
+            self.currency
+                .min_payout_usdt_from_eur(Decimal::from(MIN_PAYOUT_EUR))
+                .await
+        }
+    }
+
     pub async fn store_healthy(&self) -> bool {
         self.store.ping().await.unwrap_or(false)
     }
@@ -205,6 +224,14 @@ impl AppState {
         self.store.add_held_payout(amount).await
     }
 
+    pub fn min_payout_eur() -> Decimal {
+        Decimal::from(MIN_PAYOUT_EUR)
+    }
+
+    pub fn payout_methods() -> Vec<&'static str> {
+        PayoutMethod::all_strings()
+    }
+
     pub async fn record_payout_request(
         &self,
         id: Uuid,
@@ -212,9 +239,10 @@ impl AppState {
         amount: Decimal,
         tier: &str,
         status: &str,
+        payout_method: &str,
     ) -> AppResult<()> {
         self.store
-            .record_payout_request(id, user_id, amount, tier, status)
+            .record_payout_request(id, user_id, amount, tier, status, payout_method)
             .await
     }
 

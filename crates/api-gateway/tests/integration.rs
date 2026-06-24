@@ -120,14 +120,16 @@ async fn payout_debits_wallet_and_blocks_double_spend() {
     let app = app(state.clone());
     let (user_id, token) = register(&app).await;
 
+    let min = state.min_payout_usdt().await;
+    state.credit(user_id, min).await.unwrap();
     state
-        .credit(user_id, Decimal::from_str_exact("0.01").unwrap())
+        .add_revenue(Decimal::from_str_exact("1000.0").unwrap())
         .await
         .unwrap();
-    state
-        .add_revenue(Decimal::from_str_exact("1.0").unwrap())
-        .await
-        .unwrap();
+
+    let body = format!(
+        r#"{{"amount_usdt":"{min}","payout_method":"crypto"}}"#
+    );
 
     let first = app
         .clone()
@@ -135,18 +137,20 @@ async fn payout_debits_wallet_and_blocks_double_spend() {
             "POST",
             "/users/me/payout/request",
             &token,
-            Some(r#"{"amount_usdt":"0.01"}"#),
+            Some(&body),
         ))
         .await
         .unwrap();
     assert_eq!(first.status(), StatusCode::OK);
+    let first_json = body_json(first).await;
+    assert_eq!(first_json["payout_method"], "crypto");
 
     let second = app
         .oneshot(authed(
             "POST",
             "/users/me/payout/request",
             &token,
-            Some(r#"{"amount_usdt":"0.01"}"#),
+            Some(&body),
         ))
         .await
         .unwrap();
@@ -154,6 +158,32 @@ async fn payout_debits_wallet_and_blocks_double_spend() {
 
     let balance = state.balance(user_id).await.unwrap();
     assert_eq!(balance, Decimal::ZERO);
+}
+
+#[tokio::test]
+async fn payout_rejects_invalid_method() {
+    let state = AppState::new();
+    let app = app(state.clone());
+    let (user_id, token) = register(&app).await;
+
+    let min = state.min_payout_usdt().await;
+    state.credit(user_id, min).await.unwrap();
+    state
+        .add_revenue(Decimal::from_str_exact("1000.0").unwrap())
+        .await
+        .unwrap();
+
+    let response = app
+        .oneshot(authed(
+            "POST",
+            "/users/me/payout/request",
+            &token,
+            Some(r#"{"amount_usdt":"1","payout_method":"bitcoin"}"#),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -174,7 +204,7 @@ async fn watch_complete_credits_wallet() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response).await;
-    assert_eq!(json["reward_usdt"], "0.002");
+    assert_eq!(json["reward_usdt"], "0.00210");
 
     let wallet = app
         .oneshot(authed("GET", "/users/me/wallet", &token, None))
@@ -182,7 +212,7 @@ async fn watch_complete_credits_wallet() {
         .unwrap();
     assert_eq!(wallet.status(), StatusCode::OK);
     let wallet_json = body_json(wallet).await;
-    assert_eq!(wallet_json["balance_usdt"], "0.002");
+    assert_eq!(wallet_json["balance_usdt"], "0.00210");
     assert!(wallet_json["trust_score"].as_i64().unwrap() > 0);
 }
 
@@ -201,7 +231,40 @@ async fn stats_returns_streak_and_estimates() {
     assert_eq!(json["streak_days"], 0);
     assert_eq!(json["watches_remaining_today"], 30);
     assert_eq!(json["reward_estimate_30s"], "0.001");
-    assert_eq!(json["min_payout_usdt"], "0.01");
+    assert_eq!(json["min_payout_eur"], "170");
+    assert_eq!(json["payout_methods"].as_array().unwrap().len(), 3);
+    let demo = json["payout_demo_mode"].as_bool().unwrap();
+    if demo {
+        assert_eq!(json["min_payout_usdt"], "0.01");
+    } else {
+        assert_eq!(json["min_payout_usdt"], "184.782609");
+    }
+}
+
+#[tokio::test]
+async fn watch_complete_updates_streak() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let stats = app
+        .oneshot(authed("GET", "/users/me/stats", &token, None))
+        .await
+        .unwrap();
+    let json = body_json(stats).await;
+    assert_eq!(json["streak_days"], 1);
 }
 
 #[tokio::test]

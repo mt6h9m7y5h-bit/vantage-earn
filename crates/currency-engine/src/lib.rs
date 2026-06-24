@@ -53,6 +53,13 @@ impl CurrencyEngine {
         (amount_usdt * exchange_rate).round_dp(2)
     }
 
+    pub fn convert_local_to_usdt(amount_local: Decimal, exchange_rate: Decimal) -> Decimal {
+        if exchange_rate <= Decimal::ZERO {
+            return Decimal::ZERO;
+        }
+        (amount_local / exchange_rate).round_dp(6)
+    }
+
     pub async fn usdt_to_local(&self, amount_usdt: Decimal, currency: Currency) -> Option<Decimal> {
         let rates = self.rates.read().await;
         rates
@@ -64,6 +71,24 @@ impl CurrencyEngine {
         self.usdt_to_local(amount_usdt, Currency::Eur)
             .await
             .unwrap_or(amount_usdt)
+    }
+
+    pub async fn local_to_usdt(&self, amount_local: Decimal, currency: Currency) -> Option<Decimal> {
+        let rates = self.rates.read().await;
+        rates.get(&currency).map(|r| {
+            Self::convert_local_to_usdt(amount_local, r.usdt_to_local)
+        })
+    }
+
+    pub async fn min_payout_usdt_from_eur(&self, eur_amount: Decimal) -> Decimal {
+        self.local_to_usdt(eur_amount, Currency::Eur)
+            .await
+            .unwrap_or_else(|| {
+                Self::convert_local_to_usdt(
+                    eur_amount,
+                    Decimal::from_str_exact("0.92").unwrap(),
+                )
+            })
     }
 
     pub async fn set_rate(&self, currency: Currency, usdt_to_local: Decimal) {
@@ -93,5 +118,14 @@ mod tests {
         let result =
             CurrencyEngine::convert_usdt_to_local(Decimal::ONE, Decimal::from_str_exact("0.92").unwrap());
         assert_eq!(result, Decimal::from_str_exact("0.92").unwrap());
+    }
+
+    #[test]
+    fn converts_eur_to_usdt_for_min_payout() {
+        let result = CurrencyEngine::convert_local_to_usdt(
+            Decimal::from(170),
+            Decimal::from_str_exact("0.92").unwrap(),
+        );
+        assert_eq!(result, Decimal::from_str_exact("184.782609").unwrap());
     }
 }

@@ -30,6 +30,7 @@ struct PayoutRecord {
     amount_usdt: Decimal,
     tier: String,
     status: String,
+    payout_method: String,
 }
 
 impl MemoryStore {
@@ -141,6 +142,7 @@ impl MemoryStore {
         amount: Decimal,
         tier: &str,
         status: &str,
+        payout_method: &str,
     ) -> AppResult<()> {
         self.payout_requests.write().await.push(PayoutRecord {
             id,
@@ -148,6 +150,7 @@ impl MemoryStore {
             amount_usdt: amount,
             tier: tier.into(),
             status: status.into(),
+            payout_method: payout_method.into(),
         });
         Ok(())
     }

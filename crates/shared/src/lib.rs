@@ -11,4 +11,4 @@ pub use events::{
     WatchCompletedPayload,
 };
 pub use money::{Currency, Usdt};
-pub use payout::PayoutTier;
+pub use payout::{PayoutMethod, PayoutTier, DEMO_MIN_PAYOUT_USDT, MIN_PAYOUT_EUR};

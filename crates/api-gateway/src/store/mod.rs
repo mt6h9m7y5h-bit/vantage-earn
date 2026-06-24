@@ -147,10 +147,17 @@ impl Store {
         amount: Decimal,
         tier: &str,
         status: &str,
+        payout_method: &str,
     ) -> AppResult<()> {
         match self {
-            Self::Memory(s) => s.record_payout_request(id, user_id, amount, tier, status).await,
-            Self::Postgres(s) => s.record_payout_request(id, user_id, amount, tier, status).await,
+            Self::Memory(s) => {
+                s.record_payout_request(id, user_id, amount, tier, status, payout_method)
+                    .await
+            }
+            Self::Postgres(s) => {
+                s.record_payout_request(id, user_id, amount, tier, status, payout_method)
+                    .await
+            }
         }
     }
 

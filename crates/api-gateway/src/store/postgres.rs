@@ -319,11 +319,12 @@ impl PgStore {
         amount: Decimal,
         tier: &str,
         status: &str,
+        payout_method: &str,
     ) -> AppResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO payout_requests (id, user_id, amount_usdt, tier, status)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO payout_requests (id, user_id, amount_usdt, tier, status, payout_method)
+            VALUES ($1, $2, $3, $4, $5, $6)
             "#,
         )
         .bind(id)
@@ -331,6 +332,7 @@ impl PgStore {
         .bind(amount)
         .bind(tier)
         .bind(status)
+        .bind(payout_method)
         .execute(&self.pool)
         .await
         .map_err(db_err)?;

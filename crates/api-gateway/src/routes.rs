@@ -12,7 +12,7 @@ use referral_engine::ReferralEngine;
 use reward_engine::RewardEngine;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use shared::{AppError, AppEvent, PayoutRequestedPayload, WatchCompletedPayload};
+use shared::{AppError, AppEvent, PayoutMethod, PayoutRequestedPayload, WatchCompletedPayload};
 use uuid::Uuid;
 
 use crate::error::{map_ai_error, ApiError};
@@ -188,18 +188,19 @@ struct UserStatsResponse {
     reward_estimate_30s: Decimal,
     reward_estimate_60s: Decimal,
     min_payout_usdt: Decimal,
+    min_payout_eur: Decimal,
+    payout_demo_mode: bool,
+    payout_methods: Vec<&'static str>,
 }
 
 async fn get_stats(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> Result<Json<UserStatsResponse>, ApiError> {
-    const MIN_PAYOUT_USDT: &str = "0.01";
-
     let profile = state.profile(user_id).await;
     let watches_today = profile.effective_watches_today();
     let remaining = MAX_WATCHES_PER_DAY.saturating_sub(watches_today);
-    let min_payout = Decimal::from_str_exact(MIN_PAYOUT_USDT).unwrap();
+    let min_payout = state.min_payout_usdt().await;
 
     Ok(Json(UserStatsResponse {
         streak_days: profile.streak_days,
@@ -209,6 +210,9 @@ async fn get_stats(
         reward_estimate_30s: RewardEngine::calculate_watch_reward(30, profile.streak_days),
         reward_estimate_60s: RewardEngine::calculate_watch_reward(60, profile.streak_days),
         min_payout_usdt: min_payout,
+        min_payout_eur: AppState::min_payout_eur(),
+        payout_demo_mode: AppState::payout_demo_mode(),
+        payout_methods: AppState::payout_methods(),
     }))
 }
 
@@ -251,6 +255,8 @@ async fn watch_complete(
         is_vpn: body.is_vpn,
     })?;
 
+    profile.record_session();
+
     let base_reward =
         RewardEngine::calculate_watch_reward(body.watch_duration_secs, profile.streak_days);
     let reward = (base_reward * FraudEngine::reward_multiplier(fraud_prob)).round_dp(6);
@@ -266,7 +272,6 @@ async fn watch_complete(
         .maybe_apply_referral_bonuses(user_id, &mut profile)
         .await?;
 
-    profile.record_session();
     state.save_profile(user_id, &profile).await?;
 
     let payload = WatchCompletedPayload {
@@ -291,12 +296,14 @@ async fn watch_complete(
 #[derive(Deserialize)]
 struct PayoutRequest {
     amount_usdt: Decimal,
+    payout_method: String,
 }
 
 #[derive(Serialize)]
 struct PayoutResponse {
     user_id: Uuid,
     amount_usdt: Decimal,
+    payout_method: String,
     tier: String,
     status: String,
     payout_id: Uuid,
@@ -307,11 +314,20 @@ async fn payout_request(
     AuthUser(user_id): AuthUser,
     Json(body): Json<PayoutRequest>,
 ) -> Result<Json<PayoutResponse>, ApiError> {
+    let Some(method) = PayoutMethod::parse(&body.payout_method) else {
+        return Err(AppError::InvalidInput(format!(
+            "invalid payout_method; allowed: {}",
+            PayoutMethod::all_strings().join(", ")
+        ))
+        .into());
+    };
+
     let balance = state.balance(user_id).await?;
-    let min_payout = Decimal::from_str_exact("0.01").unwrap();
+    let min_payout = state.min_payout_usdt().await;
     if body.amount_usdt < min_payout {
         return Err(AppError::InvalidInput(format!(
-            "minimum payout is {min_payout} USDT"
+            "minimum payout is {min_payout} USDT ({} EUR equivalent)",
+            AppState::min_payout_eur()
         ))
         .into());
     }
@@ -346,7 +362,14 @@ async fn payout_request(
         state.add_held_payout(body.amount_usdt).await?;
     }
     state
-        .record_payout_request(payout_id, user_id, body.amount_usdt, tier.as_str(), status)
+        .record_payout_request(
+            payout_id,
+            user_id,
+            body.amount_usdt,
+            tier.as_str(),
+            status,
+            method.as_str(),
+        )
         .await?;
 
     let mut profile = state.profile(user_id).await;
@@ -366,6 +389,7 @@ async fn payout_request(
     Ok(Json(PayoutResponse {
         user_id,
         amount_usdt: body.amount_usdt,
+        payout_method: method.as_str().into(),
         tier: tier.as_str().into(),
         status: status.into(),
         payout_id,

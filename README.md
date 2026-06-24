@@ -47,7 +47,7 @@ See [docs/AI_COPILOT.md](./docs/AI_COPILOT.md) for architecture details.
 
 ### Rewarded video ads
 
-Default is a **mock timer** (no real ads). For live AppLixir integration, set `AD_PROVIDER=applixir` and `APPLIXIR_API_KEY`. See [docs/ADS.md](./docs/ADS.md).
+Default is a **mock timer** (no real ads). For live ads, set `AD_PROVIDER=adinplay` (recommended for indie devs) or `AD_PROVIDER=applixir`. See [docs/ADS.md](./docs/ADS.md).
 
 ## API Endpoints
 

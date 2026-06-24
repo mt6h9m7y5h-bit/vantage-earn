@@ -283,7 +283,7 @@ struct WatchCompleteRequest {
     is_emulator: bool,
     #[serde(default)]
     is_vpn: bool,
-    /// Client-reported ad provider (`mock` | `applixir`). Reserved for future SSV validation.
+    /// Client-reported ad provider (`mock` | `adinplay` | `applixir`). Reserved for future SSV validation.
     #[serde(default)]
     ad_provider: Option<String>,
     /// AppLixir transaction / session id from ad completion callback (future SSV stub).

@@ -93,6 +93,7 @@ async fn public_config_returns_mock_by_default() {
     let json = body_json(response).await;
     assert_eq!(json["ad_provider"], "mock");
     assert!(json["applixir_app_id"].is_null());
+    assert!(json["adinplay_tag_url"].is_null());
     assert_eq!(json["watch_duration_secs"], 30);
 }
 

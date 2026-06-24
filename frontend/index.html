@@ -239,7 +239,8 @@
     }
     .ad-placeholder span { font-size: 2.5rem; }
     .ad-placeholder p { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.8rem; }
-    #applixir-ad-container {
+    #applixir-ad-container,
+    #adinplay-ad-container {
       min-height: 200px;
       border-radius: 12px;
       overflow: hidden;
@@ -573,7 +574,8 @@
       <div class="ad-placeholder" id="ad-placeholder">
         <span>📺</span>
         <p id="ad-provider-label">Werbung wird geladen…</p>
-        <div id="applixir-ad-container"></div>
+        <div id="applixir-ad-container" class="hidden"></div>
+        <div id="adinplay-ad-container" class="hidden"></div>
       </div>
       <div class="timer-ring" id="ad-timer">30</div>
       <div class="timer-sub" id="ad-status">Bitte bis zum Ende schauen</div>
@@ -586,6 +588,7 @@
     let adConfig = {
       ad_provider: 'mock',
       applixir_app_id: null,
+      adinplay_tag_url: null,
       watch_duration_secs: 30,
       applixir_sdk_url: 'https://cdn.applixir.com/applixir.app.v6.0.1.js',
     };
@@ -789,12 +792,151 @@
             this._settled = true;
           },
         },
+
+        adinplay: {
+          _scriptLoaded: false,
+          _sessionId: null,
+          _settled: false,
+          _playerReady: false,
+          _finish: null,
+
+          _ensureAiptag() {
+            window.aiptag = window.aiptag || { cmd: [] };
+            aiptag.cmd.display = aiptag.cmd.display || [];
+            aiptag.cmd.player = aiptag.cmd.player || [];
+          },
+
+          _loadSdk(tagUrl) {
+            this._ensureAiptag();
+            if (this._scriptLoaded && typeof aipPlayer !== 'undefined') {
+              return Promise.resolve();
+            }
+            return new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = tagUrl;
+              script.async = true;
+              script.onload = () => {
+                this._scriptLoaded = true;
+                resolve();
+              };
+              script.onerror = () => reject(new Error('AdInPlay SDK konnte nicht geladen werden'));
+              document.head.appendChild(script);
+            });
+          },
+
+          _initPlayer() {
+            const self = this;
+            const container = document.getElementById('adinplay-ad-container');
+            aiptag.adplayer = new aipPlayer({
+              AD_WIDTH: 960,
+              AD_HEIGHT: 540,
+              AD_DISPLAY: 'fullscreen',
+              LOADING_TEXT: 'Werbung wird geladen…',
+              PREROLL_ELEM: () => container || document.getElementById('adinplay-ad-container'),
+              AIP_REWARDEDGRANTED: () => {
+                if (self._finish) {
+                  self._finish(null, { provider: 'adinplay', ad_session_id: self._sessionId });
+                }
+              },
+              AIP_REWARDEDCOMPLETE: () => {
+                if (!self._settled && self._finish) {
+                  self._finish(null, { provider: 'adinplay', ad_session_id: self._sessionId });
+                }
+              },
+              AIP_COMPLETE: () => {},
+            });
+            this._playerReady = true;
+          },
+
+          async play({ tagUrl, onLoading, onComplete, onError }) {
+            this._settled = false;
+            this._sessionId = crypto.randomUUID();
+            if (onLoading) onLoading(true);
+
+            const applixirEl = document.getElementById('applixir-ad-container');
+            const adinplayEl = document.getElementById('adinplay-ad-container');
+            if (applixirEl) applixirEl.classList.add('hidden');
+            if (adinplayEl) {
+              adinplayEl.classList.remove('hidden');
+              adinplayEl.innerHTML = '';
+            }
+
+            try {
+              await this._loadSdk(tagUrl);
+            } catch (err) {
+              if (onLoading) onLoading(false);
+              if (onError) onError(err.message || 'SDK-Fehler');
+              throw err;
+            }
+
+            return new Promise((resolve, reject) => {
+              const finish = (err, result) => {
+                if (this._settled) return;
+                this._settled = true;
+                this._finish = null;
+                if (onLoading) onLoading(false);
+                if (err) {
+                  if (onError) onError(err);
+                  reject(new Error(err));
+                } else {
+                  if (onComplete) onComplete(result);
+                  resolve(result);
+                }
+              };
+
+              const loadTimeout = setTimeout(() => {
+                if (!this._settled) {
+                  finish('Keine Werbung verfügbar (Timeout)');
+                }
+              }, 45000);
+
+              this._finish = (err, result) => {
+                clearTimeout(loadTimeout);
+                finish(err, result);
+              };
+
+              const showRewarded = () => {
+                if (typeof aiptag.adplayer === 'undefined') {
+                  this._finish('AdInPlay Player nicht bereit — Adblocker?');
+                  return;
+                }
+                try {
+                  aiptag.cmd.player.push(() => {
+                    aiptag.adplayer.startRewardedAd({ preload: false, showLoading: true });
+                  });
+                } catch (err) {
+                  this._finish(err.message || 'Werbung starten fehlgeschlagen');
+                }
+              };
+
+              if (this._playerReady && typeof aiptag.adplayer !== 'undefined') {
+                showRewarded();
+                return;
+              }
+
+              aiptag.cmd.player.push(() => {
+                try {
+                  this._initPlayer();
+                  showRewarded();
+                } catch (err) {
+                  this._finish(err.message || 'Player-Init fehlgeschlagen');
+                }
+              });
+            });
+          },
+
+          cancel() {
+            this._settled = true;
+            this._finish = null;
+          },
+        },
       },
 
       getProviderName() {
-        return adConfig.ad_provider === 'applixir' && adConfig.applixir_app_id
-          ? 'applixir'
-          : 'mock';
+        const p = adConfig.ad_provider;
+        if (p === 'adinplay' && adConfig.adinplay_tag_url) return 'adinplay';
+        if (p === 'applixir' && adConfig.applixir_app_id) return 'applixir';
+        return 'mock';
       },
 
       getProvider() {
@@ -817,6 +959,7 @@
 
     function adProviderLabel() {
       const name = AdPlayer.getProviderName();
+      if (name === 'adinplay') return 'Belohnte Video-Werbung (AdInPlay)';
       if (name === 'applixir') return 'Belohnte Video-Werbung (AppLixir)';
       return 'Entwicklungsmodus — Timer-Werbung (Mock)';
     }
@@ -1249,10 +1392,15 @@
       overlay.classList.remove('hidden');
       updateAdProviderUi();
 
-      if (providerName === 'applixir') {
+      const isLiveAd = providerName === 'applixir' || providerName === 'adinplay';
+      if (isLiveAd) {
         timerEl.classList.add('hidden');
         placeholder.classList.remove('hidden');
         statusEl.textContent = 'Werbung wird geladen…';
+        const applixirEl = document.getElementById('applixir-ad-container');
+        const adinplayEl = document.getElementById('adinplay-ad-container');
+        if (applixirEl) applixirEl.classList.toggle('hidden', providerName !== 'applixir');
+        if (adinplayEl) adinplayEl.classList.toggle('hidden', providerName !== 'adinplay');
       } else {
         timerEl.classList.remove('hidden');
         timerEl.classList.remove('paused');
@@ -1268,6 +1416,17 @@
             apiKey: adConfig.applixir_app_id,
             sdkUrl: adConfig.applixir_sdk_url,
             userId: stats?.user_id || undefined,
+            onLoading: (loading) => {
+              statusEl.textContent = loading ? 'Werbung wird geladen…' : 'Video läuft — bis zum Ende schauen';
+            },
+            onError: (msg) => {
+              showError(msg);
+              log('Werbung fehlgeschlagen: ' + msg);
+            },
+          });
+        } else if (providerName === 'adinplay') {
+          adResult = await AdPlayer.play({
+            tagUrl: adConfig.adinplay_tag_url,
             onLoading: (loading) => {
               statusEl.textContent = loading ? 'Werbung wird geladen…' : 'Video läuft — bis zum Ende schauen';
             },

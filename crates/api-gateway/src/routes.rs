@@ -9,7 +9,7 @@ use chrono::Utc;
 use fraud_engine::{FraudEngine, WatchSessionCheck, MAX_WATCHES_PER_DAY};
 use liquidity_engine::LiquidityEngine;
 use referral_engine::ReferralEngine;
-use reward_engine::RewardEngine;
+use reward_engine::{BonusCatalogItem, BonusEarned, BonusEngine, RewardEngine};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use shared::{AppError, AppEvent, PayoutMethod, PayoutRequestedPayload, WatchCompletedPayload};
@@ -182,15 +182,21 @@ async fn get_referral(
 #[derive(Serialize)]
 struct UserStatsResponse {
     streak_days: i32,
+    streak_bonus_percent: u32,
     referral_count: i32,
     watches_today: u32,
     watches_remaining_today: u32,
+    total_watches: u32,
+    next_milestone: Option<u32>,
+    milestones_claimed: u8,
+    daily_bonus_claimed_today: bool,
     reward_estimate_30s: Decimal,
     reward_estimate_60s: Decimal,
     min_payout_usdt: Decimal,
     min_payout_eur: Decimal,
     payout_demo_mode: bool,
     payout_methods: Vec<&'static str>,
+    bonus_catalog: Vec<BonusCatalogItem>,
 }
 
 async fn get_stats(
@@ -201,18 +207,36 @@ async fn get_stats(
     let watches_today = profile.effective_watches_today();
     let remaining = MAX_WATCHES_PER_DAY.saturating_sub(watches_today);
     let min_payout = state.min_payout_usdt().await;
+    let streak_bonus_percent = RewardEngine::streak_bonus_percent(profile.streak_days);
+    let daily_bonus_claimed_today = AppState::daily_bonus_claimed_today(&profile);
+    let next_milestone =
+        BonusEngine::next_milestone(profile.total_watches, profile.milestones_claimed);
+    let bonus_catalog = BonusEngine::build_catalog(
+        streak_bonus_percent,
+        profile.total_watches,
+        profile.milestones_claimed,
+        daily_bonus_claimed_today,
+        profile.streak_days,
+        profile.streak_7_bonus_claimed,
+    );
 
     Ok(Json(UserStatsResponse {
         streak_days: profile.streak_days,
+        streak_bonus_percent,
         referral_count: profile.referral_count,
         watches_today,
         watches_remaining_today: remaining,
+        total_watches: profile.total_watches,
+        next_milestone,
+        milestones_claimed: profile.milestones_claimed,
+        daily_bonus_claimed_today,
         reward_estimate_30s: RewardEngine::calculate_watch_reward(30, profile.streak_days),
         reward_estimate_60s: RewardEngine::calculate_watch_reward(60, profile.streak_days),
         min_payout_usdt: min_payout,
         min_payout_eur: AppState::min_payout_eur(),
         payout_demo_mode: AppState::payout_demo_mode(),
         payout_methods: AppState::payout_methods(),
+        bonus_catalog,
     }))
 }
 
@@ -237,6 +261,8 @@ struct WatchCompleteRequest {
 struct WatchCompleteResponse {
     user_id: Uuid,
     reward_usdt: Decimal,
+    base_reward_usdt: Decimal,
+    bonuses: Vec<BonusEarned>,
     message: String,
 }
 
@@ -255,18 +281,37 @@ async fn watch_complete(
         is_vpn: body.is_vpn,
     })?;
 
+    let is_first_watch_today = profile.effective_watches_today() == 0;
     profile.record_session();
+
+    let today = Utc::now().date_naive();
+    let watch_index = profile.total_watches + 1;
 
     let base_reward =
         RewardEngine::calculate_watch_reward(body.watch_duration_secs, profile.streak_days);
-    let reward = (base_reward * FraudEngine::reward_multiplier(fraud_prob)).round_dp(6);
-    if reward <= Decimal::ZERO {
+    let fraud_mult = FraudEngine::reward_multiplier(fraud_prob);
+    let base_with_fraud = (base_reward * fraud_mult).round_dp(6);
+    let (after_surprise, surprise_mult) =
+        BonusEngine::apply_surprise(base_reward, user_id, today, watch_index);
+    let watch_reward = (after_surprise * fraud_mult).round_dp(6);
+    if watch_reward <= Decimal::ZERO {
         return Err(AppError::FraudBlocked("reward withheld".into()).into());
     }
+    let surprise_extra = watch_reward - base_with_fraud;
 
     state
-        .credit_watch_reward(user_id, reward, fraud_prob, &profile)
+        .credit_watch_reward(user_id, watch_reward, fraud_prob, &profile)
         .await?;
+
+    let mut bonus_result = AppState::apply_watch_bonuses(&mut profile, is_first_watch_today);
+    bonus_result.surprise_multiplier = surprise_mult;
+    bonus_result.surprise_extra_usdt = surprise_extra.max(Decimal::ZERO);
+
+    if !bonus_result.flat_bonuses.is_empty() {
+        state
+            .credit_bonus_rewards(user_id, &bonus_result.flat_bonuses)
+            .await?;
+    }
 
     state
         .maybe_apply_referral_bonuses(user_id, &mut profile)
@@ -274,11 +319,14 @@ async fn watch_complete(
 
     state.save_profile(user_id, &profile).await?;
 
+    let flat_total = bonus_result.flat_total();
+    let total_reward = watch_reward + flat_total;
+
     let payload = WatchCompletedPayload {
         user_id,
         session_id: Uuid::new_v4(),
         watch_duration_secs: body.watch_duration_secs,
-        reward_usdt: reward,
+        reward_usdt: total_reward,
         occurred_at: Utc::now(),
     };
     state
@@ -286,10 +334,43 @@ async fn watch_complete(
         .publish(AppEvent::WatchCompleted(payload))
         .await;
 
+    let mut bonus_lines: Vec<String> = Vec::new();
+    if let Some(mult) = bonus_result.surprise_multiplier {
+        bonus_lines.push(format!("Überraschung {mult}× (+{surprise_extra} USDT)"));
+    }
+    for b in &bonus_result.flat_bonuses {
+        bonus_lines.push(format!("{} +{}", b.title, b.amount_usdt));
+    }
+    let message = if bonus_lines.is_empty() {
+        format!("+{watch_reward} USDT gutgeschrieben")
+    } else {
+        format!(
+            "+{total_reward} USDT gesamt (Video {watch_reward}; {})",
+            bonus_lines.join(", ")
+        )
+    };
+
+    let mut bonuses = bonus_result.flat_bonuses;
+    if bonus_result.surprise_multiplier.is_some() {
+        bonuses.insert(
+            0,
+            BonusEarned {
+                id: "surprise".into(),
+                title: format!(
+                    "Überraschung {}×",
+                    bonus_result.surprise_multiplier.unwrap()
+                ),
+                amount_usdt: bonus_result.surprise_extra_usdt,
+            },
+        );
+    }
+
     Ok(Json(WatchCompleteResponse {
         user_id,
-        reward_usdt: reward,
-        message: format!("+{reward} USDT credited"),
+        reward_usdt: total_reward,
+        base_reward_usdt: watch_reward,
+        bonuses,
+        message,
     }))
 }
 

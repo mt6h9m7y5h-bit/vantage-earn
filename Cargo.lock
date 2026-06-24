@@ -1993,8 +1993,11 @@ dependencies = [
 name = "reward-engine"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "rust_decimal",
+ "serde",
  "shared",
+ "uuid",
 ]
 
 [[package]]

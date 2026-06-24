@@ -1,3 +1,10 @@
+mod bonuses;
+
+pub use bonuses::{
+    BonusCatalogItem, BonusEarned, BonusEngine, DAILY_LOGIN_BONUS_USDT, MILESTONE_THRESHOLDS,
+    STREAK_7_BONUS_USDT, SURPRISE_CHANCE_PERCENT, SURPRISE_MULTIPLIER, WatchBonusResult,
+};
+
 use rust_decimal::Decimal;
 
 /// Base reward per 30s watch segment.
@@ -13,6 +20,17 @@ const MAX_STREAK_BONUS: f64 = 0.50;
 pub struct RewardEngine;
 
 impl RewardEngine {
+    /// Effective streak bonus as a whole-number percent (e.g. 5 → +5%).
+    pub fn streak_bonus_percent(streak_days: i32) -> u32 {
+        let rate = (streak_days as f64 * STREAK_BONUS_PER_DAY).min(MAX_STREAK_BONUS);
+        (rate * 100.0).round() as u32
+    }
+
+    /// Streak multiplier as a decimal factor (1.0 = no bonus, 1.05 = +5%).
+    pub fn streak_multiplier(streak_days: i32) -> Decimal {
+        let rate = (streak_days as f64 * STREAK_BONUS_PER_DAY).min(MAX_STREAK_BONUS);
+        Decimal::ONE + Decimal::try_from(rate).unwrap_or_default()
+    }
     /// Gross ad revenue for a session given the user's net reward.
     pub fn calculate_ad_revenue(user_reward: Decimal) -> Decimal {
         let share = Decimal::from_str_exact(USER_REVENUE_SHARE).unwrap();
@@ -38,6 +56,13 @@ impl RewardEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streak_bonus_percent_capped() {
+        assert_eq!(RewardEngine::streak_bonus_percent(1), 5);
+        assert_eq!(RewardEngine::streak_bonus_percent(10), 50);
+        assert_eq!(RewardEngine::streak_bonus_percent(20), 50);
+    }
 
     #[test]
     fn base_reward_for_30_seconds() {

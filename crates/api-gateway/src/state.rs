@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use event_bus::EventBus;
-use reward_engine::RewardEngine;
+use reward_engine::{BonusEngine, RewardEngine, WatchBonusResult};
 use rust_decimal::Decimal;
 use referral_engine::ReferralEngine;
 use shared::{
@@ -28,6 +28,10 @@ pub struct UserProfile {
     pub sessions_window_started: DateTime<Utc>,
     pub last_active_date: Option<NaiveDate>,
     pub watches_today: u32,
+    pub total_watches: u32,
+    pub milestones_claimed: u8,
+    pub last_daily_bonus_date: Option<NaiveDate>,
+    pub streak_7_bonus_claimed: bool,
     pub locale: String,
     pub referred_by: Option<Uuid>,
     pub referral_bonus_paid: bool,
@@ -45,6 +49,10 @@ impl Default for UserProfile {
             sessions_window_started: now,
             last_active_date: None,
             watches_today: 0,
+            total_watches: 0,
+            milestones_claimed: 0,
+            last_daily_bonus_date: None,
+            streak_7_bonus_claimed: false,
             locale: "en_US".into(),
             referred_by: None,
             referral_bonus_paid: false,
@@ -100,6 +108,7 @@ impl UserProfile {
             Some(_) => {
                 self.streak_days = 1;
                 self.last_active_date = Some(today);
+                self.streak_7_bonus_claimed = false;
             }
         }
     }
@@ -327,6 +336,61 @@ impl AppState {
             .await;
 
         Ok(balance_after)
+    }
+
+    pub async fn credit_bonus_rewards(
+        &self,
+        user_id: Uuid,
+        bonuses: &[reward_engine::BonusEarned],
+    ) -> AppResult<Decimal> {
+        let mut last_balance = self.balance(user_id).await?;
+        for bonus in bonuses {
+            if bonus.amount_usdt <= Decimal::ZERO {
+                continue;
+            }
+            last_balance = self.store.credit(user_id, bonus.amount_usdt).await?;
+            let ad_revenue = RewardEngine::calculate_ad_revenue(bonus.amount_usdt);
+            self.store.add_revenue(ad_revenue).await?;
+            self.events
+                .publish(AppEvent::RewardCredited(RewardCreditedPayload {
+                    user_id,
+                    amount_usdt: bonus.amount_usdt,
+                    new_balance_usdt: last_balance,
+                    occurred_at: Utc::now(),
+                }))
+                .await;
+        }
+        Ok(last_balance)
+    }
+
+    pub fn apply_watch_bonuses(
+        profile: &mut UserProfile,
+        is_first_watch_today: bool,
+    ) -> WatchBonusResult {
+        let today = Utc::now().date_naive();
+        profile.total_watches += 1;
+
+        let (bonus_result, milestones_claimed, streak_7_claimed, daily_date) =
+            BonusEngine::evaluate_watch_bonuses(
+                is_first_watch_today,
+                profile.last_daily_bonus_date,
+                today,
+                profile.total_watches,
+                profile.milestones_claimed,
+                profile.streak_days,
+                profile.streak_7_bonus_claimed,
+            );
+
+        profile.milestones_claimed = milestones_claimed;
+        profile.streak_7_bonus_claimed = streak_7_claimed;
+        profile.last_daily_bonus_date = daily_date;
+
+        bonus_result
+    }
+
+    pub fn daily_bonus_claimed_today(profile: &UserProfile) -> bool {
+        let today = Utc::now().date_naive();
+        profile.last_daily_bonus_date == Some(today)
     }
 
     pub async fn profile(&self, user_id: Uuid) -> UserProfile {

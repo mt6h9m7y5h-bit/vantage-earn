@@ -78,7 +78,9 @@ impl PgStore {
             r#"
             SELECT created_at, locale, streak_days, referral_count,
                    payout_history, sessions_last_hour, sessions_window_started,
-                   last_active_date, watches_today, referred_by, referral_bonus_paid
+                   last_active_date, watches_today, total_watches, milestones_claimed,
+                   last_daily_bonus_date, streak_7_bonus_claimed,
+                   referred_by, referral_bonus_paid
             FROM users WHERE id = $1
             "#,
         )
@@ -102,8 +104,12 @@ impl PgStore {
                 sessions_window_started = $7,
                 last_active_date = $8,
                 watches_today = $9,
-                referred_by = $10,
-                referral_bonus_paid = $11
+                total_watches = $10,
+                milestones_claimed = $11,
+                last_daily_bonus_date = $12,
+                streak_7_bonus_claimed = $13,
+                referred_by = $14,
+                referral_bonus_paid = $15
             WHERE id = $1
             "#,
         )
@@ -116,6 +122,10 @@ impl PgStore {
         .bind(profile.sessions_window_started)
         .bind(profile.last_active_date)
         .bind(profile.watches_today as i32)
+        .bind(profile.total_watches as i32)
+        .bind(profile.milestones_claimed as i16)
+        .bind(profile.last_daily_bonus_date)
+        .bind(profile.streak_7_bonus_claimed)
         .bind(profile.referred_by)
         .bind(profile.referral_bonus_paid)
         .execute(&self.pool)
@@ -409,6 +419,10 @@ struct UserRow {
     sessions_window_started: DateTime<Utc>,
     last_active_date: Option<NaiveDate>,
     watches_today: i32,
+    total_watches: i32,
+    milestones_claimed: i16,
+    last_daily_bonus_date: Option<NaiveDate>,
+    streak_7_bonus_claimed: bool,
     referred_by: Option<Uuid>,
     referral_bonus_paid: bool,
 }
@@ -425,6 +439,10 @@ impl From<UserRow> for UserProfile {
             sessions_window_started: row.sessions_window_started,
             last_active_date: row.last_active_date,
             watches_today: row.watches_today as u32,
+            total_watches: row.total_watches as u32,
+            milestones_claimed: row.milestones_claimed as u8,
+            last_daily_bonus_date: row.last_daily_bonus_date,
+            streak_7_bonus_claimed: row.streak_7_bonus_claimed,
             referred_by: row.referred_by,
             referral_bonus_paid: row.referral_bonus_paid,
         }

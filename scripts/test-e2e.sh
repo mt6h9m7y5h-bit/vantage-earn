@@ -33,16 +33,18 @@ W=$(curl -sf -m 5 -X POST "$BASE/users/me/watch/complete" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"watch_duration_secs":60}') || fail "watch"
-echo "$W" | grep -q '0.002' || fail "reward amount"
+echo "$W" | grep -q 'USDT' || fail "reward message"
 ok "watch + reward"
 
 B=$(curl -sf -m 5 "$BASE/users/me/wallet" -H "Authorization: Bearer $TOKEN") || fail "wallet"
-echo "$B" | grep -q '0.002' || fail "balance"
+echo "$B" | grep -q 'balance_usdt' || fail "balance"
 ok "wallet balance"
 
 S=$(curl -sf -m 5 "$BASE/users/me/stats" -H "Authorization: Bearer $TOKEN") || fail "stats"
 echo "$S" | grep -q '"streak_days"' || fail "stats streak"
 echo "$S" | grep -q '"reward_estimate_30s"' || fail "stats reward"
+echo "$S" | grep -q '"bonus_catalog"' || fail "stats bonus_catalog"
+echo "$S" | grep -q '"streak_bonus_percent"' || fail "stats streak_bonus_percent"
 ok "stats"
 
 L=$(curl -sf -m 5 "$BASE/users/me/ledger" -H "Authorization: Bearer $TOKEN") || fail "ledger"

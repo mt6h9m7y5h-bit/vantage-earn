@@ -12,7 +12,10 @@ use referral_engine::ReferralEngine;
 use reward_engine::{BonusCatalogItem, BonusEarned, BonusEngine, RewardEngine};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use shared::{AppError, AppEvent, PayoutMethod, PayoutRequestedPayload, WatchCompletedPayload};
+use shared::{
+    AppError, AppEvent, PayoutMethod, PayoutMethodInfo, PayoutRequestedPayload,
+    PAYOUT_FIRST_TIME_NOTE_DE, WatchCompletedPayload,
+};
 use uuid::Uuid;
 
 use crate::error::{map_ai_error, ApiError};
@@ -196,6 +199,8 @@ struct UserStatsResponse {
     min_payout_eur: Decimal,
     payout_demo_mode: bool,
     payout_methods: Vec<&'static str>,
+    payout_method_info: Vec<PayoutMethodInfo>,
+    payout_first_time_note_de: &'static str,
     bonus_catalog: Vec<BonusCatalogItem>,
 }
 
@@ -236,6 +241,8 @@ async fn get_stats(
         min_payout_eur: AppState::min_payout_eur(),
         payout_demo_mode: AppState::payout_demo_mode(),
         payout_methods: AppState::payout_methods(),
+        payout_method_info: PayoutMethod::all_info(),
+        payout_first_time_note_de: PAYOUT_FIRST_TIME_NOTE_DE,
         bonus_catalog,
     }))
 }
@@ -387,6 +394,7 @@ struct PayoutResponse {
     payout_method: String,
     tier: String,
     status: String,
+    estimated_time_de: String,
     payout_id: Uuid,
 }
 
@@ -473,6 +481,7 @@ async fn payout_request(
         payout_method: method.as_str().into(),
         tier: tier.as_str().into(),
         status: status.into(),
+        estimated_time_de: method.info().estimated_time_de,
         payout_id,
     }))
 }

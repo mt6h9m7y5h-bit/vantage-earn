@@ -194,6 +194,18 @@
       color: var(--muted);
       margin: 0.35rem 0 0.5rem;
     }
+    .payout-timing {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.45;
+      margin: 0 0 0.75rem;
+      padding: 0.65rem 0.75rem;
+      background: #0b0f14;
+      border: 1px solid #1e2a3a;
+      border-radius: 10px;
+    }
+    .payout-timing strong { color: var(--text); font-weight: 600; }
+    .payout-timing-note { margin-top: 0.35rem; font-size: 0.75rem; }
     .bonus-item {
       padding: 0.65rem 0;
       border-bottom: 1px solid #1e2a3a;
@@ -294,6 +306,12 @@
           <option value="amazon_gift_card">Amazon Gutschein</option>
           <option value="paypal">PayPal</option>
         </select>
+        <div class="payout-timing" id="payout-timing">
+          <span id="payout-timing-main">Bearbeitungszeit: —</span>
+          <div class="payout-timing-note" id="payout-timing-desc"></div>
+          <div class="payout-timing-note" id="payout-tier-note"></div>
+          <div class="payout-timing-note" id="payout-first-time-note"></div>
+        </div>
         <p class="payout-hint" id="payout-threshold-hint"></p>
         <button class="secondary" id="payout-btn" onclick="requestPayout()">Alles auszahlen</button>
       </div>
@@ -328,6 +346,11 @@
       crypto: 'Krypto (USDT)',
       amazon_gift_card: 'Amazon Gutschein',
       paypal: 'PayPal',
+    };
+    const PAYOUT_TIER_NOTES = {
+      instant: 'Kleine Beträge werden oft schnell freigegeben; die Auszahlungsmethode bestimmt die endgültige Lieferzeit.',
+      delayed_validation: 'Zusätzliche Prüfung kann 1–3 Werktage dauern, bevor der Anbieter die Auszahlung bearbeitet.',
+      deep_fraud_review: 'Manuelle Betrugsprüfung kann mehrere Werktage dauern, bevor die Auszahlung freigegeben wird.',
     };
     let token = localStorage.getItem('ve_token');
     let deferredInstall = null;
@@ -561,6 +584,34 @@
       await refresh();
     }
 
+    function payoutMethodInfoMap(statsData) {
+      const map = {};
+      (statsData.payout_method_info || []).forEach(info => { map[info.method] = info; });
+      return map;
+    }
+
+    function renderPayoutTiming(statsData, wallet) {
+      const method = document.getElementById('payout-method').value;
+      const infoMap = payoutMethodInfoMap(statsData);
+      const info = infoMap[method];
+      const mainEl = document.getElementById('payout-timing-main');
+      const descEl = document.getElementById('payout-timing-desc');
+      const tierEl = document.getElementById('payout-tier-note');
+      const firstEl = document.getElementById('payout-first-time-note');
+
+      if (info) {
+        mainEl.innerHTML = '<strong>Bearbeitungszeit (Schätzung):</strong> ' + info.estimated_time_de;
+        descEl.textContent = info.description_de + ' Die tatsächliche Dauer hängt vom jeweiligen Zahlungsanbieter ab.';
+      } else {
+        mainEl.textContent = 'Bearbeitungszeit: —';
+        descEl.textContent = '';
+      }
+
+      const tier = wallet && wallet.payout_tier;
+      tierEl.textContent = tier && PAYOUT_TIER_NOTES[tier] ? PAYOUT_TIER_NOTES[tier] : '';
+      firstEl.textContent = statsData.payout_first_time_note_de || '';
+    }
+
     async function refresh() {
       const [wallet, ref, statsData, ledger] = await Promise.all([
         api('/users/me/wallet'),
@@ -604,11 +655,17 @@
       }
 
       const methodSelect = document.getElementById('payout-method');
+      const infoMap = payoutMethodInfoMap(stats);
       if (stats.payout_methods && stats.payout_methods.length) {
-        methodSelect.innerHTML = stats.payout_methods.map(m =>
-          `<option value="${m}">${PAYOUT_METHOD_LABELS[m] || m}</option>`
-        ).join('');
+        methodSelect.innerHTML = stats.payout_methods.map(m => {
+          const label = (infoMap[m] && infoMap[m].label) || PAYOUT_METHOD_LABELS[m] || m;
+          const time = infoMap[m] && infoMap[m].estimated_time_de;
+          const suffix = time ? ' — ' + time : '';
+          return `<option value="${m}">${label}${suffix}</option>`;
+        }).join('');
       }
+      methodSelect.onchange = () => renderPayoutTiming(stats, wallet);
+      renderPayoutTiming(stats, wallet);
 
       const canPayout = parseFloat(wallet.balance_usdt) >= parseFloat(stats.min_payout_usdt);
       document.getElementById('payout-btn').disabled = !canPayout;
@@ -715,7 +772,8 @@
           body: JSON.stringify({ amount_usdt: balance, payout_method: method }),
         });
         const methodLabel = PAYOUT_METHOD_LABELS[data.payout_method] || data.payout_method;
-        log(`Auszahlung ${data.amount_usdt} USDT via ${methodLabel} — ${data.status} (${data.tier})`);
+        const timeHint = data.estimated_time_de ? ` — geschätzt ${data.estimated_time_de}` : '';
+        log(`Auszahlung ${data.amount_usdt} USDT via ${methodLabel}${timeHint} — ${data.status} (${data.tier})`);
         await refresh();
       } finally {
         btn.disabled = false;

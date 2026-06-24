@@ -248,6 +248,22 @@ async fn stats_returns_streak_and_estimates() {
     assert_eq!(json["reward_estimate_30s"], "0.001");
     assert_eq!(json["min_payout_eur"], "170");
     assert_eq!(json["payout_methods"].as_array().unwrap().len(), 3);
+    let method_info = json["payout_method_info"].as_array().unwrap();
+    assert_eq!(method_info.len(), 3);
+    let paypal = method_info
+        .iter()
+        .find(|m| m["method"] == "paypal")
+        .expect("paypal info");
+    assert_eq!(paypal["estimated_days_min"], 3);
+    assert_eq!(paypal["estimated_days_max"], 5);
+    assert!(paypal["estimated_time_de"]
+        .as_str()
+        .unwrap()
+        .contains("Werktage"));
+    assert!(json["payout_first_time_note_de"]
+        .as_str()
+        .unwrap()
+        .contains("erste Auszahlung"));
     let demo = json["payout_demo_mode"].as_bool().unwrap();
     if demo {
         assert_eq!(json["min_payout_usdt"], "0.01");

@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use chrono::Utc;
-use fraud_engine::{FraudEngine, WatchSessionCheck};
+use fraud_engine::{FraudEngine, WatchSessionCheck, MAX_WATCHES_PER_DAY};
 use liquidity_engine::LiquidityEngine;
 use referral_engine::ReferralEngine;
 use reward_engine::RewardEngine;
@@ -45,6 +45,7 @@ pub fn router() -> Router<AppState> {
         .route("/users/me/wallet", get(get_wallet))
         .route("/users/me/ledger", get(get_ledger))
         .route("/users/me/referral", get(get_referral))
+        .route("/users/me/stats", get(get_stats))
         .route("/users/me/watch/complete", post(watch_complete))
         .route("/users/me/payout/request", post(payout_request))
         .route("/users/me/ai/context", get(ai_context))
@@ -178,6 +179,39 @@ async fn get_referral(
     }))
 }
 
+#[derive(Serialize)]
+struct UserStatsResponse {
+    streak_days: i32,
+    referral_count: i32,
+    watches_today: u32,
+    watches_remaining_today: u32,
+    reward_estimate_30s: Decimal,
+    reward_estimate_60s: Decimal,
+    min_payout_usdt: Decimal,
+}
+
+async fn get_stats(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<UserStatsResponse>, ApiError> {
+    const MIN_PAYOUT_USDT: &str = "0.01";
+
+    let profile = state.profile(user_id).await;
+    let watches_today = profile.effective_watches_today();
+    let remaining = MAX_WATCHES_PER_DAY.saturating_sub(watches_today);
+    let min_payout = Decimal::from_str_exact(MIN_PAYOUT_USDT).unwrap();
+
+    Ok(Json(UserStatsResponse {
+        streak_days: profile.streak_days,
+        referral_count: profile.referral_count,
+        watches_today,
+        watches_remaining_today: remaining,
+        reward_estimate_30s: RewardEngine::calculate_watch_reward(30, profile.streak_days),
+        reward_estimate_60s: RewardEngine::calculate_watch_reward(60, profile.streak_days),
+        min_payout_usdt: min_payout,
+    }))
+}
+
 async fn get_ledger(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
@@ -212,6 +246,7 @@ async fn watch_complete(
     let fraud_prob = FraudEngine::validate_watch(&WatchSessionCheck {
         watch_duration_secs: body.watch_duration_secs,
         sessions_last_hour: profile.sessions_last_hour,
+        watches_today: profile.effective_watches_today(),
         is_emulator: body.is_emulator,
         is_vpn: body.is_vpn,
     })?;
@@ -273,6 +308,13 @@ async fn payout_request(
     Json(body): Json<PayoutRequest>,
 ) -> Result<Json<PayoutResponse>, ApiError> {
     let balance = state.balance(user_id).await?;
+    let min_payout = Decimal::from_str_exact("0.01").unwrap();
+    if body.amount_usdt < min_payout {
+        return Err(AppError::InvalidInput(format!(
+            "minimum payout is {min_payout} USDT"
+        ))
+        .into());
+    }
     if body.amount_usdt > balance {
         return Err(AppError::InsufficientBalance {
             have: balance,

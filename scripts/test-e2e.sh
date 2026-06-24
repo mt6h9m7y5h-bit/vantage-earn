@@ -40,5 +40,14 @@ B=$(curl -sf -m 5 "$BASE/users/me/wallet" -H "Authorization: Bearer $TOKEN") || 
 echo "$B" | grep -q '0.002' || fail "balance"
 ok "wallet balance"
 
+S=$(curl -sf -m 5 "$BASE/users/me/stats" -H "Authorization: Bearer $TOKEN") || fail "stats"
+echo "$S" | grep -q '"streak_days"' || fail "stats streak"
+echo "$S" | grep -q '"reward_estimate_30s"' || fail "stats reward"
+ok "stats"
+
+L=$(curl -sf -m 5 "$BASE/users/me/ledger" -H "Authorization: Bearer $TOKEN") || fail "ledger"
+echo "$L" | grep -q 'credit' || fail "ledger entry"
+ok "ledger"
+
 echo ""
 echo "All E2E checks passed for $BASE"

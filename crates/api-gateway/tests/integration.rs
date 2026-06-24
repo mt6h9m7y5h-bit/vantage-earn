@@ -187,6 +187,24 @@ async fn watch_complete_credits_wallet() {
 }
 
 #[tokio::test]
+async fn stats_returns_streak_and_estimates() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let response = app
+        .oneshot(authed("GET", "/users/me/stats", &token, None))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["streak_days"], 0);
+    assert_eq!(json["watches_remaining_today"], 30);
+    assert_eq!(json["reward_estimate_30s"], "0.001");
+    assert_eq!(json["min_payout_usdt"], "0.01");
+}
+
+#[tokio::test]
 async fn watch_too_short_is_rejected() {
     let app = app(AppState::new());
     let (_user_id, token) = register(&app).await;

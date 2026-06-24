@@ -27,6 +27,7 @@ pub struct UserProfile {
     pub sessions_last_hour: u32,
     pub sessions_window_started: DateTime<Utc>,
     pub last_active_date: Option<NaiveDate>,
+    pub watches_today: u32,
     pub locale: String,
     pub referred_by: Option<Uuid>,
     pub referral_bonus_paid: bool,
@@ -43,6 +44,7 @@ impl Default for UserProfile {
             sessions_last_hour: 0,
             sessions_window_started: now,
             last_active_date: None,
+            watches_today: 0,
             locale: "en_US".into(),
             referred_by: None,
             referral_bonus_paid: false,
@@ -58,6 +60,14 @@ impl UserProfile {
             .max(1) as i32
     }
 
+    pub fn effective_watches_today(&self) -> u32 {
+        let today = Utc::now().date_naive();
+        match self.last_active_date {
+            Some(d) if d == today => self.watches_today,
+            _ => 0,
+        }
+    }
+
     pub fn record_session(&mut self) {
         let now = Utc::now();
         if now
@@ -71,6 +81,12 @@ impl UserProfile {
         self.sessions_last_hour += 1;
 
         let today = now.date_naive();
+        if self.last_active_date == Some(today) {
+            self.watches_today += 1;
+        } else {
+            self.watches_today = 1;
+        }
+
         match self.last_active_date {
             None => {
                 self.streak_days = 1;

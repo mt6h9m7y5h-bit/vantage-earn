@@ -78,7 +78,7 @@ impl PgStore {
             r#"
             SELECT created_at, locale, streak_days, referral_count,
                    payout_history, sessions_last_hour, sessions_window_started,
-                   last_active_date, referred_by, referral_bonus_paid
+                   last_active_date, watches_today, referred_by, referral_bonus_paid
             FROM users WHERE id = $1
             "#,
         )
@@ -101,8 +101,9 @@ impl PgStore {
                 sessions_last_hour = $6,
                 sessions_window_started = $7,
                 last_active_date = $8,
-                referred_by = $9,
-                referral_bonus_paid = $10
+                watches_today = $9,
+                referred_by = $10,
+                referral_bonus_paid = $11
             WHERE id = $1
             "#,
         )
@@ -114,6 +115,7 @@ impl PgStore {
         .bind(profile.sessions_last_hour as i32)
         .bind(profile.sessions_window_started)
         .bind(profile.last_active_date)
+        .bind(profile.watches_today as i32)
         .bind(profile.referred_by)
         .bind(profile.referral_bonus_paid)
         .execute(&self.pool)
@@ -404,6 +406,7 @@ struct UserRow {
     sessions_last_hour: i32,
     sessions_window_started: DateTime<Utc>,
     last_active_date: Option<NaiveDate>,
+    watches_today: i32,
     referred_by: Option<Uuid>,
     referral_bonus_paid: bool,
 }
@@ -419,6 +422,7 @@ impl From<UserRow> for UserProfile {
             sessions_last_hour: row.sessions_last_hour as u32,
             sessions_window_started: row.sessions_window_started,
             last_active_date: row.last_active_date,
+            watches_today: row.watches_today as u32,
             referred_by: row.referred_by,
             referral_bonus_paid: row.referral_bonus_paid,
         }

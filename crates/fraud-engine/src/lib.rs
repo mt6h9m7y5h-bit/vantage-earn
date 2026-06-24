@@ -1,6 +1,8 @@
 use rust_decimal::Decimal;
 use shared::AppError;
 
+pub const MAX_WATCHES_PER_DAY: u32 = 30;
+
 const MAX_WATCH_SECS_PER_SESSION: u32 = 3600;
 const MIN_WATCH_SECS: u32 = 15;
 const MAX_SESSIONS_PER_HOUR: u32 = 120;
@@ -11,6 +13,7 @@ pub struct FraudEngine;
 pub struct WatchSessionCheck {
     pub watch_duration_secs: u32,
     pub sessions_last_hour: u32,
+    pub watches_today: u32,
     pub is_emulator: bool,
     pub is_vpn: bool,
 }
@@ -33,6 +36,9 @@ impl FraudEngine {
         }
         if check.sessions_last_hour > MAX_SESSIONS_PER_HOUR {
             return Err(AppError::FraudBlocked("rate limit exceeded".into()));
+        }
+        if check.watches_today >= MAX_WATCHES_PER_DAY {
+            return Err(AppError::FraudBlocked("daily watch limit reached".into()));
         }
 
         let mut fraud_prob = 0.0f64;
@@ -63,6 +69,7 @@ mod tests {
         WatchSessionCheck {
             watch_duration_secs: 60,
             sessions_last_hour: 5,
+            watches_today: 5,
             is_emulator: false,
             is_vpn: false,
         }
@@ -77,6 +84,13 @@ mod tests {
     fn emulator_blocked() {
         let mut c = valid_check();
         c.is_emulator = true;
+        assert!(FraudEngine::validate_watch(&c).is_err());
+    }
+
+    #[test]
+    fn daily_limit_blocks() {
+        let mut c = valid_check();
+        c.watches_today = MAX_WATCHES_PER_DAY;
         assert!(FraudEngine::validate_watch(&c).is_err());
     }
 

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: vantage-earn
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: RUST_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true

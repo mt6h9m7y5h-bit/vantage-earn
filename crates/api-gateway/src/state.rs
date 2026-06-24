@@ -1,0 +1,404 @@
+use std::sync::Arc;
+
+use chrono::{DateTime, NaiveDate, Utc};
+use event_bus::EventBus;
+use reward_engine::RewardEngine;
+use rust_decimal::Decimal;
+use referral_engine::ReferralEngine;
+use shared::{
+    AppEvent, AppResult, Currency, PayoutTier, RewardCreditedPayload, SafeAIContext,
+    TrustScoreUpdatedPayload,
+};
+use trust_score_engine::TrustScoreEngine;
+use uuid::Uuid;
+
+use currency_engine::CurrencyEngine;
+use ai_engine::AiCopilot;
+
+use crate::auth::JwtService;
+use crate::store::{LedgerItem, Store};
+
+#[derive(Clone)]
+pub struct UserProfile {
+    pub created_at: DateTime<Utc>,
+    pub streak_days: i32,
+    pub referral_count: i32,
+    pub payout_history: i32,
+    pub sessions_last_hour: u32,
+    pub sessions_window_started: DateTime<Utc>,
+    pub last_active_date: Option<NaiveDate>,
+    pub locale: String,
+    pub referred_by: Option<Uuid>,
+    pub referral_bonus_paid: bool,
+}
+
+impl Default for UserProfile {
+    fn default() -> Self {
+        let now = Utc::now();
+        Self {
+            created_at: now,
+            streak_days: 0,
+            referral_count: 0,
+            payout_history: 0,
+            sessions_last_hour: 0,
+            sessions_window_started: now,
+            last_active_date: None,
+            locale: "en_US".into(),
+            referred_by: None,
+            referral_bonus_paid: false,
+        }
+    }
+}
+
+impl UserProfile {
+    pub fn account_age_days(&self) -> i32 {
+        Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_days()
+            .max(1) as i32
+    }
+
+    pub fn record_session(&mut self) {
+        let now = Utc::now();
+        if now
+            .signed_duration_since(self.sessions_window_started)
+            .num_hours()
+            >= 1
+        {
+            self.sessions_last_hour = 0;
+            self.sessions_window_started = now;
+        }
+        self.sessions_last_hour += 1;
+
+        let today = now.date_naive();
+        match self.last_active_date {
+            None => {
+                self.streak_days = 1;
+                self.last_active_date = Some(today);
+            }
+            Some(last) if last == today => {}
+            Some(last) if (today - last).num_days() == 1 => {
+                self.streak_days += 1;
+                self.last_active_date = Some(today);
+            }
+            Some(_) => {
+                self.streak_days = 1;
+                self.last_active_date = Some(today);
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AppState {
+    store: Arc<Store>,
+    pub currency: Arc<CurrencyEngine>,
+    pub events: Arc<EventBus>,
+    pub copilot: AiCopilot,
+    pub jwt: JwtService,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self::with_store(Store::memory())
+    }
+
+    pub async fn connect() -> Self {
+        let store = if let Ok(url) = std::env::var("DATABASE_URL") {
+            tracing::info!("connecting to PostgreSQL");
+            match Store::connect(&url).await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!(error = %e, "database connection failed");
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            tracing::warn!("DATABASE_URL not set — using in-memory store");
+            Store::memory()
+        };
+        Self::with_store(store)
+    }
+
+    fn with_store(store: Store) -> Self {
+        let events = Arc::new(EventBus::new());
+        events.on(|event| {
+            tracing::debug!(?event, "event handler received");
+        });
+
+        Self {
+            store: Arc::new(store),
+            currency: Arc::new(CurrencyEngine::new()),
+            events,
+            copilot: AiCopilot::from_config(ai_engine::AiConfig::default()),
+            jwt: JwtService::from_env(),
+        }
+    }
+
+    pub fn liquidity_reserve_ratio() -> Decimal {
+        std::env::var("LIQUIDITY_RESERVE_RATIO")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .and_then(Decimal::from_f64_retain)
+            .unwrap_or_else(|| Decimal::new(10, 2))
+    }
+
+    pub async fn store_healthy(&self) -> bool {
+        self.store.ping().await.unwrap_or(false)
+    }
+
+    pub async fn balance(&self, user_id: Uuid) -> AppResult<Decimal> {
+        self.store.balance(user_id).await
+    }
+
+    pub async fn credit(&self, user_id: Uuid, amount: Decimal) -> AppResult<Decimal> {
+        self.store.credit(user_id, amount).await
+    }
+
+    pub async fn debit(&self, user_id: Uuid, amount: Decimal) -> AppResult<Decimal> {
+        self.store.debit(user_id, amount).await
+    }
+
+    pub async fn add_revenue(&self, amount: Decimal) -> AppResult<()> {
+        self.store.add_revenue(amount).await
+    }
+
+    pub async fn total_revenue(&self) -> AppResult<Decimal> {
+        self.store.total_revenue().await
+    }
+
+    pub async fn pending_payouts(&self) -> AppResult<Decimal> {
+        self.store.pending_payouts().await
+    }
+
+    pub async fn held_payouts(&self) -> AppResult<Decimal> {
+        self.store.held_payouts().await
+    }
+
+    pub async fn add_pending_payout(&self, amount: Decimal) -> AppResult<()> {
+        self.store.add_pending_payout(amount).await
+    }
+
+    pub async fn add_held_payout(&self, amount: Decimal) -> AppResult<()> {
+        self.store.add_held_payout(amount).await
+    }
+
+    pub async fn record_payout_request(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        amount: Decimal,
+        tier: &str,
+        status: &str,
+    ) -> AppResult<()> {
+        self.store
+            .record_payout_request(id, user_id, amount, tier, status)
+            .await
+    }
+
+    pub async fn find_user_by_referral_code(&self, code: &str) -> AppResult<Option<Uuid>> {
+        self.store.find_user_by_referral_code(code).await
+    }
+
+    pub async fn ledger(&self, user_id: Uuid) -> AppResult<Vec<LedgerItem>> {
+        self.store.ledger(user_id).await
+    }
+
+    pub async fn maybe_apply_referral_bonuses(
+        &self,
+        user_id: Uuid,
+        profile: &mut UserProfile,
+    ) -> AppResult<()> {
+        if profile.referral_bonus_paid {
+            return Ok(());
+        }
+        let Some(referrer_id) = profile.referred_by else {
+            profile.referral_bonus_paid = true;
+            return Ok(());
+        };
+        if referrer_id == user_id {
+            profile.referral_bonus_paid = true;
+            return Ok(());
+        }
+
+        let referee_bonus = ReferralEngine::referee_bonus();
+        let referrer_bonus = ReferralEngine::referrer_bonus();
+
+        self.credit(user_id, referee_bonus).await?;
+        self.add_revenue(RewardEngine::calculate_ad_revenue(referee_bonus))
+            .await?;
+
+        self.credit(referrer_id, referrer_bonus).await?;
+        self.add_revenue(RewardEngine::calculate_ad_revenue(referrer_bonus))
+            .await?;
+
+        let mut referrer_profile = self.profile(referrer_id).await;
+        referrer_profile.referral_count += 1;
+        self.save_profile(referrer_id, &referrer_profile).await?;
+
+        profile.referral_bonus_paid = true;
+        Ok(())
+    }
+
+    pub async fn credit_watch_reward(
+        &self,
+        user_id: Uuid,
+        reward_usdt: Decimal,
+        fraud_probability: f64,
+        profile: &UserProfile,
+    ) -> AppResult<Decimal> {
+        let balance_after = self.store.credit(user_id, reward_usdt).await?;
+        let ad_revenue = RewardEngine::calculate_ad_revenue(reward_usdt);
+        self.store.add_revenue(ad_revenue).await?;
+
+        self.events
+            .publish(AppEvent::RewardCredited(RewardCreditedPayload {
+                user_id,
+                amount_usdt: reward_usdt,
+                new_balance_usdt: balance_after,
+                occurred_at: Utc::now(),
+            }))
+            .await;
+
+        let score = TrustScoreEngine::calculate(
+            profile.account_age_days(),
+            fraud_probability,
+            profile.payout_history,
+            0.0,
+        )
+        .score;
+        self.store.set_trust_score(user_id, score).await?;
+        self.events
+            .publish(AppEvent::TrustScoreUpdated(TrustScoreUpdatedPayload {
+                user_id,
+                score,
+                occurred_at: Utc::now(),
+            }))
+            .await;
+
+        Ok(balance_after)
+    }
+
+    pub async fn profile(&self, user_id: Uuid) -> UserProfile {
+        self.store
+            .profile(user_id)
+            .await
+            .unwrap_or_default()
+    }
+
+    pub async fn save_profile(&self, user_id: Uuid, profile: &UserProfile) -> AppResult<()> {
+        self.store.save_profile(user_id, profile).await
+    }
+
+    pub async fn trust_score(&self, user_id: Uuid) -> i32 {
+        self.store
+            .trust_score(user_id)
+            .await
+            .unwrap_or(50)
+    }
+
+    pub async fn ensure_user(&self, user_id: Uuid) {
+        let _ = self.store.ensure_user(user_id).await;
+    }
+
+    pub async fn user_exists(&self, user_id: Uuid) -> bool {
+        self.store.user_exists(user_id).await.unwrap_or(false)
+    }
+
+    pub async fn local_currency_for_user(&self, user_id: Uuid) -> Currency {
+        let profile = self.profile(user_id).await;
+        localization_engine::LocalizationEngine::default_currency_for_locale(&profile.locale)
+    }
+
+    pub async fn build_ai_context(&self, user_id: Uuid) -> SafeAIContext {
+        let profile = self.profile(user_id).await;
+        let balance = self.balance(user_id).await.unwrap_or(Decimal::ZERO);
+        let currency =
+            localization_engine::LocalizationEngine::default_currency_for_locale(&profile.locale);
+        let localized = self
+            .currency
+            .usdt_to_local(balance, currency)
+            .await
+            .unwrap_or(balance);
+        let goal = SafeAIContext::payout_goal_eur();
+        let progress = if goal > Decimal::ZERO {
+            (localized / goal * Decimal::from(100)).min(Decimal::from(100))
+        } else {
+            Decimal::ZERO
+        };
+        let daily_reward = RewardEngine::calculate_watch_reward(3600, profile.streak_days);
+        let days_until_goal = if daily_reward > Decimal::ZERO && localized < goal {
+            use rust_decimal::prelude::ToPrimitive;
+            ((goal - localized) / daily_reward)
+                .ceil()
+                .to_i32()
+                .unwrap_or(30)
+        } else {
+            0
+        };
+
+        SafeAIContext {
+            user_id,
+            system_language: localization_engine::LocalizationEngine::detect_system_language(
+                &profile.locale,
+            ),
+            current_balance_usdt: balance,
+            localized_balance: localized,
+            localized_currency: currency,
+            avg_daily_revenue_usdt: daily_reward,
+            referral_count: profile.referral_count,
+            streak_days: profile.streak_days,
+            estimated_days_until_goal: days_until_goal,
+            payout_progress_percent: progress,
+            top_offerwall_name: "TapJoy".into(),
+            top_offerwall_reward_usdt: Decimal::new(25, 2),
+            motivational_level: (profile.streak_days.clamp(0, 10) + 1),
+        }
+    }
+
+    pub async fn payout_tier_for_usdt(&self, amount_usdt: Decimal) -> PayoutTier {
+        let eur = self.currency.eur_equivalent(amount_usdt).await;
+        PayoutTier::from_eur_amount(eur)
+    }
+
+    pub fn payout_status(tier: PayoutTier, trust_score: i32) -> &'static str {
+        match tier {
+            PayoutTier::Instant if TrustScoreEngine::allows_instant_payout(trust_score) => {
+                "approved"
+            }
+            PayoutTier::Instant => "pending_validation",
+            PayoutTier::DelayedValidation => "pending_validation",
+            PayoutTier::DeepFraudReview => "pending_fraud_review",
+        }
+    }
+
+    pub fn payout_is_approved(status: &str) -> bool {
+        status == "approved"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    #[test]
+    fn streak_increments_once_per_day() {
+        let mut profile = UserProfile::default();
+        profile.record_session();
+        assert_eq!(profile.streak_days, 1);
+
+        profile.record_session();
+        assert_eq!(profile.streak_days, 1);
+
+        profile.last_active_date = Some(NaiveDate::from_ymd_opt(2026, 6, 22).unwrap());
+        profile.record_session();
+        assert_eq!(profile.streak_days, 1);
+    }
+}

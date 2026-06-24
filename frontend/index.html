@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>VANTAGE-EARN</title>
+  <meta name="description" content="Watch-to-Earn — USDT verdienen beim Schauen" />
+  <meta name="theme-color" content="#00d4aa" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VANTAGE" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card: #141b24;
+      --accent: #00d4aa;
+      --text: #e8eef5;
+      --muted: #8b9cb3;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { touch-action: manipulation; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at top, #122033, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+    }
+    .wrap { max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+    .sub { color: var(--muted); margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid #243044;
+      border-radius: 16px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .install-card {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, #141b24, #0f2a22);
+    }
+    .install-card p { margin: 0 0 0.75rem; font-size: 0.9rem; color: var(--muted); }
+    .balance {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .row { display: flex; justify-content: space-between; margin: 0.4rem 0; font-size: 0.9rem; }
+    .row span:last-child { color: var(--muted); }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 0.9rem;
+      min-height: 48px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      touch-action: manipulation;
+    }
+    .primary { background: var(--accent); color: #04241c; }
+    .secondary { background: #243044; color: var(--text); }
+    input {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 10px;
+      border: 1px solid #243044;
+      background: #0b0f14;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+      font-size: 16px;
+    }
+    #log {
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      white-space: pre-wrap;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .hidden { display: none; }
+    .ios-hint { font-size: 0.85rem; line-height: 1.5; color: var(--muted); }
+    #error-banner {
+      background: #3d1f1f;
+      border: 1px solid #ff6b6b;
+      color: #ffb4b4;
+      padding: 0.75rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>VANTAGE-EARN</h1>
+    <p class="sub">Watch-to-Earn App</p>
+
+    <div id="error-banner" class="hidden"></div>
+
+    <div id="install-card" class="card install-card hidden">
+      <p><strong>App installieren</strong> — kein App Store nötig.</p>
+      <button class="primary" id="install-btn" onclick="installApp()">Zum Home-Bildschirm hinzufügen</button>
+      <p id="ios-hint" class="ios-hint hidden" style="margin-top:0.75rem">
+        iPhone: <strong>Teilen</strong> → <strong>Zum Home-Bildschirm</strong>
+      </p>
+    </div>
+
+    <div id="auth-card" class="card">
+      <input id="referral" placeholder="Referral-Code (optional)" />
+      <button class="primary" onclick="register()">Account erstellen</button>
+    </div>
+
+    <div id="app" class="hidden">
+      <div class="card">
+        <div class="balance" id="balance">0 USDT</div>
+        <div class="row"><span>Trust Score</span><span id="trust">—</span></div>
+        <div class="row"><span>Währung</span><span id="currency">—</span></div>
+        <div class="row"><span>Streak</span><span id="streak">—</span></div>
+        <div class="row"><span>Dein Code</span><span id="ref-code">—</span></div>
+      </div>
+
+      <button class="primary" id="watch-btn" onclick="watch()">60s schauen & verdienen</button>
+      <button class="secondary" onclick="refresh()">Wallet aktualisieren</button>
+      <button class="secondary" onclick="shareReferral()">Referral-Link teilen</button>
+
+      <div class="card" style="margin-top:1rem">
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.origin;
+    let token = localStorage.getItem('ve_token');
+    let deferredInstall = null;
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+
+    function showInstallUi() {
+      if (isStandalone) return;
+      document.getElementById('install-card').classList.remove('hidden');
+      if (isIos) {
+        document.getElementById('install-btn').classList.add('hidden');
+        document.getElementById('ios-hint').classList.remove('hidden');
+      }
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstall = e;
+      showInstallUi();
+    });
+
+    if (isIos && !isStandalone) showInstallUi();
+
+    function showError(msg) {
+      const el = document.getElementById('error-banner');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    async function installApp() {
+      if (!deferredInstall) return;
+      deferredInstall.prompt();
+      await deferredInstall.userChoice;
+      deferredInstall = null;
+      document.getElementById('install-card').classList.add('hidden');
+    }
+
+    function log(msg) {
+      const el = document.getElementById('log');
+      el.textContent = new Date().toLocaleTimeString() + ' — ' + msg + '\n' + el.textContent;
+    }
+
+    async function api(path, opts = {}) {
+      if (!navigator.onLine) {
+        showError('Kein Internet. Bitte WLAN oder mobile Daten prüfen.');
+        throw new Error('offline');
+      }
+      let res;
+      try {
+        res = await fetch(API + path, {
+          ...opts,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+            ...opts.headers,
+          },
+        });
+      } catch {
+        showError('Server nicht erreichbar. Lokal nur im gleichen WLAN — online brauchst du eine HTTPS-URL (siehe docs/DEPLOY.md).');
+        throw new Error('network');
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showError(data.error || 'Fehler ' + res.status);
+        throw new Error(data.error || res.statusText);
+      }
+      document.getElementById('error-banner').classList.add('hidden');
+      return data;
+    }
+
+    async function register() {
+      const referral_code = document.getElementById('referral').value.trim() || undefined;
+      const body = { locale: 'de_DE', ...(referral_code ? { referral_code } : {}) };
+      const data = await api('/auth/register', { method: 'POST', body: JSON.stringify(body) });
+      token = data.token;
+      localStorage.setItem('ve_token', token);
+      document.getElementById('auth-card').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      log('Account erstellt: ' + data.user_id.slice(0, 8) + '…');
+      await refresh();
+    }
+
+    async function refresh() {
+      const wallet = await api('/users/me/wallet');
+      const ref = await api('/users/me/referral');
+      document.getElementById('balance').textContent = wallet.balance_usdt + ' USDT';
+      document.getElementById('trust').textContent = wallet.trust_score;
+      document.getElementById('currency').textContent = wallet.currency;
+      document.getElementById('ref-code').textContent = ref.referral_code;
+      document.getElementById('streak').textContent = ref.referral_count + ' Referrals';
+      window._refCode = ref.referral_code;
+    }
+
+    async function shareReferral() {
+      const code = window._refCode || document.getElementById('ref-code').textContent;
+      if (!code || code === '—') {
+        showError('Erst Account erstellen, dann teilen.');
+        return;
+      }
+      const url = `${window.location.origin}/demo?ref=${code}`;
+      const text = `VANTAGE-EARN: Watch-to-Earn App — Code: ${code}`;
+      if (navigator.share) {
+        await navigator.share({ title: 'VANTAGE-EARN', text, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        log('Link kopiert: ' + url);
+      }
+    }
+
+    async function watch() {
+      const btn = document.getElementById('watch-btn');
+      btn.disabled = true;
+      btn.textContent = 'Schauen… 60s';
+      await new Promise(r => setTimeout(r, 2000));
+      const data = await api('/users/me/watch/complete', {
+        method: 'POST',
+        body: JSON.stringify({ watch_duration_secs: 60 }),
+      });
+      log(data.message);
+      await refresh();
+      btn.disabled = false;
+      btn.textContent = '60s schauen & verdienen';
+    }
+
+    if (token) {
+      document.getElementById('auth-card').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      refresh().catch(() => { token = null; localStorage.removeItem('ve_token'); location.reload(); });
+    } else {
+      const ref = new URLSearchParams(location.search).get('ref');
+      if (ref) document.getElementById('referral').value = ref;
+    }
+  </script>
+</body>
+</html>

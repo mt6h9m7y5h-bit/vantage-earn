@@ -1,0 +1,23 @@
+# Deploy: fly launch && fly secrets set JWT_SECRET=... && fly deploy
+# URL: https://<app-name>.fly.dev/demo  — funktioniert auf jedem Handy weltweit
+
+app = 'vantage-earn'
+primary_region = 'fra'
+
+[build]
+
+[env]
+  PORT = '3000'
+  RUST_ENV = 'production'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1

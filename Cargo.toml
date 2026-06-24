@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/shared",
+    "crates/event-bus",
+    "crates/reward-engine",
+    "crates/wallet-engine",
+    "crates/trust-score-engine",
+    "crates/fraud-engine",
+    "crates/currency-engine",
+    "crates/localization-engine",
+    "crates/ai-engine",
+    "crates/liquidity-engine",
+    "crates/referral-engine",
+    "crates/api-gateway",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+async-openai = { version = "0.41", default-features = false, features = ["chat-completion", "rustls"] }
+async-trait = "0.1"
+jsonwebtoken = "9"
+local-ip-address = "0.6"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "rust_decimal", "migrate", "derive", "macros"] }

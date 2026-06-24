@@ -1,0 +1,42 @@
+[package]
+name = "api-gateway"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "vantage-earn"
+path = "src/main.rs"
+
+[dependencies]
+ai-engine = { path = "../ai-engine" }
+axum.workspace = true
+chrono.workspace = true
+currency-engine = { path = "../currency-engine" }
+event-bus = { path = "../event-bus" }
+fraud-engine = { path = "../fraud-engine" }
+jsonwebtoken.workspace = true
+liquidity-engine = { path = "../liquidity-engine" }
+localization-engine = { path = "../localization-engine" }
+referral-engine = { path = "../referral-engine" }
+reward-engine = { path = "../reward-engine" }
+rust_decimal.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shared = { path = "../shared" }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "rust_decimal", "migrate", "derive", "macros"] }
+tokio.workspace = true
+local-ip-address.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+trust-score-engine = { path = "../trust-score-engine" }
+uuid.workspace = true
+wallet-engine = { path = "../wallet-engine" }
+
+[dev-dependencies]
+http-body-util = "0.1"
+serde_json.workspace = true
+tower = { version = "0.5", features = ["util"] }

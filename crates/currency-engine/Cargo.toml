@@ -1,0 +1,10 @@
+[package]
+name = "currency-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono.workspace = true
+rust_decimal.workspace = true
+shared = { path = "../shared" }
+tokio.workspace = true

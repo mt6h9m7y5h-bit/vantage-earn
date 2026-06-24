@@ -1,0 +1,22 @@
+[package]
+name = "ai-engine"
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = ["openai"]
+# Disable in CI: `cargo test -p ai-engine --no-default-features`
+openai = ["dep:async-openai"]
+
+[dependencies]
+async-openai = { version = "0.41", default-features = false, features = ["chat-completion", "rustls"], optional = true }
+async-trait = "0.1"
+rust_decimal.workspace = true
+serde.workspace = true
+shared = { path = "../shared" }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true

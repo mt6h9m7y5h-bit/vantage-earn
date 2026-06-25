@@ -880,3 +880,173 @@ async fn admin_payout_list_requires_secret() {
         .unwrap();
     assert_eq!(ok.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn admin_feature_flags_get_and_patch_with_audit() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+
+    let get = app
+        .clone()
+        .oneshot(admin_req("GET", "/admin/feature-flags", None))
+        .await
+        .unwrap();
+    assert_eq!(get.status(), StatusCode::OK);
+    let flags = body_json(get).await;
+    assert_eq!(flags["maintenance_mode"], false);
+    assert!(flags["maintenance_message"].is_string());
+
+    let patch = app
+        .clone()
+        .oneshot(admin_req(
+            "PATCH",
+            "/admin/feature-flags",
+            Some(
+                r#"{"maintenance_mode":true,"maintenance_message":"Test-Wartung","watch_duration_secs":45}"#,
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(patch.status(), StatusCode::OK);
+    let patched = body_json(patch).await;
+    assert_eq!(patched["maintenance_mode"], true);
+    assert_eq!(patched["maintenance_message"], "Test-Wartung");
+    assert_eq!(patched["watch_duration_secs"], 45);
+    assert_eq!(patched["watch_duration_source"], "db");
+
+    let config = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/config")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(config.status(), StatusCode::OK);
+    let config_json = body_json(config).await;
+    assert_eq!(config_json["maintenance_mode"], true);
+    assert_eq!(config_json["watch_duration_secs"], 45);
+
+    let audit = app
+        .oneshot(admin_req("GET", "/admin/audit-log?limit=10", None))
+        .await
+        .unwrap();
+    let audit_json = body_json(audit).await;
+    assert!(audit_json["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["action"] == "feature_flags_update"));
+}
+
+#[tokio::test]
+async fn maintenance_mode_blocks_watch_complete() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    app.clone()
+        .oneshot(admin_req(
+            "PATCH",
+            "/admin/feature-flags",
+            Some(r#"{"maintenance_mode":true,"maintenance_message":"Geplante Wartung"}"#),
+        ))
+        .await
+        .unwrap();
+
+    let watch = app
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(watch.status(), StatusCode::BAD_REQUEST);
+    let watch_json = body_json(watch).await;
+    assert!(watch_json["error"]
+        .as_str()
+        .unwrap()
+        .contains("Geplante Wartung"));
+}
+
+#[tokio::test]
+async fn admin_bulk_credit_preview_and_execute() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (user1, token1) = register(&app).await;
+    let (user2, token2) = register(&app).await;
+
+    for token in [&token1, &token2] {
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/users/me/watch/complete",
+                token,
+                Some(r#"{"watch_duration_secs": 60}"#),
+            ))
+            .await
+            .unwrap();
+    }
+
+    let preview = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            "/admin/bulk/credit/preview",
+            Some(r#"{"amount_usdt":"0.01","reason":"x","filter":"active_7d"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let preview_json = body_json(preview).await;
+    assert!(preview_json["user_count"].as_u64().unwrap() >= 2);
+    assert_eq!(preview_json["max_users"], 500);
+
+    let credit = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            "/admin/bulk/credit",
+            Some(
+                r#"{"amount_usdt":"0.05","reason":"Wochenbonus","filter":{"user_ids":[]}}"#,
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(credit.status(), StatusCode::BAD_REQUEST);
+
+    let credit = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            "/admin/bulk/credit",
+            Some(&format!(
+                r#"{{"amount_usdt":"0.05","reason":"Wochenbonus","filter":{{"user_ids":["{user1}","{user2}"]}}}}"#
+            )),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(credit.status(), StatusCode::OK);
+    let credit_json = body_json(credit).await;
+    assert_eq!(credit_json["user_count"], 2);
+    assert_eq!(credit_json["action"], "bulk_credit");
+
+    let audit = app
+        .oneshot(admin_req("GET", "/admin/audit-log?limit=10", None))
+        .await
+        .unwrap();
+    let audit_json = body_json(audit).await;
+    assert!(audit_json["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| {
+            e["action"] == "bulk_credit"
+                && e["details"]["reason"] == "Wochenbonus"
+                && e["details"]["user_count"] == 2
+        }));
+}

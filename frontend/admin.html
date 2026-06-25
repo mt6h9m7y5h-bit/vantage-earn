@@ -278,6 +278,8 @@
       <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Übersicht</button>
       <button class="tab" data-tab="payouts" onclick="switchTab('payouts')">Auszahlungen</button>
       <button class="tab" data-tab="users" onclick="switchTab('users')">Nutzer</button>
+      <button class="tab" data-tab="actions" onclick="switchTab('actions')">Aktionen</button>
+      <button class="tab" data-tab="settings" onclick="switchTab('settings')">Einstellungen</button>
       <button class="tab" data-tab="audit" onclick="switchTab('audit')">Audit</button>
     </nav>
 
@@ -394,6 +396,72 @@
       </div>
     </section>
 
+    <section id="panel-actions" class="panel">
+      <div class="card">
+        <h2>Massen-Bonus</h2>
+        <p class="muted" style="margin:0 0 1rem">Guthaben an mehrere Nutzer gleichzeitig gutschreiben (max. 500 Nutzer pro Aktion).</p>
+        <div class="actions">
+          <div class="action-form">
+            <div class="row" style="grid-template-columns:1fr 1fr">
+              <div><label>Betrag pro Nutzer (USDT)</label><input id="bulk-amount" type="number" step="0.000001" min="0" value="0.01" /></div>
+              <div><label>Filter</label>
+                <select id="bulk-filter">
+                  <option value="active_7d">Aktiv in den letzten 7 Tagen</option>
+                  <option value="all">Alle Nutzer</option>
+                  <option value="user_ids">Bestimmte UUIDs</option>
+                </select>
+              </div>
+            </div>
+            <div id="bulk-ids-wrap" class="hidden" style="margin-top:0.75rem">
+              <label>Nutzer-UUIDs (kommagetrennt)</label>
+              <textarea id="bulk-user-ids" rows="3" placeholder="uuid1, uuid2, …"></textarea>
+            </div>
+            <div style="margin-top:0.75rem">
+              <label>Grund (Pflichtfeld)</label>
+              <input id="bulk-reason" type="text" placeholder="z.B. Wochenend-Aktion" />
+            </div>
+            <div style="display:flex;gap:0.5rem;margin-top:0.85rem;flex-wrap:wrap">
+              <button class="btn-ghost" onclick="previewBulkCredit()">Vorschau</button>
+              <button class="btn-primary" onclick="executeBulkCredit()">Bonus ausführen</button>
+            </div>
+            <p id="bulk-preview" class="muted" style="margin-top:0.75rem"></p>
+            <p id="bulk-action-msg" class="success hidden"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-settings" class="panel">
+      <div class="card">
+        <h2>Feature-Flags</h2>
+        <p class="muted" style="margin:0 0 1rem">Laufzeit-Einstellungen ohne Redeploy. DB-Werte überschreiben Umgebungsvariablen.</p>
+        <div class="actions">
+          <div class="action-form">
+            <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem">
+              <input id="flag-maintenance" type="checkbox" style="width:auto" />
+              Wartungsmodus (Watch/Earn blockieren)
+            </label>
+            <div style="margin-bottom:0.75rem">
+              <label>Wartungsnachricht</label>
+              <input id="flag-maintenance-msg" type="text" placeholder="Wartungsarbeiten – bitte später erneut versuchen." />
+            </div>
+            <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem">
+              <input id="flag-payout-demo" type="checkbox" style="width:auto" />
+              Payout-Demo-Modus (niedrigere Mindestauszahlung)
+            </label>
+            <p id="flag-payout-source" class="muted" style="margin:-0.5rem 0 0.75rem"></p>
+            <div style="margin-bottom:0.75rem">
+              <label>Watch-Dauer Override (Sekunden, leer = aus Env)</label>
+              <input id="flag-watch-duration" type="number" min="1" step="1" placeholder="z.B. 30" />
+            </div>
+            <p id="flag-watch-source" class="muted" style="margin:-0.5rem 0 0.75rem"></p>
+            <button class="btn-primary" onclick="saveFeatureFlags()">Einstellungen speichern</button>
+            <p id="settings-msg" class="success hidden"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="panel-audit" class="panel">
       <div class="card">
         <h2>Admin-Audit-Log</h2>
@@ -482,6 +550,7 @@
       document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
       if (name === 'overview') { loadStats(); loadAnalytics(); }
       if (name === 'payouts') loadPayouts();
+      if (name === 'settings') loadFeatureFlags();
       if (name === 'audit') loadAudit();
     }
 
@@ -822,6 +891,119 @@
       }
     }
 
+    async function loadFeatureFlags() {
+      try {
+        const f = await api('/admin/feature-flags');
+        document.getElementById('flag-maintenance').checked = !!f.maintenance_mode;
+        document.getElementById('flag-maintenance-msg').value = f.maintenance_message || '';
+        document.getElementById('flag-payout-demo').checked = !!f.payout_demo_mode;
+        document.getElementById('flag-payout-source').textContent =
+          `Quelle Payout-Demo: ${f.payout_demo_mode_source === 'db' ? 'Datenbank (Override)' : 'Umgebungsvariable'}`;
+        document.getElementById('flag-watch-duration').value =
+          f.watch_duration_source === 'db' ? f.watch_duration_secs : '';
+        document.getElementById('flag-watch-source').textContent =
+          `Aktuelle Watch-Dauer: ${f.watch_duration_secs}s (${f.watch_duration_source === 'db' ? 'DB' : 'Env'})`;
+        settingsMsg('');
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function settingsMsg(text) {
+      const el = document.getElementById('settings-msg');
+      el.textContent = text;
+      el.classList.toggle('hidden', !text);
+    }
+
+    async function saveFeatureFlags() {
+      const watchRaw = document.getElementById('flag-watch-duration').value.trim();
+      const body = {
+        maintenance_mode: document.getElementById('flag-maintenance').checked,
+        maintenance_message: document.getElementById('flag-maintenance-msg').value.trim(),
+        payout_demo_mode: document.getElementById('flag-payout-demo').checked,
+        clear_payout_demo_mode: false,
+        clear_watch_duration_secs: watchRaw === '',
+      };
+      if (watchRaw !== '') body.watch_duration_secs = parseInt(watchRaw, 10);
+      try {
+        await api('/admin/feature-flags', { method: 'PATCH', body: JSON.stringify(body) });
+        settingsMsg('Einstellungen gespeichert.');
+        loadFeatureFlags();
+      } catch (e) {
+        settingsMsg('');
+        showError(e.message);
+      }
+    }
+
+    function bulkFilterPayload() {
+      const preset = document.getElementById('bulk-filter').value;
+      if (preset === 'user_ids') {
+        const raw = document.getElementById('bulk-user-ids').value.trim();
+        const user_ids = raw.split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+        return { user_ids };
+      }
+      return preset;
+    }
+
+    function bulkRequestBody() {
+      return {
+        amount_usdt: document.getElementById('bulk-amount').value,
+        reason: document.getElementById('bulk-reason').value.trim(),
+        filter: bulkFilterPayload(),
+      };
+    }
+
+    function bulkMsg(text) {
+      const el = document.getElementById('bulk-action-msg');
+      el.textContent = text;
+      el.classList.toggle('hidden', !text);
+    }
+
+    async function previewBulkCredit() {
+      const body = bulkRequestBody();
+      if (!body.amount_usdt || Number(body.amount_usdt) <= 0) {
+        document.getElementById('bulk-preview').textContent = 'Bitte einen positiven Betrag eingeben.';
+        return;
+      }
+      try {
+        const d = await api('/admin/bulk/credit/preview', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        document.getElementById('bulk-preview').textContent =
+          `Vorschau: ${d.user_count} Nutzer × ${fmtUsdt(d.amount_usdt)} = ${fmtUsdt(d.total_usdt)} (Limit: ${d.max_users})`;
+        bulkMsg('');
+        showError('');
+      } catch (e) {
+        document.getElementById('bulk-preview').textContent = '';
+        showError(e.message);
+      }
+    }
+
+    async function executeBulkCredit() {
+      const body = bulkRequestBody();
+      if (!body.reason) { alert('Bitte einen Grund angeben.'); return; }
+      if (!body.amount_usdt || Number(body.amount_usdt) <= 0) { alert('Bitte einen positiven Betrag eingeben.'); return; }
+      try {
+        const preview = await api('/admin/bulk/credit/preview', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        if (!confirm(`Wirklich ${preview.user_count} Nutzer je ${fmtUsdt(preview.amount_usdt)} gutschreiben (gesamt ${fmtUsdt(preview.total_usdt)})?`)) return;
+        const d = await api('/admin/bulk/credit', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        bulkMsg(`${d.user_count} Nutzer gutgeschrieben (gesamt ${fmtUsdt(d.total_usdt)}).`);
+        document.getElementById('bulk-preview').textContent = '';
+        showError('');
+      } catch (e) {
+        bulkMsg('');
+        showError(e.message);
+      }
+    }
+
     async function loadAudit() {
       try {
         const d = await api('/admin/audit-log?limit=50');
@@ -850,6 +1032,12 @@
     }
     document.getElementById('secret').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
     document.getElementById('search-q').addEventListener('keydown', e => { if (e.key === 'Enter') searchUsers(); });
+    document.getElementById('bulk-filter').addEventListener('change', () => {
+      document.getElementById('bulk-ids-wrap').classList.toggle(
+        'hidden',
+        document.getElementById('bulk-filter').value !== 'user_ids'
+      );
+    });
   </script>
 </body>
 </html>

@@ -74,8 +74,24 @@ pub fn router() -> Router<AppState> {
     public.merge(protected)
 }
 
-async fn public_config() -> impl IntoResponse {
-    Json(AdConfig::default().public_json())
+async fn public_config(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut json = AdConfig::default().public_json();
+    let flags = state.feature_flags_view().await?;
+    if let Some(obj) = json.as_object_mut() {
+        obj.insert(
+            "watch_duration_secs".to_string(),
+            serde_json::json!(flags.watch_duration_secs),
+        );
+        obj.insert(
+            "maintenance_mode".to_string(),
+            serde_json::json!(flags.maintenance_mode),
+        );
+        obj.insert(
+            "maintenance_message".to_string(),
+            serde_json::json!(flags.maintenance_message),
+        );
+    }
+    Ok(Json(json))
 }
 
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
@@ -443,6 +459,10 @@ async fn watch_complete(
     AuthUser(user_id): AuthUser,
     Json(body): Json<WatchCompleteRequest>,
 ) -> Result<Json<WatchCompleteResponse>, ApiError> {
+    let (maintenance, maintenance_msg) = state.maintenance_status().await?;
+    if maintenance {
+        return Err(AppError::InvalidInput(maintenance_msg).into());
+    }
     if state.is_user_banned(user_id).await {
         return Err(AppError::FraudBlocked("account suspended".into()).into());
     }

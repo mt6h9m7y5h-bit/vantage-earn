@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use shared::{AppError, AppResult};
@@ -6,7 +8,7 @@ use uuid::Uuid;
 
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::{AdminAuditEntry, AdminDailyMetric, LedgerItem, PayoutListFilter, PayoutRequestRow};
+use crate::store::{AdminAuditEntry, AdminDailyMetric, BulkUserFilter, LedgerItem, PayoutListFilter, PayoutRequestRow};
 
 #[derive(Clone)]
 pub struct PgStore {
@@ -813,6 +815,102 @@ impl PgStore {
         .await
         .map_err(db_err)?;
         Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    pub async fn get_all_feature_flags(&self) -> AppResult<HashMap<String, serde_json::Value>> {
+        let rows = sqlx::query_as::<_, (String, serde_json::Value)>(
+            "SELECT key, value FROM feature_flags",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().collect())
+    }
+
+    pub async fn set_feature_flag(&self, key: &str, value: serde_json::Value) -> AppResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO feature_flags (key, value, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            "#,
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub async fn delete_feature_flag(&self, key: &str) -> AppResult<()> {
+        sqlx::query("DELETE FROM feature_flags WHERE key = $1")
+            .bind(key)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub async fn list_users_for_bulk(
+        &self,
+        filter: BulkUserFilter,
+        limit: u32,
+    ) -> AppResult<Vec<Uuid>> {
+        let limit = limit as i64;
+        let ids = match filter {
+            BulkUserFilter::All => {
+                sqlx::query_as::<_, (Uuid,)>(
+                    r#"
+                    SELECT id FROM users
+                    WHERE banned = FALSE
+                    ORDER BY id
+                    LIMIT $1
+                    "#,
+                )
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?
+            }
+            BulkUserFilter::ActiveDays(_) => {
+                let since = filter
+                    .active_since()
+                    .ok_or_else(|| AppError::InvalidInput("invalid active filter".into()))?;
+                sqlx::query_as::<_, (Uuid,)>(
+                    r#"
+                    SELECT id FROM users
+                    WHERE banned = FALSE AND last_active_date >= $1
+                    ORDER BY id
+                    LIMIT $2
+                    "#,
+                )
+                .bind(since)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?
+            }
+            BulkUserFilter::UserIds(list) => {
+                if list.is_empty() {
+                    return Ok(vec![]);
+                }
+                sqlx::query_as::<_, (Uuid,)>(
+                    r#"
+                    SELECT id FROM users
+                    WHERE banned = FALSE AND id = ANY($1)
+                    ORDER BY id
+                    LIMIT $2
+                    "#,
+                )
+                .bind(&list)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?
+            }
+        };
+        Ok(ids.into_iter().map(|(id,)| id).collect())
     }
 }
 

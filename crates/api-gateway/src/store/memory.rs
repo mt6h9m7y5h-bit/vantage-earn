@@ -11,7 +11,7 @@ use wallet_engine::{LedgerKind, WalletEngine};
 
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::{AdminAuditEntry, AdminDailyMetric, LedgerItem, PayoutListFilter, PayoutRequestRow};
+use crate::store::{AdminAuditEntry, AdminDailyMetric, BulkUserFilter, LedgerItem, PayoutListFilter, PayoutRequestRow};
 
 #[derive(Clone)]
 pub struct MemoryStore {
@@ -24,6 +24,7 @@ pub struct MemoryStore {
     payout_requests: Arc<RwLock<Vec<PayoutRecord>>>,
     revenue_events: Arc<RwLock<Vec<(DateTime<Utc>, Decimal)>>>,
     audit_log: Arc<RwLock<Vec<AdminAuditEntry>>>,
+    feature_flags: Arc<RwLock<HashMap<String, serde_json::Value>>>,
 }
 
 #[derive(Clone)]
@@ -50,6 +51,7 @@ impl MemoryStore {
             payout_requests: Arc::new(RwLock::new(Vec::new())),
             revenue_events: Arc::new(RwLock::new(Vec::new())),
             audit_log: Arc::new(RwLock::new(Vec::new())),
+            feature_flags: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -479,6 +481,49 @@ impl MemoryStore {
             .map(|p| p.amount_usdt)
             .sum();
         Ok(sum)
+    }
+
+    pub async fn get_all_feature_flags(&self) -> AppResult<HashMap<String, serde_json::Value>> {
+        Ok(self.feature_flags.read().await.clone())
+    }
+
+    pub async fn set_feature_flag(&self, key: &str, value: serde_json::Value) -> AppResult<()> {
+        self.feature_flags
+            .write()
+            .await
+            .insert(key.to_string(), value);
+        Ok(())
+    }
+
+    pub async fn delete_feature_flag(&self, key: &str) -> AppResult<()> {
+        self.feature_flags.write().await.remove(key);
+        Ok(())
+    }
+
+    pub async fn list_users_for_bulk(
+        &self,
+        filter: BulkUserFilter,
+        limit: u32,
+    ) -> AppResult<Vec<Uuid>> {
+        let users = self.users.read().await;
+        let mut ids: Vec<Uuid> = users
+            .iter()
+            .filter(|(_, profile)| !profile.banned)
+            .filter(|(id, profile)| match &filter {
+                BulkUserFilter::All => true,
+                BulkUserFilter::ActiveDays(_) => {
+                    profile
+                        .last_active_date
+                        .map(|d| filter.active_since().is_some_and(|since| d >= since))
+                        .unwrap_or(false)
+                }
+                BulkUserFilter::UserIds(list) => list.contains(id),
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        ids.sort();
+        ids.truncate(limit as usize);
+        Ok(ids)
     }
 }
 

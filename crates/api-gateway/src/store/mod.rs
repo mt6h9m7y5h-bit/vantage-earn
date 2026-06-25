@@ -1,8 +1,11 @@
 mod audit;
+mod flags;
 mod ledger;
 mod memory;
 mod payout;
 mod postgres;
+
+pub use flags::{BulkCreditFilter, BulkUserFilter, MAX_BULK_CREDIT_USERS};
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
@@ -346,6 +349,38 @@ impl Store {
         match self {
             Self::Memory(s) => s.total_paid_out_usdt().await,
             Self::Postgres(s) => s.total_paid_out_usdt().await,
+        }
+    }
+
+    pub async fn get_all_feature_flags(&self) -> AppResult<std::collections::HashMap<String, serde_json::Value>> {
+        match self {
+            Self::Memory(s) => s.get_all_feature_flags().await,
+            Self::Postgres(s) => s.get_all_feature_flags().await,
+        }
+    }
+
+    pub async fn set_feature_flag(&self, key: &str, value: serde_json::Value) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.set_feature_flag(key, value).await,
+            Self::Postgres(s) => s.set_feature_flag(key, value).await,
+        }
+    }
+
+    pub async fn delete_feature_flag(&self, key: &str) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.delete_feature_flag(key).await,
+            Self::Postgres(s) => s.delete_feature_flag(key).await,
+        }
+    }
+
+    pub async fn list_users_for_bulk(
+        &self,
+        filter: BulkUserFilter,
+        limit: u32,
+    ) -> AppResult<Vec<Uuid>> {
+        match self {
+            Self::Memory(s) => s.list_users_for_bulk(filter, limit).await,
+            Self::Postgres(s) => s.list_users_for_bulk(filter, limit).await,
         }
     }
 }

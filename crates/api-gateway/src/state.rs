@@ -16,7 +16,11 @@ use currency_engine::CurrencyEngine;
 use ai_engine::AiCopilot;
 
 use crate::auth::JwtService;
-use crate::store::{AdminAuditEntry, LedgerItem, Store};
+use crate::feature_flags::{
+    FeatureFlagsPatch, FeatureFlagsView, KEY_MAINTENANCE_MESSAGE, KEY_MAINTENANCE_MODE,
+    KEY_PAYOUT_DEMO_MODE, KEY_WATCH_DURATION_SECS,
+};
+use crate::store::{AdminAuditEntry, BulkCreditFilter, LedgerItem, Store, MAX_BULK_CREDIT_USERS};
 
 #[derive(Clone)]
 pub struct UserProfile {
@@ -172,7 +176,7 @@ impl AppState {
             .unwrap_or_else(|| Decimal::new(10, 2))
     }
 
-    pub fn payout_demo_mode() -> bool {
+    pub fn payout_demo_mode_from_env() -> bool {
         if cfg!(test) {
             return true;
         }
@@ -181,8 +185,127 @@ impl AppState {
             .unwrap_or(false)
     }
 
+    pub fn payout_demo_mode() -> bool {
+        Self::payout_demo_mode_from_env()
+    }
+
+    pub async fn effective_payout_demo_mode(&self) -> AppResult<bool> {
+        let flags = self.store.get_all_feature_flags().await?;
+        Ok(FeatureFlagsView::resolve(&flags).payout_demo_mode)
+    }
+
+    pub async fn effective_watch_duration_secs(&self) -> AppResult<u32> {
+        let flags = self.store.get_all_feature_flags().await?;
+        Ok(FeatureFlagsView::resolve(&flags).watch_duration_secs)
+    }
+
+    pub async fn maintenance_status(&self) -> AppResult<(bool, String)> {
+        let flags = self.store.get_all_feature_flags().await?;
+        let view = FeatureFlagsView::resolve(&flags);
+        Ok((view.maintenance_mode, view.maintenance_message))
+    }
+
+    pub async fn feature_flags_view(&self) -> AppResult<FeatureFlagsView> {
+        let flags = self.store.get_all_feature_flags().await?;
+        Ok(FeatureFlagsView::resolve(&flags))
+    }
+
+    pub async fn patch_feature_flags(&self, patch: FeatureFlagsPatch) -> AppResult<FeatureFlagsView> {
+        if let Some(v) = patch.maintenance_mode {
+            self.store
+                .set_feature_flag(KEY_MAINTENANCE_MODE, serde_json::json!(v))
+                .await?;
+        }
+        if let Some(msg) = patch.maintenance_message {
+            let trimmed = msg.trim();
+            if !trimmed.is_empty() {
+                self.store
+                    .set_feature_flag(KEY_MAINTENANCE_MESSAGE, serde_json::json!(trimmed))
+                    .await?;
+            }
+        }
+        if patch.clear_payout_demo_mode {
+            self.store.delete_feature_flag(KEY_PAYOUT_DEMO_MODE).await?;
+        } else if let Some(v) = patch.payout_demo_mode {
+            self.store
+                .set_feature_flag(KEY_PAYOUT_DEMO_MODE, serde_json::json!(v))
+                .await?;
+        }
+        if patch.clear_watch_duration_secs {
+            self.store
+                .delete_feature_flag(KEY_WATCH_DURATION_SECS)
+                .await?;
+        } else if let Some(v) = patch.watch_duration_secs {
+            if v == 0 {
+                return Err(AppError::InvalidInput(
+                    "watch_duration_secs must be positive".into(),
+                ));
+            }
+            self.store
+                .set_feature_flag(KEY_WATCH_DURATION_SECS, serde_json::json!(v))
+                .await?;
+        }
+        self.feature_flags_view().await
+    }
+
+    pub async fn bulk_credit_preview(
+        &self,
+        filter: BulkCreditFilter,
+        amount_usdt: Decimal,
+    ) -> AppResult<(usize, Decimal)> {
+        if amount_usdt <= Decimal::ZERO {
+            return Err(AppError::InvalidInput("amount must be positive".into()));
+        }
+        let user_filter = filter
+            .to_user_filter()
+            .map_err(AppError::InvalidInput)?;
+        let user_ids = self
+            .store
+            .list_users_for_bulk(user_filter, MAX_BULK_CREDIT_USERS + 1)
+            .await?;
+        if user_ids.len() > MAX_BULK_CREDIT_USERS as usize {
+            return Err(AppError::InvalidInput(format!(
+                "too many users ({}) — max {MAX_BULK_CREDIT_USERS}",
+                user_ids.len()
+            )));
+        }
+        let total = amount_usdt * Decimal::from(user_ids.len());
+        Ok((user_ids.len(), total))
+    }
+
+    pub async fn bulk_credit_users(
+        &self,
+        filter: BulkCreditFilter,
+        amount_usdt: Decimal,
+    ) -> AppResult<(usize, Decimal)> {
+        if amount_usdt <= Decimal::ZERO {
+            return Err(AppError::InvalidInput("amount must be positive".into()));
+        }
+        let user_filter = filter
+            .to_user_filter()
+            .map_err(AppError::InvalidInput)?;
+        let user_ids = self
+            .store
+            .list_users_for_bulk(user_filter, MAX_BULK_CREDIT_USERS + 1)
+            .await?;
+        if user_ids.is_empty() {
+            return Err(AppError::InvalidInput("no matching users".into()));
+        }
+        if user_ids.len() > MAX_BULK_CREDIT_USERS as usize {
+            return Err(AppError::InvalidInput(format!(
+                "too many users ({}) — max {MAX_BULK_CREDIT_USERS}",
+                user_ids.len()
+            )));
+        }
+        for user_id in &user_ids {
+            self.credit(*user_id, amount_usdt).await?;
+        }
+        let total = amount_usdt * Decimal::from(user_ids.len());
+        Ok((user_ids.len(), total))
+    }
+
     pub async fn min_payout_usdt(&self) -> Decimal {
-        if Self::payout_demo_mode() {
+        if self.effective_payout_demo_mode().await.unwrap_or_else(|_| Self::payout_demo_mode()) {
             Decimal::from_str_exact(DEMO_MIN_PAYOUT_USDT).unwrap()
         } else {
             self.currency

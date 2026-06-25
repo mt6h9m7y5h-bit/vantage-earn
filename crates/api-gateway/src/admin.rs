@@ -12,8 +12,9 @@ use shared::AppError;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::feature_flags::{FeatureFlagsPatch, FeatureFlagsView};
 use crate::state::AppState;
-use crate::store::{AdminAuditEntry, AdminDailyMetric, PayoutListFilter, PayoutRequestRow};
+use crate::store::{AdminAuditEntry, AdminDailyMetric, BulkCreditFilter, PayoutListFilter, PayoutRequestRow, MAX_BULK_CREDIT_USERS};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -29,6 +30,9 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users/{user_id}/trust-score", post(admin_trust_score))
         .route("/admin/users/{user_id}/ban", post(admin_ban))
         .route("/admin/audit-log", get(admin_audit_log))
+        .route("/admin/feature-flags", get(admin_get_feature_flags).patch(admin_patch_feature_flags))
+        .route("/admin/bulk/credit/preview", post(admin_bulk_credit_preview))
+        .route("/admin/bulk/credit", post(admin_bulk_credit))
 }
 
 fn verify_admin(headers: &HeaderMap) -> Result<(), ApiError> {
@@ -305,7 +309,7 @@ async fn admin_user_detail(
         total_watches: profile.total_watches,
         payout_history: profile.payout_history,
         payout_tier: tier.as_str().into(),
-        payout_demo_mode: AppState::payout_demo_mode(),
+        payout_demo_mode: state.effective_payout_demo_mode().await?,
     }))
 }
 
@@ -493,4 +497,110 @@ async fn admin_audit_log(
     let limit = query.limit.clamp(1, 200);
     let entries = state.admin_audit_log(limit).await?;
     Ok(Json(AuditLogResponse { entries }))
+}
+
+async fn admin_get_feature_flags(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<FeatureFlagsView>, ApiError> {
+    verify_admin(&headers)?;
+    Ok(Json(state.feature_flags_view().await?))
+}
+
+async fn admin_patch_feature_flags(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(patch): Json<FeatureFlagsPatch>,
+) -> Result<Json<FeatureFlagsView>, ApiError> {
+    verify_admin(&headers)?;
+    let before = state.feature_flags_view().await?;
+    let after = state.patch_feature_flags(patch).await?;
+    state
+        .admin_log_action(
+            admin_ip(&headers),
+            "feature_flags_update",
+            None,
+            serde_json::json!({
+                "before": before,
+                "after": after,
+            }),
+        )
+        .await?;
+    Ok(Json(after))
+}
+
+#[derive(Deserialize)]
+struct BulkCreditBody {
+    amount_usdt: Decimal,
+    reason: String,
+    filter: BulkCreditFilter,
+}
+
+#[derive(Serialize)]
+struct BulkCreditPreviewResponse {
+    user_count: usize,
+    amount_usdt: Decimal,
+    total_usdt: Decimal,
+    max_users: u32,
+}
+
+async fn admin_bulk_credit_preview(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<BulkCreditBody>,
+) -> Result<Json<BulkCreditPreviewResponse>, ApiError> {
+    verify_admin(&headers)?;
+    let (user_count, total_usdt) = state
+        .bulk_credit_preview(body.filter, body.amount_usdt)
+        .await?;
+    Ok(Json(BulkCreditPreviewResponse {
+        user_count,
+        amount_usdt: body.amount_usdt,
+        total_usdt,
+        max_users: MAX_BULK_CREDIT_USERS,
+    }))
+}
+
+#[derive(Serialize)]
+struct BulkCreditResponse {
+    user_count: usize,
+    amount_usdt: Decimal,
+    total_usdt: Decimal,
+    action: String,
+}
+
+async fn admin_bulk_credit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<BulkCreditBody>,
+) -> Result<Json<BulkCreditResponse>, ApiError> {
+    verify_admin(&headers)?;
+    let reason = body.reason.trim();
+    if reason.is_empty() {
+        return Err(shared::AppError::InvalidInput("reason is required".into()).into());
+    }
+    let filter_json = serde_json::to_value(&body.filter).unwrap_or(serde_json::Value::Null);
+    let (user_count, total_usdt) = state
+        .bulk_credit_users(body.filter, body.amount_usdt)
+        .await?;
+    state
+        .admin_log_action(
+            admin_ip(&headers),
+            "bulk_credit",
+            None,
+            serde_json::json!({
+                "amount_usdt": body.amount_usdt,
+                "reason": reason,
+                "filter": filter_json,
+                "user_count": user_count,
+                "total_usdt": total_usdt,
+            }),
+        )
+        .await?;
+    Ok(Json(BulkCreditResponse {
+        user_count,
+        amount_usdt: body.amount_usdt,
+        total_usdt,
+        action: "bulk_credit".into(),
+    }))
 }

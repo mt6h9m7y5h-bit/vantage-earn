@@ -1,6 +1,5 @@
 use axum::{
     extract::State,
-    http::HeaderMap,
     middleware,
     response::IntoResponse,
     routing::{get, post},
@@ -50,7 +49,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/login", post(login))
         .route("/leaderboard/weekly", get(weekly_leaderboard))
         .route("/admin", get(pwa::admin_page))
-        .route("/admin/stats", get(admin_stats))
+        .merge(crate::admin::router())
         .layer(middleware::from_fn_with_state(
             auth_limiter,
             rate_limit::middleware,
@@ -443,6 +442,9 @@ async fn watch_complete(
     AuthUser(user_id): AuthUser,
     Json(body): Json<WatchCompleteRequest>,
 ) -> Result<Json<WatchCompleteResponse>, ApiError> {
+    if state.is_user_banned(user_id).await {
+        return Err(AppError::FraudBlocked("account suspended".into()).into());
+    }
     let mut profile = state.profile(user_id).await;
 
     let fraud_prob = FraudEngine::validate_watch(&WatchSessionCheck {
@@ -601,6 +603,9 @@ async fn payout_request(
     AuthUser(user_id): AuthUser,
     Json(body): Json<PayoutRequest>,
 ) -> Result<Json<PayoutResponse>, ApiError> {
+    if state.is_user_banned(user_id).await {
+        return Err(AppError::FraudBlocked("account suspended".into()).into());
+    }
     let Some(method) = PayoutMethod::parse(&body.payout_method) else {
         return Err(AppError::InvalidInput(format!(
             "invalid payout_method; allowed: {}",
@@ -764,38 +769,5 @@ async fn weekly_leaderboard(
     Ok(Json(WeeklyLeaderboardResponse {
         week_start: crate::store::week_start_utc(),
         entries,
-    }))
-}
-
-#[derive(Serialize)]
-struct AdminStatsResponse {
-    total_revenue: Decimal,
-    pending_payouts: Decimal,
-    held_payouts: Decimal,
-    user_count: i64,
-    recent_payout_count: i64,
-}
-
-async fn admin_stats(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<AdminStatsResponse>, ApiError> {
-    let secret = headers
-        .get("X-Admin-Secret")
-        .and_then(|v| v.to_str().ok());
-    AppState::verify_admin_secret(secret)?;
-
-    let total_revenue = state.total_revenue().await?;
-    let pending_payouts = state.pending_payouts().await?;
-    let held_payouts = state.held_payouts().await?;
-    let user_count = state.user_count().await?;
-    let recent_payout_count = state.recent_payout_count().await?;
-
-    Ok(Json(AdminStatsResponse {
-        total_revenue,
-        pending_payouts,
-        held_payouts,
-        user_count,
-        recent_payout_count,
     }))
 }

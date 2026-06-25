@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use referral_engine::ReferralEngine;
 use rust_decimal::Decimal;
 use shared::AppResult;
@@ -11,7 +11,7 @@ use wallet_engine::{LedgerKind, WalletEngine};
 
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::LedgerItem;
+use crate::store::{AdminAuditEntry, LedgerItem};
 
 #[derive(Clone)]
 pub struct MemoryStore {
@@ -22,6 +22,8 @@ pub struct MemoryStore {
     pending_payouts: Arc<RwLock<Decimal>>,
     held_payouts: Arc<RwLock<Decimal>>,
     payout_requests: Arc<RwLock<Vec<PayoutRecord>>>,
+    revenue_events: Arc<RwLock<Vec<(DateTime<Utc>, Decimal)>>>,
+    audit_log: Arc<RwLock<Vec<AdminAuditEntry>>>,
 }
 
 #[derive(Clone)]
@@ -46,6 +48,8 @@ impl MemoryStore {
             pending_payouts: Arc::new(RwLock::new(Decimal::ZERO)),
             held_payouts: Arc::new(RwLock::new(Decimal::ZERO)),
             payout_requests: Arc::new(RwLock::new(Vec::new())),
+            revenue_events: Arc::new(RwLock::new(Vec::new())),
+            audit_log: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -118,6 +122,10 @@ impl MemoryStore {
 
     pub async fn add_revenue(&self, amount: Decimal) -> AppResult<()> {
         *self.total_revenue.write().await += amount;
+        self.revenue_events
+            .write()
+            .await
+            .push((Utc::now(), amount));
         Ok(())
     }
 
@@ -214,6 +222,125 @@ impl MemoryStore {
                 created_at: e.created_at,
             })
             .collect())
+    }
+
+    pub async fn active_users_today(&self, today: NaiveDate) -> AppResult<i64> {
+        let count = self
+            .users
+            .read()
+            .await
+            .values()
+            .filter(|p| p.last_active_date == Some(today))
+            .count();
+        Ok(count as i64)
+    }
+
+    pub async fn registrations_today(&self, today: NaiveDate) -> AppResult<i64> {
+        let count = self
+            .users
+            .read()
+            .await
+            .values()
+            .filter(|p| p.created_at.date_naive() == today)
+            .count();
+        Ok(count as i64)
+    }
+
+    pub async fn videos_today(&self, today: NaiveDate) -> AppResult<i64> {
+        let total: u32 = self
+            .users
+            .read()
+            .await
+            .values()
+            .filter(|p| p.last_active_date == Some(today))
+            .map(|p| p.watches_today)
+            .sum();
+        Ok(total as i64)
+    }
+
+    pub async fn rewards_today_usdt(&self, today: NaiveDate) -> AppResult<Decimal> {
+        let start = today.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let entries = self.wallet.all_ledger().await;
+        let sum = entries
+            .iter()
+            .filter(|e| e.kind == LedgerKind::Credit && e.created_at >= start)
+            .map(|e| e.amount_usdt)
+            .sum();
+        Ok(sum)
+    }
+
+    pub async fn avg_trust_score(&self) -> AppResult<f64> {
+        let scores = self.trust_scores.read().await;
+        if scores.is_empty() {
+            return Ok(50.0);
+        }
+        let sum: i64 = scores.values().map(|&s| s as i64).sum();
+        Ok(sum as f64 / scores.len() as f64)
+    }
+
+    pub async fn revenue_in_period_hours(&self, hours: i64) -> AppResult<Decimal> {
+        let cutoff = Utc::now() - Duration::hours(hours);
+        let sum = self
+            .revenue_events
+            .read()
+            .await
+            .iter()
+            .filter(|(t, _)| *t >= cutoff)
+            .map(|(_, a)| *a)
+            .sum();
+        Ok(sum)
+    }
+
+    pub async fn revenue_in_period_days(&self, days: i64) -> AppResult<Decimal> {
+        self.revenue_in_period_hours(days * 24).await
+    }
+
+    pub async fn search_users(&self, query: &str) -> AppResult<Vec<Uuid>> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(vec![]);
+        }
+
+        if let Ok(id) = Uuid::parse_str(q) {
+            if self.user_exists(id).await? {
+                return Ok(vec![id]);
+            }
+        }
+
+        if let Some(id) = self.find_user_by_referral_code(q).await? {
+            return Ok(vec![id]);
+        }
+
+        let normalized = q.replace('-', "").to_uppercase();
+        if normalized.len() >= 4 {
+            let users = self.users.read().await;
+            let mut matches: Vec<Uuid> = users
+                .keys()
+                .filter(|id| {
+                    id.to_string()
+                        .replace('-', "")
+                        .to_uppercase()
+                        .contains(&normalized)
+                })
+                .copied()
+                .collect();
+            matches.sort();
+            matches.truncate(20);
+            return Ok(matches);
+        }
+
+        Ok(vec![])
+    }
+
+    pub async fn append_admin_audit(&self, entry: AdminAuditEntry) -> AppResult<()> {
+        self.audit_log.write().await.push(entry);
+        Ok(())
+    }
+
+    pub async fn admin_audit_log(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        let log = self.audit_log.read().await;
+        let start = log.len().saturating_sub(limit as usize);
+        Ok(log[start..].iter().rev().cloned().collect())
     }
 }
 

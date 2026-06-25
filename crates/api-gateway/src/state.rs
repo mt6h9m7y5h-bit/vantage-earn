@@ -16,7 +16,7 @@ use currency_engine::CurrencyEngine;
 use ai_engine::AiCopilot;
 
 use crate::auth::JwtService;
-use crate::store::{LedgerItem, Store};
+use crate::store::{AdminAuditEntry, LedgerItem, Store};
 
 #[derive(Clone)]
 pub struct UserProfile {
@@ -36,6 +36,7 @@ pub struct UserProfile {
     pub locale: String,
     pub referred_by: Option<Uuid>,
     pub referral_bonus_paid: bool,
+    pub banned: bool,
 }
 
 impl Default for UserProfile {
@@ -58,6 +59,7 @@ impl Default for UserProfile {
             locale: "en_US".into(),
             referred_by: None,
             referral_bonus_paid: false,
+            banned: false,
         }
     }
 }
@@ -416,6 +418,10 @@ impl AppState {
             .unwrap_or(50)
     }
 
+    pub async fn set_trust_score(&self, user_id: Uuid, score: i32) -> AppResult<()> {
+        self.store.set_trust_score(user_id, score).await
+    }
+
     pub async fn ensure_user(&self, user_id: Uuid) {
         let _ = self.store.ensure_user(user_id).await;
     }
@@ -522,6 +528,88 @@ impl AppState {
             Some(s) if s == expected => Ok(()),
             _ => Err(shared::AppError::Unauthorized),
         }
+    }
+
+    pub async fn admin_stats_extended(&self) -> AppResult<crate::admin::AdminStatsExtended> {
+        let today = Utc::now().date_naive();
+        Ok(crate::admin::AdminStatsExtended {
+            total_revenue: self.total_revenue().await?,
+            pending_payouts: self.pending_payouts().await?,
+            held_payouts: self.held_payouts().await?,
+            user_count: self.user_count().await?,
+            recent_payout_count: self.recent_payout_count().await?,
+            active_users_today: self.store_active_users_today(today).await?,
+            registrations_today: self.store_registrations_today(today).await?,
+            videos_today: self.store_videos_today(today).await?,
+            rewards_today_usdt: self.store_rewards_today_usdt(today).await?,
+            avg_trust_score: self.store_avg_trust_score().await?,
+            revenue_24h: self.store_revenue_in_period_hours(24).await?,
+            revenue_7d: self.store_revenue_in_period_days(7).await?,
+            revenue_30d: self.store_revenue_in_period_days(30).await?,
+        })
+    }
+
+    pub async fn admin_lookup_users(&self, query: &str) -> AppResult<Vec<Uuid>> {
+        self.store_search_users(query).await
+    }
+
+    pub async fn admin_audit_log(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        self.store_admin_audit_log(limit).await
+    }
+
+    pub async fn admin_log_action(
+        &self,
+        admin_ip: Option<String>,
+        action: &str,
+        user_id: Option<Uuid>,
+        details: serde_json::Value,
+    ) -> AppResult<()> {
+        let entry = AdminAuditEntry::new(admin_ip, action, user_id, details);
+        self.store_append_admin_audit(entry).await
+    }
+
+    pub async fn is_user_banned(&self, user_id: Uuid) -> bool {
+        self.profile(user_id).await.banned
+    }
+
+    async fn store_active_users_today(&self, today: NaiveDate) -> AppResult<i64> {
+        self.store.active_users_today(today).await
+    }
+
+    async fn store_registrations_today(&self, today: NaiveDate) -> AppResult<i64> {
+        self.store.registrations_today(today).await
+    }
+
+    async fn store_videos_today(&self, today: NaiveDate) -> AppResult<i64> {
+        self.store.videos_today(today).await
+    }
+
+    async fn store_rewards_today_usdt(&self, today: NaiveDate) -> AppResult<Decimal> {
+        self.store.rewards_today_usdt(today).await
+    }
+
+    async fn store_avg_trust_score(&self) -> AppResult<f64> {
+        self.store.avg_trust_score().await
+    }
+
+    async fn store_revenue_in_period_hours(&self, hours: i64) -> AppResult<Decimal> {
+        self.store.revenue_in_period_hours(hours).await
+    }
+
+    async fn store_revenue_in_period_days(&self, days: i64) -> AppResult<Decimal> {
+        self.store.revenue_in_period_days(days).await
+    }
+
+    async fn store_search_users(&self, query: &str) -> AppResult<Vec<Uuid>> {
+        self.store.search_users(query).await
+    }
+
+    async fn store_admin_audit_log(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        self.store.admin_audit_log(limit).await
+    }
+
+    async fn store_append_admin_audit(&self, entry: AdminAuditEntry) -> AppResult<()> {
+        self.store.append_admin_audit(entry).await
     }
 }
 

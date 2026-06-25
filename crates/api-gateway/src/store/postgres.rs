@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::LedgerItem;
+use crate::store::{AdminAuditEntry, LedgerItem};
 
 #[derive(Clone)]
 pub struct PgStore {
@@ -92,7 +92,7 @@ impl PgStore {
                    last_active_date, watches_today, total_watches, milestones_claimed,
                    last_daily_bonus_date, streak_7_bonus_claimed,
                    last_challenge_bonus_date,
-                   referred_by, referral_bonus_paid
+                   referred_by, referral_bonus_paid, banned
             FROM users WHERE id = $1
             "#,
         )
@@ -122,7 +122,8 @@ impl PgStore {
                 streak_7_bonus_claimed = $13,
                 last_challenge_bonus_date = $14,
                 referred_by = $15,
-                referral_bonus_paid = $16
+                referral_bonus_paid = $16,
+                banned = $17
             WHERE id = $1
             "#,
         )
@@ -142,6 +143,7 @@ impl PgStore {
         .bind(profile.last_challenge_bonus_date)
         .bind(profile.referred_by)
         .bind(profile.referral_bonus_paid)
+        .bind(profile.banned)
         .execute(&self.pool)
         .await
         .map_err(db_err)?;
@@ -286,13 +288,20 @@ impl PgStore {
     }
 
     pub async fn add_revenue(&self, amount: Decimal) -> AppResult<()> {
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
         sqlx::query(
             "UPDATE platform_stats SET total_revenue = total_revenue + $1 WHERE id = 1",
         )
         .bind(amount)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(db_err)?;
+        sqlx::query("INSERT INTO revenue_events (amount_usdt) VALUES ($1)")
+            .bind(amount)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        tx.commit().await.map_err(db_err)?;
         Ok(())
     }
 
@@ -444,6 +453,155 @@ impl PgStore {
         .map_err(db_err)?;
         Ok(row.0)
     }
+
+    pub async fn active_users_today(&self, today: NaiveDate) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE last_active_date = $1",
+        )
+        .bind(today)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn registrations_today(&self, today: NaiveDate) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE created_at::date = $1",
+        )
+        .bind(today)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn videos_today(&self, today: NaiveDate) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COALESCE(SUM(watches_today), 0)::bigint FROM users WHERE last_active_date = $1",
+        )
+        .bind(today)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn rewards_today_usdt(&self, today: NaiveDate) -> AppResult<Decimal> {
+        let start = today.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let row: (Option<Decimal>,) = sqlx::query_as(
+            r#"
+            SELECT COALESCE(SUM(amount_usdt), 0)
+            FROM ledger_entries
+            WHERE kind = 'credit' AND created_at >= $1
+            "#,
+        )
+        .bind(start)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    pub async fn avg_trust_score(&self) -> AppResult<f64> {
+        let row: (Option<f64>,) =
+            sqlx::query_as("SELECT AVG(score)::float8 FROM trust_scores")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(db_err)?;
+        Ok(row.0.unwrap_or(50.0))
+    }
+
+    pub async fn revenue_in_period_hours(&self, hours: i64) -> AppResult<Decimal> {
+        let row: (Option<Decimal>,) = sqlx::query_as(
+            r#"
+            SELECT COALESCE(SUM(amount_usdt), 0)
+            FROM revenue_events
+            WHERE created_at >= NOW() - make_interval(hours => $1)
+            "#,
+        )
+        .bind(hours as i32)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    pub async fn revenue_in_period_days(&self, days: i64) -> AppResult<Decimal> {
+        self.revenue_in_period_hours(days * 24).await
+    }
+
+    pub async fn search_users(&self, query: &str) -> AppResult<Vec<Uuid>> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(vec![]);
+        }
+
+        if let Ok(id) = Uuid::parse_str(q) {
+            if self.user_exists(id).await? {
+                return Ok(vec![id]);
+            }
+        }
+
+        if let Some(id) = self.find_user_by_referral_code(q).await? {
+            return Ok(vec![id]);
+        }
+
+        let normalized = q.replace('-', "").to_uppercase();
+        if normalized.len() >= 4 {
+            let pattern = format!("{normalized}%");
+            let rows = sqlx::query_as::<_, (Uuid,)>(
+                r#"
+                SELECT id FROM users
+                WHERE UPPER(REPLACE(id::text, '-', '')) LIKE $1
+                ORDER BY id
+                LIMIT 20
+                "#,
+            )
+            .bind(&pattern)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_err)?;
+            return Ok(rows.into_iter().map(|(id,)| id).collect());
+        }
+
+        Ok(vec![])
+    }
+
+    pub async fn append_admin_audit(&self, entry: AdminAuditEntry) -> AppResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO admin_audit_log (id, admin_ip, action, user_id, details, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            "#,
+        )
+        .bind(entry.id)
+        .bind(&entry.admin_ip)
+        .bind(&entry.action)
+        .bind(entry.user_id)
+        .bind(&entry.details)
+        .bind(entry.created_at)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub async fn admin_audit_log(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        let rows = sqlx::query_as::<_, AuditRow>(
+            r#"
+            SELECT id, admin_ip, action, user_id, details, created_at
+            FROM admin_audit_log
+            ORDER BY created_at DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -491,6 +649,7 @@ struct UserRow {
     last_challenge_bonus_date: Option<NaiveDate>,
     referred_by: Option<Uuid>,
     referral_bonus_paid: bool,
+    banned: bool,
 }
 
 impl From<UserRow> for UserProfile {
@@ -512,6 +671,30 @@ impl From<UserRow> for UserProfile {
             last_challenge_bonus_date: row.last_challenge_bonus_date,
             referred_by: row.referred_by,
             referral_bonus_paid: row.referral_bonus_paid,
+            banned: row.banned,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct AuditRow {
+    id: Uuid,
+    admin_ip: Option<String>,
+    action: String,
+    user_id: Option<Uuid>,
+    details: serde_json::Value,
+    created_at: DateTime<Utc>,
+}
+
+impl From<AuditRow> for AdminAuditEntry {
+    fn from(row: AuditRow) -> Self {
+        Self {
+            id: row.id,
+            admin_ip: row.admin_ip,
+            action: row.action,
+            user_id: row.user_id,
+            details: row.details,
+            created_at: row.created_at,
         }
     }
 }

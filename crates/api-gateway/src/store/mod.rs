@@ -1,12 +1,14 @@
+mod audit;
 mod ledger;
 mod memory;
 mod postgres;
 
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use shared::AppResult;
 use uuid::Uuid;
 
+pub use audit::AdminAuditEntry;
 pub use ledger::LedgerItem;
 pub use memory::MemoryStore;
 pub use postgres::{normalize_database_url, PgStore};
@@ -205,6 +207,76 @@ impl Store {
         match self {
             Self::Memory(s) => s.recent_payout_count(days).await,
             Self::Postgres(s) => s.recent_payout_count(days).await,
+        }
+    }
+
+    pub async fn active_users_today(&self, today: NaiveDate) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.active_users_today(today).await,
+            Self::Postgres(s) => s.active_users_today(today).await,
+        }
+    }
+
+    pub async fn registrations_today(&self, today: NaiveDate) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.registrations_today(today).await,
+            Self::Postgres(s) => s.registrations_today(today).await,
+        }
+    }
+
+    pub async fn videos_today(&self, today: NaiveDate) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.videos_today(today).await,
+            Self::Postgres(s) => s.videos_today(today).await,
+        }
+    }
+
+    pub async fn rewards_today_usdt(&self, today: NaiveDate) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.rewards_today_usdt(today).await,
+            Self::Postgres(s) => s.rewards_today_usdt(today).await,
+        }
+    }
+
+    pub async fn avg_trust_score(&self) -> AppResult<f64> {
+        match self {
+            Self::Memory(s) => s.avg_trust_score().await,
+            Self::Postgres(s) => s.avg_trust_score().await,
+        }
+    }
+
+    pub async fn revenue_in_period_hours(&self, hours: i64) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.revenue_in_period_hours(hours).await,
+            Self::Postgres(s) => s.revenue_in_period_hours(hours).await,
+        }
+    }
+
+    pub async fn revenue_in_period_days(&self, days: i64) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.revenue_in_period_days(days).await,
+            Self::Postgres(s) => s.revenue_in_period_days(days).await,
+        }
+    }
+
+    pub async fn search_users(&self, query: &str) -> AppResult<Vec<Uuid>> {
+        match self {
+            Self::Memory(s) => s.search_users(query).await,
+            Self::Postgres(s) => s.search_users(query).await,
+        }
+    }
+
+    pub async fn append_admin_audit(&self, entry: AdminAuditEntry) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.append_admin_audit(entry).await,
+            Self::Postgres(s) => s.append_admin_audit(entry).await,
+        }
+    }
+
+    pub async fn admin_audit_log(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        match self {
+            Self::Memory(s) => s.admin_audit_log(limit).await,
+            Self::Postgres(s) => s.admin_audit_log(limit).await,
         }
     }
 }

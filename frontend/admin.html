@@ -3,105 +3,521 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VANTAGE-EARN Admin</title>
+  <meta name="theme-color" content="#070B14" />
+  <title>VANTAGE-EARN Admin Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #0b0f14;
-      --card: #141b24;
-      --accent: #00d4aa;
-      --text: #e8eef5;
-      --muted: #8b9cb3;
+      --bg: #070B14;
+      --surface: #0D1420;
+      --card: #111A28;
+      --border: #1E2D42;
+      --accent: #00D4AA;
+      --accent-dim: rgba(0, 212, 170, 0.12);
+      --text: #E8EEF5;
+      --muted: #8B9CB3;
+      --danger: #FF6B6B;
+      --warn: #F5A623;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: system-ui, sans-serif;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
-      padding: 2rem 1rem;
+      min-height: 100vh;
+      line-height: 1.5;
     }
-    .wrap { max-width: 560px; margin: 0 auto; }
-    h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+    .shell { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    header h1 span { color: var(--accent); font-weight: 600; }
+    .auth-bar {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex: 1;
+      min-width: 260px;
+      max-width: 420px;
+    }
+    input, select, textarea {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.65rem 0.85rem;
+      font: inherit;
+      font-size: 0.9rem;
+      width: 100%;
+    }
+    input:focus, textarea:focus { outline: 2px solid var(--accent-dim); border-color: var(--accent); }
+    button {
+      font: inherit;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      padding: 0.65rem 1rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #04241c; }
+    .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-danger { background: rgba(255,107,107,0.15); color: var(--danger); border: 1px solid rgba(255,107,107,0.35); }
+    .tabs {
+      display: flex;
+      gap: 0.35rem;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .tab {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid transparent;
+      padding: 0.55rem 1rem;
+      border-radius: 999px;
+      font-weight: 500;
+    }
+    .tab.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: rgba(0,212,170,0.25);
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
     .card {
       background: var(--card);
-      border: 1px solid #243044;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.1rem 1.25rem;
       margin-bottom: 1rem;
     }
-    .row { display: flex; justify-content: space-between; margin: 0.5rem 0; }
-    .row span:last-child { color: var(--accent); font-weight: 600; }
-    input, button {
-      width: 100%;
-      padding: 0.75rem;
-      border-radius: 10px;
-      border: 1px solid #243044;
-      margin-bottom: 0.5rem;
-      font-size: 1rem;
-    }
-    input { background: #0b0f14; color: var(--text); }
-    button {
-      background: var(--accent);
-      color: #04241c;
-      border: none;
+    .card h2 {
+      margin: 0 0 0.85rem;
+      font-size: 0.95rem;
       font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+    }
+    .kpi .label { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .kpi .value { font-size: 1.15rem; font-weight: 700; color: var(--accent); }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .error { color: var(--danger); font-size: 0.88rem; margin-top: 0.5rem; }
+    .success { color: var(--accent); font-size: 0.88rem; margin-top: 0.5rem; }
+    .search-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .search-row input { flex: 1; }
+    .user-list { list-style: none; padding: 0; margin: 0 0 1rem; }
+    .user-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.65rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 0.4rem;
+      background: var(--surface);
       cursor: pointer;
     }
-    .error { color: #ff6b6b; font-size: 0.9rem; }
-    .muted { color: var(--muted); font-size: 0.85rem; }
+    .user-list li:hover { border-color: var(--accent); }
+    .user-list code { color: var(--accent); font-size: 0.82rem; }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.65rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .detail-item .k { font-size: 0.75rem; color: var(--muted); }
+    .detail-item .v { font-weight: 600; font-size: 0.95rem; }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-banned { background: rgba(255,107,107,0.15); color: var(--danger); }
+    .badge-ok { background: var(--accent-dim); color: var(--accent); }
+    .actions { display: grid; gap: 1rem; }
+    .action-form label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.3rem; }
+    .action-form .row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: end; }
+    .action-form .row-2 { display: grid; grid-template-columns: 1fr auto; gap: 0.5rem; align-items: end; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.6rem 0.5rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    td code { font-size: 0.78rem; color: var(--accent); }
+    .hidden { display: none !important; }
+    #login-gate { max-width: 400px; margin: 4rem auto; text-align: center; }
+    #app.hidden { display: none; }
+    @media (max-width: 640px) {
+      .action-form .row, .action-form .row-2 { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>VANTAGE-EARN Admin</h1>
-    <p class="muted">Plattform-Kennzahlen — geschützt durch <code>ADMIN_SECRET</code> (Header <code>X-Admin-Secret</code>).</p>
-
-    <div class="card">
-      <label for="secret">Admin-Secret</label>
-      <input id="secret" type="password" placeholder="ADMIN_SECRET" autocomplete="off" />
-      <button onclick="loadStats()">Statistiken laden</button>
-      <p id="error" class="error"></p>
-    </div>
-
-    <div id="stats" class="card hidden">
-      <div class="row"><span>Gesamtumsatz</span><span id="revenue">—</span></div>
-      <div class="row"><span>Ausstehende Auszahlungen</span><span id="pending">—</span></div>
-      <div class="row"><span>Zurückgehaltene Auszahlungen</span><span id="held">—</span></div>
-      <div class="row"><span>Nutzer (geschätzt)</span><span id="users">—</span></div>
-      <div class="row"><span>Auszahlungen (7 Tage)</span><span id="payouts">—</span></div>
-    </div>
+  <div id="login-gate" class="card shell">
+    <h1>Admin <span>Control Center</span></h1>
+    <p class="muted">Geschützt durch <code>ADMIN_SECRET</code> (Header <code>X-Admin-Secret</code>).</p>
+    <input id="secret" type="password" placeholder="ADMIN_SECRET" autocomplete="off" />
+    <button class="btn-primary" style="width:100%;margin-top:0.5rem" onclick="unlock()">Anmelden</button>
+    <p id="login-error" class="error"></p>
   </div>
-  <script>
-    const saved = localStorage.getItem('ve_admin_secret');
-    if (saved) document.getElementById('secret').value = saved;
 
-    async function loadStats() {
-      const secret = document.getElementById('secret').value.trim();
-      const err = document.getElementById('error');
+  <div id="app" class="shell hidden">
+    <header>
+      <h1>Admin <span>Control Center</span></h1>
+      <div class="auth-bar">
+        <input id="secret-inline" type="password" placeholder="ADMIN_SECRET" autocomplete="off" />
+        <button class="btn-ghost" onclick="saveSecret()">Speichern</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Übersicht</button>
+      <button class="tab" data-tab="users" onclick="switchTab('users')">Nutzer</button>
+      <button class="tab" data-tab="audit" onclick="switchTab('audit')">Audit</button>
+    </nav>
+
+    <p id="global-error" class="error hidden"></p>
+
+    <section id="panel-overview" class="panel active">
+      <div class="card">
+        <h2>Plattform-KPIs</h2>
+        <div class="kpi-grid" id="kpi-grid">
+          <div class="kpi"><div class="label">Gesamtumsatz</div><div class="value" id="kpi-revenue">—</div></div>
+          <div class="kpi"><div class="label">Umsatz 24h</div><div class="value" id="kpi-rev24">—</div></div>
+          <div class="kpi"><div class="label">Umsatz 7 Tage</div><div class="value" id="kpi-rev7">—</div></div>
+          <div class="kpi"><div class="label">Umsatz 30 Tage</div><div class="value" id="kpi-rev30">—</div></div>
+          <div class="kpi"><div class="label">Nutzer gesamt</div><div class="value" id="kpi-users">—</div></div>
+          <div class="kpi"><div class="label">Aktiv heute</div><div class="value" id="kpi-active">—</div></div>
+          <div class="kpi"><div class="label">Registrierungen heute</div><div class="value" id="kpi-reg">—</div></div>
+          <div class="kpi"><div class="label">Videos heute</div><div class="value" id="kpi-videos">—</div></div>
+          <div class="kpi"><div class="label">Rewards heute</div><div class="value" id="kpi-rewards">—</div></div>
+          <div class="kpi"><div class="label">Ø Trust-Score</div><div class="value" id="kpi-trust">—</div></div>
+          <div class="kpi"><div class="label">Ausstehende Auszahlungen</div><div class="value" id="kpi-pending">—</div></div>
+          <div class="kpi"><div class="label">Zurückgehalten</div><div class="value" id="kpi-held">—</div></div>
+          <div class="kpi"><div class="label">Auszahlungen (7 Tage)</div><div class="value" id="kpi-payouts">—</div></div>
+        </div>
+        <button class="btn-ghost" style="margin-top:0.75rem" onclick="loadStats()">Aktualisieren</button>
+      </div>
+    </section>
+
+    <section id="panel-users" class="panel">
+      <div class="card">
+        <h2>Nutzersuche</h2>
+        <div class="search-row">
+          <input id="search-q" type="text" placeholder="UUID, Teil-UUID oder Referral-Code" />
+          <button class="btn-primary" onclick="searchUsers()">Suchen</button>
+        </div>
+        <ul class="user-list" id="user-results"></ul>
+      </div>
+
+      <div id="user-detail" class="card hidden">
+        <h2>Nutzerprofil</h2>
+        <div class="detail-grid" id="detail-grid"></div>
+        <div class="actions">
+          <div class="action-form card" style="background:var(--surface)">
+            <strong>Bonus geben</strong>
+            <div class="row" style="margin-top:0.5rem">
+              <div><label>Betrag (USDT)</label><input id="credit-amount" type="number" step="0.000001" min="0" /></div>
+              <div><label>Grund</label><input id="credit-reason" type="text" placeholder="z.B. Support-Kompensation" /></div>
+              <button class="btn-primary" onclick="creditUser()">Gutschreiben</button>
+            </div>
+          </div>
+          <div class="action-form card" style="background:var(--surface)">
+            <strong>Trust-Score setzen</strong>
+            <div class="row" style="margin-top:0.5rem">
+              <div><label>Score (0–100)</label><input id="trust-score" type="number" min="0" max="100" /></div>
+              <div><label>Grund</label><input id="trust-reason" type="text" /></div>
+              <button class="btn-primary" onclick="setTrust()">Setzen</button>
+            </div>
+          </div>
+          <div class="action-form card" style="background:var(--surface)">
+            <strong>Sperren / Entsperren</strong>
+            <div class="row-2" style="margin-top:0.5rem">
+              <div><label>Grund</label><input id="ban-reason" type="text" placeholder="Begründung" /></div>
+              <button class="btn-danger" id="ban-btn" onclick="toggleBan()">Sperren</button>
+            </div>
+          </div>
+        </div>
+        <p id="user-action-msg" class="success hidden"></p>
+      </div>
+    </section>
+
+    <section id="panel-audit" class="panel">
+      <div class="card">
+        <h2>Admin-Audit-Log</h2>
+        <button class="btn-ghost" style="margin-bottom:0.75rem" onclick="loadAudit()">Aktualisieren</button>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Zeit</th>
+                <th>Aktion</th>
+                <th>Nutzer</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="audit-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    let selectedUserId = null;
+    let selectedUserBanned = false;
+
+    function secret() {
+      return (document.getElementById('secret-inline')?.value || document.getElementById('secret')?.value || '').trim();
+    }
+
+    function headers() {
+      return { 'X-Admin-Secret': secret(), 'Content-Type': 'application/json' };
+    }
+
+    function fmtUsdt(v) {
+      if (v == null) return '—';
+      return Number(v).toFixed(6).replace(/\.?0+$/, '') + ' USDT';
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('global-error');
+      el.textContent = msg;
+      el.classList.toggle('hidden', !msg);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
+      return data;
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
+      if (name === 'overview') loadStats();
+      if (name === 'audit') loadAudit();
+    }
+
+    async function unlock() {
+      const err = document.getElementById('login-error');
       err.textContent = '';
-      if (!secret) {
-        err.textContent = 'Bitte ADMIN_SECRET eingeben.';
-        return;
-      }
+      if (!secret()) { err.textContent = 'Bitte ADMIN_SECRET eingeben.'; return; }
       try {
-        const res = await fetch('/admin/stats', {
-          headers: { 'X-Admin-Secret': secret },
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          err.textContent = data.error || 'Zugriff verweigert';
-          return;
-        }
-        localStorage.setItem('ve_admin_secret', secret);
-        document.getElementById('stats').classList.remove('hidden');
-        document.getElementById('revenue').textContent = data.total_revenue + ' USDT';
-        document.getElementById('pending').textContent = data.pending_payouts + ' USDT';
-        document.getElementById('held').textContent = data.held_payouts + ' USDT';
-        document.getElementById('users').textContent = data.user_count;
-        document.getElementById('payouts').textContent = data.recent_payout_count;
-      } catch {
-        err.textContent = 'Server nicht erreichbar.';
+        await api('/admin/stats');
+        localStorage.setItem('ve_admin_secret', secret());
+        document.getElementById('login-gate').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        document.getElementById('secret-inline').value = secret();
+        loadStats();
+      } catch (e) {
+        err.textContent = e.message;
       }
     }
+
+    function saveSecret() {
+      const s = secret();
+      if (s) localStorage.setItem('ve_admin_secret', s);
+      showError('');
+      loadStats();
+    }
+
+    async function loadStats() {
+      try {
+        const d = await api('/admin/stats');
+        document.getElementById('kpi-revenue').textContent = fmtUsdt(d.total_revenue);
+        document.getElementById('kpi-rev24').textContent = fmtUsdt(d.revenue_24h);
+        document.getElementById('kpi-rev7').textContent = fmtUsdt(d.revenue_7d);
+        document.getElementById('kpi-rev30').textContent = fmtUsdt(d.revenue_30d);
+        document.getElementById('kpi-users').textContent = d.user_count;
+        document.getElementById('kpi-active').textContent = d.active_users_today;
+        document.getElementById('kpi-reg').textContent = d.registrations_today;
+        document.getElementById('kpi-videos').textContent = d.videos_today;
+        document.getElementById('kpi-rewards').textContent = fmtUsdt(d.rewards_today_usdt);
+        document.getElementById('kpi-trust').textContent = d.avg_trust_score?.toFixed(1) ?? '—';
+        document.getElementById('kpi-pending').textContent = fmtUsdt(d.pending_payouts);
+        document.getElementById('kpi-held').textContent = fmtUsdt(d.held_payouts);
+        document.getElementById('kpi-payouts').textContent = d.recent_payout_count;
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function searchUsers() {
+      const q = document.getElementById('search-q').value.trim();
+      if (!q) return;
+      try {
+        const d = await api(`/admin/users/lookup?q=${encodeURIComponent(q)}`);
+        const ul = document.getElementById('user-results');
+        ul.innerHTML = '';
+        if (!d.users.length) {
+          ul.innerHTML = '<li class="muted">Keine Treffer</li>';
+          return;
+        }
+        d.users.forEach(u => {
+          const li = document.createElement('li');
+          li.innerHTML = `<span><code>${u.referral_code}</code> · ${u.user_id}</span><span class="muted">→</span>`;
+          li.onclick = () => loadUser(u.user_id);
+          ul.appendChild(li);
+        });
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function loadUser(userId) {
+      selectedUserId = userId;
+      try {
+        const u = await api(`/admin/users/${userId}`);
+        selectedUserBanned = u.banned;
+        document.getElementById('user-detail').classList.remove('hidden');
+        const banBtn = document.getElementById('ban-btn');
+        banBtn.textContent = u.banned ? 'Entsperren' : 'Sperren';
+        banBtn.className = u.banned ? 'btn-primary' : 'btn-danger';
+        document.getElementById('detail-grid').innerHTML = `
+          <div class="detail-item"><div class="k">UUID</div><div class="v"><code>${u.user_id}</code></div></div>
+          <div class="detail-item"><div class="k">Referral-Code</div><div class="v"><code>${u.referral_code}</code></div></div>
+          <div class="detail-item"><div class="k">Guthaben</div><div class="v">${fmtUsdt(u.balance_usdt)}</div></div>
+          <div class="detail-item"><div class="k">Trust-Score</div><div class="v">${u.trust_score}</div></div>
+          <div class="detail-item"><div class="k">Status</div><div class="v"><span class="badge ${u.banned ? 'badge-banned' : 'badge-ok'}">${u.banned ? 'Gesperrt' : 'Aktiv'}</span></div></div>
+          <div class="detail-item"><div class="k">Streak</div><div class="v">${u.streak_days} Tage</div></div>
+          <div class="detail-item"><div class="k">Videos heute / gesamt</div><div class="v">${u.watches_today} / ${u.total_watches}</div></div>
+          <div class="detail-item"><div class="k">Referrals</div><div class="v">${u.referral_count}</div></div>
+          <div class="detail-item"><div class="k">Payout-Tier</div><div class="v">${u.payout_tier}</div></div>
+          <div class="detail-item"><div class="k">Registriert</div><div class="v">${new Date(u.created_at).toLocaleString('de-DE')}</div></div>
+        `;
+        document.getElementById('trust-score').value = u.trust_score;
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function userMsg(text) {
+      const el = document.getElementById('user-action-msg');
+      el.textContent = text;
+      el.classList.toggle('hidden', !text);
+    }
+
+    async function creditUser() {
+      if (!selectedUserId) return;
+      const amount = document.getElementById('credit-amount').value;
+      const reason = document.getElementById('credit-reason').value.trim() || 'Admin-Bonus';
+      try {
+        const d = await api(`/admin/users/${selectedUserId}/credit`, {
+          method: 'POST',
+          body: JSON.stringify({ amount_usdt: amount, reason }),
+        });
+        userMsg(`Gutgeschrieben. Neues Guthaben: ${fmtUsdt(d.balance_usdt)}`);
+        loadUser(selectedUserId);
+      } catch (e) {
+        userMsg('');
+        showError(e.message);
+      }
+    }
+
+    async function setTrust() {
+      if (!selectedUserId) return;
+      const score = parseInt(document.getElementById('trust-score').value, 10);
+      const reason = document.getElementById('trust-reason').value.trim() || 'Admin-Anpassung';
+      try {
+        await api(`/admin/users/${selectedUserId}/trust-score`, {
+          method: 'POST',
+          body: JSON.stringify({ score, reason }),
+        });
+        userMsg(`Trust-Score auf ${score} gesetzt.`);
+        loadUser(selectedUserId);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function toggleBan() {
+      if (!selectedUserId) return;
+      const banned = !selectedUserBanned;
+      const reason = document.getElementById('ban-reason').value.trim() || (banned ? 'Admin-Sperre' : 'Admin-Entsperrung');
+      try {
+        await api(`/admin/users/${selectedUserId}/ban`, {
+          method: 'POST',
+          body: JSON.stringify({ banned, reason }),
+        });
+        userMsg(banned ? 'Nutzer gesperrt.' : 'Nutzer entsperrt.');
+        loadUser(selectedUserId);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function loadAudit() {
+      try {
+        const d = await api('/admin/audit-log?limit=50');
+        const tbody = document.getElementById('audit-body');
+        tbody.innerHTML = '';
+        (d.entries || []).forEach(e => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${new Date(e.created_at).toLocaleString('de-DE')}</td>
+            <td>${e.action}</td>
+            <td>${e.user_id ? `<code>${e.user_id}</code>` : '—'}</td>
+            <td><code>${JSON.stringify(e.details)}</code></td>
+          `;
+          tbody.appendChild(tr);
+        });
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    const saved = localStorage.getItem('ve_admin_secret');
+    if (saved) {
+      document.getElementById('secret').value = saved;
+      document.getElementById('secret-inline').value = saved;
+    }
+    document.getElementById('secret').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+    document.getElementById('search-q').addEventListener('keydown', e => { if (e.key === 'Enter') searchUsers(); });
   </script>
 </body>
 </html>

@@ -463,11 +463,115 @@ async fn admin_stats_requires_secret() {
     assert!(json["total_revenue"].is_string());
     assert!(json["user_count"].as_i64().unwrap() >= 0);
     assert!(json["recent_payout_count"].as_i64().unwrap() >= 0);
-
-    std::env::remove_var("ADMIN_SECRET");
 }
 
-/// Optional Postgres smoke test — requires running DB:
+fn admin_req(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
+    let builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("X-Admin-Secret", "test-admin-secret");
+    match body {
+        Some(b) => builder
+            .header("content-type", "application/json")
+            .body(Body::from(b.to_string()))
+            .unwrap(),
+        None => builder.body(Body::empty()).unwrap(),
+    }
+}
+
+#[tokio::test]
+async fn admin_credit_and_audit_log() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (user_id, _token) = register(&app).await;
+
+    let credit = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/users/{user_id}/credit"),
+            Some(r#"{"amount_usdt":"1.5","reason":"Test-Bonus"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(credit.status(), StatusCode::OK);
+    let credit_json = body_json(credit).await;
+    assert_eq!(credit_json["balance_usdt"], "1.5");
+    assert_eq!(credit_json["action"], "credit");
+
+    let audit = app
+        .oneshot(admin_req("GET", "/admin/audit-log?limit=10", None))
+        .await
+        .unwrap();
+    assert_eq!(audit.status(), StatusCode::OK);
+    let audit_json = body_json(audit).await;
+    let entries = audit_json["entries"].as_array().unwrap();
+    assert!(!entries.is_empty());
+    assert_eq!(entries[0]["action"], "credit");
+    assert_eq!(entries[0]["user_id"], user_id.to_string());
+    assert_eq!(entries[0]["details"]["reason"], "Test-Bonus");
+}
+
+#[tokio::test]
+async fn admin_ban_blocks_watch() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (user_id, token) = register(&app).await;
+
+    let ban = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/users/{user_id}/ban"),
+            Some(r#"{"banned":true,"reason":"Test-Sperre"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ban.status(), StatusCode::OK);
+    let ban_json = body_json(ban).await;
+    assert_eq!(ban_json["banned"], true);
+
+    let watch = app
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(watch.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn admin_stats_extended_fields() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+
+    let response = app
+        .oneshot(admin_req("GET", "/admin/stats", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert!(json["active_users_today"].as_i64().unwrap() >= 1);
+    assert!(json["videos_today"].as_i64().unwrap() >= 1);
+    assert!(json["rewards_today_usdt"].is_string());
+    assert!(json["avg_trust_score"].is_number());
+    assert!(json["revenue_24h"].is_string());
+}
+
 /// `DATABASE_URL=postgres://... cargo test -p api-gateway --test integration postgres_health_and_register -- --ignored --nocapture`
 #[tokio::test]
 #[ignore = "requires DATABASE_URL and running postgres (see scripts/test-postgres.sh)"]

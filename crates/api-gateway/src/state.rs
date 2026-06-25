@@ -6,8 +6,8 @@ use reward_engine::{BonusEngine, RewardEngine, WatchBonusInput, WatchBonusResult
 use rust_decimal::Decimal;
 use referral_engine::ReferralEngine;
 use shared::{
-    AppEvent, AppResult, Currency, PayoutMethod, PayoutTier, RewardCreditedPayload, SafeAIContext,
-    TrustScoreUpdatedPayload, DEMO_MIN_PAYOUT_USDT, MIN_PAYOUT_EUR,
+    AppError, AppEvent, AppResult, Currency, PayoutMethod, PayoutTier, RewardCreditedPayload,
+    SafeAIContext, TrustScoreUpdatedPayload, DEMO_MIN_PAYOUT_USDT, MIN_PAYOUT_EUR,
 };
 use trust_score_engine::TrustScoreEngine;
 use uuid::Uuid;
@@ -616,6 +616,126 @@ impl AppState {
 
     async fn store_append_admin_audit(&self, entry: AdminAuditEntry) -> AppResult<()> {
         self.store.append_admin_audit(entry).await
+    }
+
+    pub async fn admin_analytics_summary(
+        &self,
+        days: i64,
+    ) -> AppResult<crate::admin::AdminAnalyticsSummary> {
+        let days = days.clamp(1, 30);
+        let daily = self.store.admin_daily_metrics(days).await?;
+        let earnings_period_total: Decimal = daily.iter().map(|d| d.usdt).sum();
+        let today = Utc::now().date_naive();
+        Ok(crate::admin::AdminAnalyticsSummary {
+            days,
+            daily_earnings: daily,
+            earnings_period_total,
+            total_users: self.user_count().await?,
+            pending_payout_count: self.store.pending_payout_request_count().await?,
+            pending_payouts_usdt: self.pending_payouts().await?,
+            held_payouts_usdt: self.held_payouts().await?,
+            total_paid_out_usdt: self.store.total_paid_out_usdt().await?,
+            active_users_today: self.store_active_users_today(today).await?,
+            total_revenue: self.total_revenue().await?,
+        })
+    }
+
+    pub async fn admin_list_payouts(
+        &self,
+        filter: crate::store::PayoutListFilter,
+        limit: u32,
+    ) -> AppResult<Vec<crate::store::PayoutRequestRow>> {
+        self.store.list_payout_requests(filter, limit).await
+    }
+
+    pub async fn get_payout_request(
+        &self,
+        payout_id: Uuid,
+    ) -> AppResult<Option<crate::store::PayoutRequestRow>> {
+        self.store.get_payout_request(payout_id).await
+    }
+
+    pub async fn admin_approve_payout(
+        &self,
+        payout_id: Uuid,
+    ) -> AppResult<crate::store::PayoutRequestRow> {
+        let payout = self
+            .store
+            .get_payout_request(payout_id)
+            .await?
+            .ok_or_else(|| AppError::InvalidInput("payout not found".into()))?;
+
+        let new_status = match payout.status.as_str() {
+            "pending_validation" | "pending_fraud_review" => {
+                self.store
+                    .release_held_to_pending(payout.amount_usdt)
+                    .await?;
+                "approved"
+            }
+            "approved" => {
+                self.store
+                    .subtract_pending_payout(payout.amount_usdt)
+                    .await?;
+                "paid_out"
+            }
+            _ => {
+                return Err(AppError::InvalidInput(
+                    "payout cannot be approved in its current status".into(),
+                ));
+            }
+        };
+
+        self.store
+            .update_payout_status(payout_id, new_status)
+            .await?;
+        self.store
+            .get_payout_request(payout_id)
+            .await?
+            .ok_or_else(|| AppError::InvalidInput("payout not found".into()))
+    }
+
+    pub async fn admin_reject_payout(
+        &self,
+        payout_id: Uuid,
+    ) -> AppResult<crate::store::PayoutRequestRow> {
+        let payout = self
+            .store
+            .get_payout_request(payout_id)
+            .await?
+            .ok_or_else(|| AppError::InvalidInput("payout not found".into()))?;
+
+        if payout.status == "rejected" || payout.status == "paid_out" {
+            return Err(AppError::InvalidInput(
+                "payout cannot be rejected in its current status".into(),
+            ));
+        }
+
+        match payout.status.as_str() {
+            "pending_validation" | "pending_fraud_review" => {
+                self.store
+                    .subtract_held_payout(payout.amount_usdt)
+                    .await?;
+            }
+            "approved" => {
+                self.store
+                    .subtract_pending_payout(payout.amount_usdt)
+                    .await?;
+            }
+            _ => {
+                return Err(AppError::InvalidInput(
+                    "payout cannot be rejected in its current status".into(),
+                ));
+            }
+        }
+
+        self.credit(payout.user_id, payout.amount_usdt).await?;
+        self.store
+            .update_payout_status(payout_id, "rejected")
+            .await?;
+        self.store
+            .get_payout_request(payout_id)
+            .await?
+            .ok_or_else(|| AppError::InvalidInput("payout not found".into()))
     }
 }
 

@@ -11,7 +11,7 @@ use wallet_engine::{LedgerKind, WalletEngine};
 
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::{AdminAuditEntry, LedgerItem};
+use crate::store::{AdminAuditEntry, AdminDailyMetric, LedgerItem, PayoutListFilter, PayoutRequestRow};
 
 #[derive(Clone)]
 pub struct MemoryStore {
@@ -341,6 +341,144 @@ impl MemoryStore {
         let log = self.audit_log.read().await;
         let start = log.len().saturating_sub(limit as usize);
         Ok(log[start..].iter().rev().cloned().collect())
+    }
+
+    pub async fn list_payout_requests(
+        &self,
+        filter: PayoutListFilter,
+        limit: u32,
+    ) -> AppResult<Vec<PayoutRequestRow>> {
+        let requests = self.payout_requests.read().await;
+        let mut rows: Vec<PayoutRequestRow> = requests
+            .iter()
+            .filter(|p| filter.matches(&p.status))
+            .map(|p| PayoutRequestRow {
+                id: p.id,
+                user_id: p.user_id,
+                amount_usdt: p.amount_usdt,
+                tier: p.tier.clone(),
+                status: p.status.clone(),
+                payout_method: p.payout_method.clone(),
+                created_at: p.created_at,
+            })
+            .collect();
+        rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        rows.truncate(limit as usize);
+        Ok(rows)
+    }
+
+    pub async fn get_payout_request(&self, id: Uuid) -> AppResult<Option<PayoutRequestRow>> {
+        Ok(self
+            .payout_requests
+            .read()
+            .await
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| PayoutRequestRow {
+                id: p.id,
+                user_id: p.user_id,
+                amount_usdt: p.amount_usdt,
+                tier: p.tier.clone(),
+                status: p.status.clone(),
+                payout_method: p.payout_method.clone(),
+                created_at: p.created_at,
+            }))
+    }
+
+    pub async fn update_payout_status(&self, id: Uuid, status: &str) -> AppResult<()> {
+        let mut requests = self.payout_requests.write().await;
+        let Some(record) = requests.iter_mut().find(|p| p.id == id) else {
+            return Ok(());
+        };
+        record.status = status.into();
+        Ok(())
+    }
+
+    pub async fn subtract_held_payout(&self, amount: Decimal) -> AppResult<()> {
+        let mut held = self.held_payouts.write().await;
+        *held = (*held - amount).max(Decimal::ZERO);
+        Ok(())
+    }
+
+    pub async fn subtract_pending_payout(&self, amount: Decimal) -> AppResult<()> {
+        let mut pending = self.pending_payouts.write().await;
+        *pending = (*pending - amount).max(Decimal::ZERO);
+        Ok(())
+    }
+
+    pub async fn release_held_to_pending(&self, amount: Decimal) -> AppResult<()> {
+        self.subtract_held_payout(amount).await?;
+        *self.pending_payouts.write().await += amount;
+        Ok(())
+    }
+
+    pub async fn admin_daily_metrics(&self, days: i64) -> AppResult<Vec<AdminDailyMetric>> {
+        use std::collections::HashMap;
+
+        let today = Utc::now().date_naive();
+        let start = today - Duration::days(days - 1);
+        let entries = self.wallet.all_ledger().await;
+
+        let mut by_date: HashMap<NaiveDate, (Decimal, u32, std::collections::HashSet<Uuid>)> =
+            HashMap::new();
+        for entry in entries {
+            if entry.kind != LedgerKind::Credit {
+                continue;
+            }
+            let day = entry.created_at.date_naive();
+            if day < start {
+                continue;
+            }
+            let slot = by_date.entry(day).or_insert((
+                Decimal::ZERO,
+                0,
+                std::collections::HashSet::new(),
+            ));
+            slot.0 += entry.amount_usdt;
+            slot.1 += 1;
+            slot.2.insert(entry.user_id);
+        }
+
+        Ok((0..days)
+            .map(|offset| {
+                let date = start + Duration::days(offset);
+                let (usdt, watch_count, users) = by_date
+                    .get(&date)
+                    .map(|(u, w, set)| (*u, *w, set.len() as u32))
+                    .unwrap_or((Decimal::ZERO, 0, 0));
+                AdminDailyMetric {
+                    date,
+                    usdt,
+                    watch_count,
+                    active_users: users,
+                }
+            })
+            .collect())
+    }
+
+    pub async fn pending_payout_request_count(&self) -> AppResult<i64> {
+        let count = self
+            .payout_requests
+            .read()
+            .await
+            .iter()
+            .filter(|p| {
+                p.status == "pending_validation" || p.status == "pending_fraud_review"
+            })
+            .count();
+        Ok(count as i64)
+    }
+
+    pub async fn total_paid_out_usdt(&self) -> AppResult<Decimal> {
+        let sum = self
+            .payout_requests
+            .read()
+            .await
+            .iter()
+            .filter(|p| p.status == "paid_out")
+            .map(|p| p.amount_usdt)
+            .sum();
+        Ok(sum)
     }
 }
 

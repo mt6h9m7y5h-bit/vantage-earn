@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::{AdminAuditEntry, LedgerItem};
+use crate::store::{AdminAuditEntry, AdminDailyMetric, LedgerItem, PayoutListFilter, PayoutRequestRow};
 
 #[derive(Clone)]
 pub struct PgStore {
@@ -602,6 +602,218 @@ impl PgStore {
         .map_err(db_err)?;
         Ok(rows.into_iter().map(Into::into).collect())
     }
+
+    pub async fn list_payout_requests(
+        &self,
+        filter: PayoutListFilter,
+        limit: u32,
+    ) -> AppResult<Vec<PayoutRequestRow>> {
+        let rows = match filter {
+            PayoutListFilter::Pending => {
+                sqlx::query_as::<_, PayoutRow>(
+                    r#"
+                    SELECT id, user_id, amount_usdt, tier, status, payout_method, created_at
+                    FROM payout_requests
+                    WHERE status IN ('pending_validation', 'pending_fraud_review')
+                    ORDER BY created_at DESC
+                    LIMIT $1
+                    "#,
+                )
+                .bind(limit as i64)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?
+            }
+            PayoutListFilter::Approved => {
+                sqlx::query_as::<_, PayoutRow>(
+                    r#"
+                    SELECT id, user_id, amount_usdt, tier, status, payout_method, created_at
+                    FROM payout_requests
+                    WHERE status IN ('approved', 'paid_out')
+                    ORDER BY created_at DESC
+                    LIMIT $1
+                    "#,
+                )
+                .bind(limit as i64)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?
+            }
+            PayoutListFilter::Rejected => {
+                sqlx::query_as::<_, PayoutRow>(
+                    r#"
+                    SELECT id, user_id, amount_usdt, tier, status, payout_method, created_at
+                    FROM payout_requests
+                    WHERE status = 'rejected'
+                    ORDER BY created_at DESC
+                    LIMIT $1
+                    "#,
+                )
+                .bind(limit as i64)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?
+            }
+            PayoutListFilter::All => {
+                sqlx::query_as::<_, PayoutRow>(
+                    r#"
+                    SELECT id, user_id, amount_usdt, tier, status, payout_method, created_at
+                    FROM payout_requests
+                    ORDER BY created_at DESC
+                    LIMIT $1
+                    "#,
+                )
+                .bind(limit as i64)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(db_err)?
+            }
+        };
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    pub async fn get_payout_request(&self, id: Uuid) -> AppResult<Option<PayoutRequestRow>> {
+        let row = sqlx::query_as::<_, PayoutRow>(
+            r#"
+            SELECT id, user_id, amount_usdt, tier, status, payout_method, created_at
+            FROM payout_requests
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.map(Into::into))
+    }
+
+    pub async fn update_payout_status(&self, id: Uuid, status: &str) -> AppResult<()> {
+        sqlx::query("UPDATE payout_requests SET status = $2 WHERE id = $1")
+            .bind(id)
+            .bind(status)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub async fn subtract_held_payout(&self, amount: Decimal) -> AppResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE platform_stats
+            SET held_payouts = GREATEST(held_payouts - $1, 0)
+            WHERE id = 1
+            "#,
+        )
+        .bind(amount)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub async fn subtract_pending_payout(&self, amount: Decimal) -> AppResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE platform_stats
+            SET pending_payouts = GREATEST(pending_payouts - $1, 0)
+            WHERE id = 1
+            "#,
+        )
+        .bind(amount)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub async fn release_held_to_pending(&self, amount: Decimal) -> AppResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE platform_stats
+            SET held_payouts = GREATEST(held_payouts - $1, 0),
+                pending_payouts = pending_payouts + $1
+            WHERE id = 1
+            "#,
+        )
+        .bind(amount)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(())
+    }
+
+    pub async fn admin_daily_metrics(&self, days: i64) -> AppResult<Vec<AdminDailyMetric>> {
+        let rows = sqlx::query_as::<_, DailyMetricRow>(
+            r#"
+            WITH day_series AS (
+                SELECT generate_series(
+                    (CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day')::date,
+                    CURRENT_DATE,
+                    '1 day'
+                )::date AS date
+            ),
+            credits AS (
+                SELECT created_at::date AS date,
+                       COALESCE(SUM(amount_usdt), 0) AS usdt,
+                       COUNT(*)::int AS watch_count,
+                       COUNT(DISTINCT user_id)::int AS active_users
+                FROM ledger_entries
+                WHERE kind = 'credit'
+                  AND created_at >= (CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day')
+                GROUP BY 1
+            )
+            SELECT d.date,
+                   COALESCE(c.usdt, 0) AS usdt,
+                   COALESCE(c.watch_count, 0) AS watch_count,
+                   COALESCE(c.active_users, 0) AS active_users
+            FROM day_series d
+            LEFT JOIN credits c ON c.date = d.date
+            ORDER BY d.date
+            "#,
+        )
+        .bind(days as i32)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| AdminDailyMetric {
+                date: r.date,
+                usdt: r.usdt,
+                watch_count: r.watch_count as u32,
+                active_users: r.active_users as u32,
+            })
+            .collect())
+    }
+
+    pub async fn pending_payout_request_count(&self) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM payout_requests
+            WHERE status IN ('pending_validation', 'pending_fraud_review')
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn total_paid_out_usdt(&self) -> AppResult<Decimal> {
+        let row: (Option<Decimal>,) = sqlx::query_as(
+            r#"
+            SELECT COALESCE(SUM(amount_usdt), 0)
+            FROM payout_requests
+            WHERE status = 'paid_out'
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -697,6 +909,39 @@ impl From<AuditRow> for AdminAuditEntry {
             created_at: row.created_at,
         }
     }
+}
+
+#[derive(sqlx::FromRow)]
+struct PayoutRow {
+    id: Uuid,
+    user_id: Uuid,
+    amount_usdt: Decimal,
+    tier: String,
+    status: String,
+    payout_method: String,
+    created_at: DateTime<Utc>,
+}
+
+impl From<PayoutRow> for PayoutRequestRow {
+    fn from(row: PayoutRow) -> Self {
+        Self {
+            id: row.id,
+            user_id: row.user_id,
+            amount_usdt: row.amount_usdt,
+            tier: row.tier,
+            status: row.status,
+            payout_method: row.payout_method,
+            created_at: row.created_at,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct DailyMetricRow {
+    date: NaiveDate,
+    usdt: Decimal,
+    watch_count: i32,
+    active_users: i32,
 }
 
 fn db_err(err: sqlx::Error) -> AppError {

@@ -703,3 +703,180 @@ async fn analytics_summary_reflects_watch_earnings() {
     let last_day = &json["earnings_last_7_days"].as_array().unwrap()[6];
     assert!(last_day["watch_count"].as_u64().unwrap() >= 1);
 }
+
+#[tokio::test]
+async fn admin_analytics_summary_returns_chart_data() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+
+    let response = app
+        .oneshot(admin_req("GET", "/admin/analytics/summary?days=7", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["days"], 7);
+    assert_eq!(json["daily_earnings"].as_array().unwrap().len(), 7);
+    assert!(json["total_users"].as_i64().unwrap() >= 1);
+    assert!(json["earnings_period_total"].is_string());
+    assert!(json["pending_payout_count"].as_i64().unwrap() >= 0);
+}
+
+#[tokio::test]
+async fn admin_payout_approve_and_reject_with_audit() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    std::env::set_var("PAYOUT_DEMO_MODE", "true");
+    let state = AppState::new();
+    let app = app(state.clone());
+    let (user_id, token) = register(&app).await;
+
+    let min = state.min_payout_usdt().await;
+    state.credit(user_id, min).await.unwrap();
+    state
+        .add_revenue(Decimal::from_str_exact("1000.0").unwrap())
+        .await
+        .unwrap();
+    state.set_trust_score(user_id, 20).await.unwrap();
+
+    let body = format!(r#"{{"amount_usdt":"{min}","payout_method":"crypto"}}"#);
+    let payout_res = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/payout/request",
+            &token,
+            Some(&body),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(payout_res.status(), StatusCode::OK);
+    let payout_json = body_json(payout_res).await;
+    let payout_id = payout_json["payout_id"].as_str().unwrap();
+    assert!(
+        payout_json["status"] == "pending_validation"
+            || payout_json["status"] == "pending_fraud_review"
+    );
+
+    let list = app
+        .clone()
+        .oneshot(admin_req("GET", "/admin/payouts?status=pending", None))
+        .await
+        .unwrap();
+    assert_eq!(list.status(), StatusCode::OK);
+    let list_json = body_json(list).await;
+    assert!(list_json["payouts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|p| p["id"].as_str().unwrap() == payout_id));
+
+    let approve = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/payouts/{payout_id}/approve"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(approve.status(), StatusCode::OK);
+    let approve_json = body_json(approve).await;
+    assert_eq!(approve_json["action"], "approve");
+    assert_eq!(approve_json["payout"]["status"], "approved");
+
+    let audit = app
+        .clone()
+        .oneshot(admin_req("GET", "/admin/audit-log?limit=10", None))
+        .await
+        .unwrap();
+    let audit_json = body_json(audit).await;
+    assert!(audit_json["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["action"] == "payout_approve"));
+
+    // Second payout to test reject + refund
+    state.credit(user_id, min).await.unwrap();
+    let payout_res2 = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/payout/request",
+            &token,
+            Some(&body),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(payout_res2.status(), StatusCode::OK);
+    let payout_id2 = body_json(payout_res2).await["payout_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let reject = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/payouts/{payout_id2}/reject"),
+            Some(r#"{"reason":"Test-Ablehnung"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(reject.status(), StatusCode::OK);
+    let reject_json = body_json(reject).await;
+    assert_eq!(reject_json["action"], "reject");
+    assert_eq!(reject_json["payout"]["status"], "rejected");
+
+    let balance = state.balance(user_id).await.unwrap();
+    assert_eq!(balance, min);
+
+    let audit2 = app
+        .oneshot(admin_req("GET", "/admin/audit-log?limit=10", None))
+        .await
+        .unwrap();
+    let audit2_json = body_json(audit2).await;
+    assert!(audit2_json["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| {
+            e["action"] == "payout_reject"
+                && e["details"]["reason"] == "Test-Ablehnung"
+        }));
+}
+
+#[tokio::test]
+async fn admin_payout_list_requires_secret() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+
+    let no_secret = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/payouts?status=pending")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(no_secret.status(), StatusCode::UNAUTHORIZED);
+
+    let ok = app
+        .oneshot(admin_req("GET", "/admin/payouts?status=all", None))
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+}

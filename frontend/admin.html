@@ -184,6 +184,67 @@
     th { color: var(--muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
     td code { font-size: 0.78rem; color: var(--accent); }
     .hidden { display: none !important; }
+    .chart-period {
+      display: flex;
+      gap: 0.35rem;
+      margin-bottom: 0.75rem;
+    }
+    .chart-period button {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.82rem;
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .chart-period button.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: rgba(0,212,170,0.25);
+    }
+    .analytics-chart-wrap { margin-top: 0.5rem; }
+    .analytics-chart { width: 100%; height: auto; display: block; }
+    .analytics-chart-bar { fill: var(--accent); opacity: 0.85; }
+    .analytics-chart-bar:hover { opacity: 1; }
+    .analytics-chart-axis { fill: var(--muted); font-size: 10px; }
+    .analytics-chart-grid { stroke: var(--border); stroke-width: 1; }
+    .status-pill {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .status-pending { background: rgba(245,166,35,0.15); color: var(--warn); }
+    .status-approved { background: var(--accent-dim); color: var(--accent); }
+    .status-paid { background: rgba(0,212,170,0.22); color: #5eecc8; }
+    .status-rejected { background: rgba(255,107,107,0.15); color: var(--danger); }
+    .table-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .table-actions button { padding: 0.35rem 0.6rem; font-size: 0.78rem; }
+    .filter-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .filter-row select { width: auto; min-width: 140px; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 100;
+    }
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      width: 100%;
+      max-width: 420px;
+    }
+    .modal h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+    .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
     #login-gate { max-width: 400px; margin: 4rem auto; text-align: center; }
     #app.hidden { display: none; }
     @media (max-width: 640px) {
@@ -215,6 +276,7 @@
 
     <nav class="tabs">
       <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Übersicht</button>
+      <button class="tab" data-tab="payouts" onclick="switchTab('payouts')">Auszahlungen</button>
       <button class="tab" data-tab="users" onclick="switchTab('users')">Nutzer</button>
       <button class="tab" data-tab="audit" onclick="switchTab('audit')">Audit</button>
     </nav>
@@ -238,8 +300,55 @@
           <div class="kpi"><div class="label">Ausstehende Auszahlungen</div><div class="value" id="kpi-pending">—</div></div>
           <div class="kpi"><div class="label">Zurückgehalten</div><div class="value" id="kpi-held">—</div></div>
           <div class="kpi"><div class="label">Auszahlungen (7 Tage)</div><div class="value" id="kpi-payouts">—</div></div>
+          <div class="kpi"><div class="label">Offene Prüfungen</div><div class="value" id="kpi-pending-count">—</div></div>
+          <div class="kpi"><div class="label">Ausgezahlt gesamt</div><div class="value" id="kpi-paid-out">—</div></div>
         </div>
-        <button class="btn-ghost" style="margin-top:0.75rem" onclick="loadStats()">Aktualisieren</button>
+        <button class="btn-ghost" style="margin-top:0.75rem" onclick="loadStats(); loadAnalytics();">Aktualisieren</button>
+      </div>
+      <div class="card">
+        <h2>Plattform-Verdienst</h2>
+        <div class="chart-period">
+          <button id="chart-7d" class="active" onclick="setChartPeriod(7)">7 Tage</button>
+          <button id="chart-30d" onclick="setChartPeriod(30)">30 Tage</button>
+        </div>
+        <div class="analytics-chart-wrap">
+          <svg id="earnings-chart" class="analytics-chart" viewBox="0 0 320 180" role="img" aria-label="Täglicher Plattform-Verdienst"></svg>
+        </div>
+        <div class="analytics-chart-wrap" style="margin-top:1rem">
+          <p class="muted" style="margin:0 0 0.5rem">Aktive Nutzer pro Tag</p>
+          <svg id="users-chart" class="analytics-chart" viewBox="0 0 320 140" role="img" aria-label="Aktive Nutzer pro Tag"></svg>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-payouts" class="panel">
+      <div class="card">
+        <h2>Auszahlungs-Warteschlange</h2>
+        <div class="filter-row">
+          <select id="payout-status" onchange="loadPayouts()">
+            <option value="pending">Offen (Prüfung)</option>
+            <option value="approved">Freigegeben</option>
+            <option value="rejected">Abgelehnt</option>
+            <option value="all">Alle</option>
+          </select>
+          <button class="btn-ghost" onclick="loadPayouts()">Aktualisieren</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Nutzer</th>
+                <th>Betrag</th>
+                <th>Methode</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="payouts-body"></tbody>
+          </table>
+        </div>
+        <p id="payouts-empty" class="muted hidden">Keine Auszahlungen in dieser Ansicht.</p>
       </div>
     </section>
 
@@ -306,9 +415,25 @@
     </section>
   </div>
 
+  <div id="reject-modal" class="modal-backdrop hidden" onclick="if(event.target===this)closeRejectModal()">
+    <div class="modal">
+      <h3>Auszahlung ablehnen</h3>
+      <p class="muted" id="reject-modal-hint"></p>
+      <label class="muted" style="display:block;margin-top:0.75rem;font-size:0.82rem">Begründung (Pflichtfeld)</label>
+      <textarea id="reject-reason" rows="3" placeholder="z.B. Verdacht auf Betrug"></textarea>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeRejectModal()">Abbrechen</button>
+        <button class="btn-danger" onclick="confirmReject()">Ablehnen</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let selectedUserId = null;
     let selectedUserBanned = false;
+    let chartPeriod = 7;
+    let analyticsCache = null;
+    let rejectPayoutId = null;
 
     function secret() {
       const appVisible = !document.getElementById('app').classList.contains('hidden');
@@ -355,8 +480,182 @@
     function switchTab(name) {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
       document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
-      if (name === 'overview') loadStats();
+      if (name === 'overview') { loadStats(); loadAnalytics(); }
+      if (name === 'payouts') loadPayouts();
       if (name === 'audit') loadAudit();
+    }
+
+    function setChartPeriod(days) {
+      chartPeriod = days;
+      document.getElementById('chart-7d').classList.toggle('active', days === 7);
+      document.getElementById('chart-30d').classList.toggle('active', days === 30);
+      loadAnalytics();
+    }
+
+    function renderBarChart(svgEl, series, valueKey, label) {
+      if (!svgEl) return;
+      if (!series || !series.length) {
+        svgEl.innerHTML = `<text x="160" y="90" text-anchor="middle" class="analytics-chart-axis">Noch keine Daten</text>`;
+        return;
+      }
+      const values = series.map((d) => parseFloat(d[valueKey]) || 0);
+      const max = Math.max(...values, 0.000001);
+      const w = 320;
+      const h = svgEl.getAttribute('viewBox').split(' ').map(Number)[3] || 180;
+      const padL = 36;
+      const padR = 8;
+      const padT = 12;
+      const padB = 28;
+      const chartW = w - padL - padR;
+      const chartH = h - padT - padB;
+      const barGap = 4;
+      const barW = Math.max(4, (chartW - barGap * (series.length - 1)) / series.length);
+      const bars = series.map((d, i) => {
+        const v = parseFloat(d[valueKey]) || 0;
+        const barH = (v / max) * chartH;
+        const x = padL + i * (barW + barGap);
+        const y = padT + chartH - barH;
+        const date = new Date(d.date + 'T12:00:00');
+        const dateLabel = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+        const showLabel = series.length <= 12 || i % Math.ceil(series.length / 8) === 0 || i === series.length - 1;
+        const tip = valueKey === 'usdt' ? fmtUsdt(d.usdt) : `${v} Nutzer`;
+        return `
+          <rect class="analytics-chart-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(barH, v > 0 ? 2 : 0).toFixed(1)}" rx="2">
+            <title>${dateLabel}: ${tip}</title>
+          </rect>
+          ${showLabel ? `<text class="analytics-chart-axis" x="${(x + barW / 2).toFixed(1)}" y="${h - 8}" text-anchor="middle">${dateLabel}</text>` : ''}
+        `;
+      }).join('');
+      const gridY = padT + chartH / 2;
+      const topLabel = valueKey === 'usdt' ? fmtUsdt(max) : String(Math.round(max));
+      svgEl.innerHTML = `
+        <line class="analytics-chart-grid" x1="${padL}" y1="${gridY}" x2="${w - padR}" y2="${gridY}"/>
+        <line class="analytics-chart-grid" x1="${padL}" y1="${padT + chartH}" x2="${w - padR}" y2="${padT + chartH}"/>
+        <text class="analytics-chart-axis" x="${padL - 6}" y="${padT + 4}" text-anchor="end">${topLabel}</text>
+        <text class="analytics-chart-axis" x="${padL - 6}" y="${padT + chartH}" text-anchor="end">0</text>
+        ${bars}
+      `;
+      svgEl.setAttribute('aria-label', label);
+    }
+
+    async function loadAnalytics() {
+      try {
+        const d = await api(`/admin/analytics/summary?days=${chartPeriod}`);
+        analyticsCache = d;
+        document.getElementById('kpi-pending-count').textContent = d.pending_payout_count ?? '—';
+        document.getElementById('kpi-paid-out').textContent = fmtUsdt(d.total_paid_out_usdt);
+        renderBarChart(document.getElementById('earnings-chart'), d.daily_earnings, 'usdt', 'Täglicher Plattform-Verdienst');
+        renderBarChart(document.getElementById('users-chart'), d.daily_earnings, 'active_users', 'Aktive Nutzer pro Tag');
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function payoutStatusLabel(status) {
+      const map = {
+        pending_validation: 'Prüfung',
+        pending_fraud_review: 'Betrugsprüfung',
+        approved: 'Freigegeben',
+        paid_out: 'Ausgezahlt',
+        rejected: 'Abgelehnt',
+      };
+      return map[status] || status;
+    }
+
+    function payoutStatusClass(status) {
+      if (status === 'pending_validation' || status === 'pending_fraud_review') return 'status-pending';
+      if (status === 'approved') return 'status-approved';
+      if (status === 'paid_out') return 'status-paid';
+      if (status === 'rejected') return 'status-rejected';
+      return 'status-pending';
+    }
+
+    function canApprove(status) {
+      return ['pending_validation', 'pending_fraud_review', 'approved'].includes(status);
+    }
+
+    function canReject(status) {
+      return ['pending_validation', 'pending_fraud_review', 'approved'].includes(status);
+    }
+
+    async function loadPayouts() {
+      const status = document.getElementById('payout-status').value;
+      try {
+        const d = await api(`/admin/payouts?status=${encodeURIComponent(status)}&limit=100`);
+        const tbody = document.getElementById('payouts-body');
+        const empty = document.getElementById('payouts-empty');
+        tbody.innerHTML = '';
+        const rows = d.payouts || [];
+        empty.classList.toggle('hidden', rows.length > 0);
+        rows.forEach(p => {
+          const tr = document.createElement('tr');
+          const actions = [];
+          if (canApprove(p.status)) {
+            const label = p.status === 'approved' ? 'Als ausgezahlt' : 'Freigeben';
+            actions.push(`<button class="btn-primary" onclick="approvePayout('${p.id}')">${label}</button>`);
+          }
+          if (canReject(p.status)) {
+            actions.push(`<button class="btn-danger" onclick="openRejectModal('${p.id}', '${p.amount_usdt}')">Ablehnen</button>`);
+          }
+          tr.innerHTML = `
+            <td>${new Date(p.created_at).toLocaleString('de-DE')}</td>
+            <td><code>${p.user_id}</code></td>
+            <td>${fmtUsdt(p.amount_usdt)}</td>
+            <td>${p.payout_method || '—'}</td>
+            <td><span class="status-pill ${payoutStatusClass(p.status)}">${payoutStatusLabel(p.status)}</span></td>
+            <td><div class="table-actions">${actions.join('') || '<span class="muted">—</span>'}</div></td>
+          `;
+          tbody.appendChild(tr);
+        });
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function approvePayout(id) {
+      if (!confirm('Auszahlung wirklich freigeben / als ausgezahlt markieren?')) return;
+      try {
+        await api(`/admin/payouts/${id}/approve`, { method: 'POST' });
+        loadPayouts();
+        loadStats();
+        loadAnalytics();
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function openRejectModal(id, amount) {
+      rejectPayoutId = id;
+      document.getElementById('reject-modal-hint').textContent = `Betrag: ${fmtUsdt(amount)} — Guthaben wird dem Nutzer zurückerstattet.`;
+      document.getElementById('reject-reason').value = '';
+      document.getElementById('reject-modal').classList.remove('hidden');
+    }
+
+    function closeRejectModal() {
+      rejectPayoutId = null;
+      document.getElementById('reject-modal').classList.add('hidden');
+    }
+
+    async function confirmReject() {
+      if (!rejectPayoutId) return;
+      const reason = document.getElementById('reject-reason').value.trim();
+      if (!reason) { alert('Bitte eine Begründung angeben.'); return; }
+      try {
+        await api(`/admin/payouts/${rejectPayoutId}/reject`, {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        });
+        closeRejectModal();
+        loadPayouts();
+        loadStats();
+        loadAnalytics();
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
     }
 
     async function unlock() {
@@ -371,6 +670,7 @@
         document.getElementById('app').classList.remove('hidden');
         document.getElementById('secret-inline').value = s;
         loadStats();
+        loadAnalytics();
       } catch (e) {
         err.textContent = e.message;
       }
@@ -388,6 +688,7 @@
         document.getElementById('secret-inline').value = s;
         showError('');
         loadStats();
+        loadAnalytics();
       } catch (e) {
         showError(e.message);
       }

@@ -13,11 +13,15 @@ use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::state::AppState;
-use crate::store::AdminAuditEntry;
+use crate::store::{AdminAuditEntry, AdminDailyMetric, PayoutListFilter, PayoutRequestRow};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/admin/stats", get(admin_stats))
+        .route("/admin/analytics/summary", get(admin_analytics_summary))
+        .route("/admin/payouts", get(admin_list_payouts))
+        .route("/admin/payouts/{id}/approve", post(admin_approve_payout))
+        .route("/admin/payouts/{id}/reject", post(admin_reject_payout))
         .route("/admin/users/lookup", get(admin_user_lookup))
         .route("/admin/users/{user_id}", get(admin_user_detail))
         .route("/admin/users/{user_id}/credit", post(admin_credit))
@@ -73,6 +77,153 @@ async fn admin_stats(
 ) -> Result<Json<AdminStatsExtended>, ApiError> {
     verify_admin(&headers)?;
     Ok(Json(state.admin_stats_extended().await?))
+}
+
+#[derive(Deserialize)]
+struct AnalyticsDaysQuery {
+    #[serde(default = "default_analytics_days")]
+    days: i64,
+}
+
+fn default_analytics_days() -> i64 {
+    7
+}
+
+#[derive(Serialize)]
+pub struct AdminAnalyticsSummary {
+    pub days: i64,
+    pub daily_earnings: Vec<AdminDailyMetric>,
+    pub earnings_period_total: Decimal,
+    pub total_users: i64,
+    pub pending_payout_count: i64,
+    pub pending_payouts_usdt: Decimal,
+    pub held_payouts_usdt: Decimal,
+    pub total_paid_out_usdt: Decimal,
+    pub active_users_today: i64,
+    pub total_revenue: Decimal,
+}
+
+async fn admin_analytics_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AnalyticsDaysQuery>,
+) -> Result<Json<AdminAnalyticsSummary>, ApiError> {
+    verify_admin(&headers)?;
+    let days = if query.days == 30 { 30 } else { 7 };
+    Ok(Json(state.admin_analytics_summary(days).await?))
+}
+
+#[derive(Deserialize)]
+struct PayoutListQuery {
+    #[serde(default = "default_payout_status")]
+    status: String,
+    #[serde(default = "default_payout_limit")]
+    limit: u32,
+}
+
+fn default_payout_status() -> String {
+    "pending".into()
+}
+
+fn default_payout_limit() -> u32 {
+    50
+}
+
+#[derive(Serialize)]
+struct PayoutListResponse {
+    payouts: Vec<PayoutRequestRow>,
+}
+
+async fn admin_list_payouts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<PayoutListQuery>,
+) -> Result<Json<PayoutListResponse>, ApiError> {
+    verify_admin(&headers)?;
+    let filter = PayoutListFilter::parse(&query.status).ok_or_else(|| {
+        shared::AppError::InvalidInput(
+            "status must be pending, approved, rejected, or all".into(),
+        )
+    })?;
+    let limit = query.limit.clamp(1, 200);
+    let payouts = state.admin_list_payouts(filter, limit).await?;
+    Ok(Json(PayoutListResponse { payouts }))
+}
+
+#[derive(Serialize)]
+struct PayoutActionResponse {
+    payout: PayoutRequestRow,
+    action: String,
+}
+
+async fn admin_approve_payout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<PayoutActionResponse>, ApiError> {
+    verify_admin(&headers)?;
+    let before = state
+        .get_payout_request(id)
+        .await?
+        .ok_or_else(|| shared::AppError::InvalidInput("payout not found".into()))?;
+    let payout = state.admin_approve_payout(id).await?;
+    state
+        .admin_log_action(
+            admin_ip(&headers),
+            "payout_approve",
+            Some(payout.user_id),
+            serde_json::json!({
+                "payout_id": id,
+                "amount_usdt": payout.amount_usdt,
+                "previous_status": before.status,
+                "new_status": payout.status,
+            }),
+        )
+        .await?;
+    Ok(Json(PayoutActionResponse {
+        payout,
+        action: "approve".into(),
+    }))
+}
+
+#[derive(Deserialize)]
+struct RejectBody {
+    reason: String,
+}
+
+async fn admin_reject_payout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(body): Json<RejectBody>,
+) -> Result<Json<PayoutActionResponse>, ApiError> {
+    verify_admin(&headers)?;
+    let reason = body.reason.trim();
+    if reason.is_empty() {
+        return Err(shared::AppError::InvalidInput("reason is required".into()).into());
+    }
+    let before = state
+        .get_payout_request(id)
+        .await?
+        .ok_or_else(|| shared::AppError::InvalidInput("payout not found".into()))?;
+    let payout = state.admin_reject_payout(id).await?;
+    state
+        .admin_log_action(
+            admin_ip(&headers),
+            "payout_reject",
+            Some(payout.user_id),
+            serde_json::json!({
+                "payout_id": id,
+                "amount_usdt": payout.amount_usdt,
+                "previous_status": before.status,
+                "reason": reason,
+            }),
+        )
+        .await?;
+    Ok(Json(PayoutActionResponse {
+        payout,
+        action: "reject".into(),
+    }))
 }
 
 #[derive(Deserialize)]

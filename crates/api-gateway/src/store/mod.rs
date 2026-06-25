@@ -1,6 +1,7 @@
 mod audit;
 mod ledger;
 mod memory;
+mod payout;
 mod postgres;
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
@@ -11,6 +12,7 @@ use uuid::Uuid;
 pub use audit::AdminAuditEntry;
 pub use ledger::LedgerItem;
 pub use memory::MemoryStore;
+pub use payout::{AdminDailyMetric, PayoutListFilter, PayoutRequestRow};
 pub use postgres::{normalize_database_url, PgStore};
 
 use crate::state::UserProfile;
@@ -277,6 +279,73 @@ impl Store {
         match self {
             Self::Memory(s) => s.admin_audit_log(limit).await,
             Self::Postgres(s) => s.admin_audit_log(limit).await,
+        }
+    }
+
+    pub async fn list_payout_requests(
+        &self,
+        filter: PayoutListFilter,
+        limit: u32,
+    ) -> AppResult<Vec<PayoutRequestRow>> {
+        match self {
+            Self::Memory(s) => s.list_payout_requests(filter, limit).await,
+            Self::Postgres(s) => s.list_payout_requests(filter, limit).await,
+        }
+    }
+
+    pub async fn get_payout_request(&self, id: Uuid) -> AppResult<Option<PayoutRequestRow>> {
+        match self {
+            Self::Memory(s) => s.get_payout_request(id).await,
+            Self::Postgres(s) => s.get_payout_request(id).await,
+        }
+    }
+
+    pub async fn update_payout_status(&self, id: Uuid, status: &str) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.update_payout_status(id, status).await,
+            Self::Postgres(s) => s.update_payout_status(id, status).await,
+        }
+    }
+
+    pub async fn subtract_held_payout(&self, amount: Decimal) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.subtract_held_payout(amount).await,
+            Self::Postgres(s) => s.subtract_held_payout(amount).await,
+        }
+    }
+
+    pub async fn subtract_pending_payout(&self, amount: Decimal) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.subtract_pending_payout(amount).await,
+            Self::Postgres(s) => s.subtract_pending_payout(amount).await,
+        }
+    }
+
+    pub async fn release_held_to_pending(&self, amount: Decimal) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.release_held_to_pending(amount).await,
+            Self::Postgres(s) => s.release_held_to_pending(amount).await,
+        }
+    }
+
+    pub async fn admin_daily_metrics(&self, days: i64) -> AppResult<Vec<AdminDailyMetric>> {
+        match self {
+            Self::Memory(s) => s.admin_daily_metrics(days).await,
+            Self::Postgres(s) => s.admin_daily_metrics(days).await,
+        }
+    }
+
+    pub async fn pending_payout_request_count(&self) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.pending_payout_request_count().await,
+            Self::Postgres(s) => s.pending_payout_request_count().await,
+        }
+    }
+
+    pub async fn total_paid_out_usdt(&self) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.total_paid_out_usdt().await,
+            Self::Postgres(s) => s.total_paid_out_usdt().await,
         }
     }
 }

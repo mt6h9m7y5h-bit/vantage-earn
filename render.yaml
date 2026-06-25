@@ -18,6 +18,8 @@ services:
       # Already set in Dashboard — avoid blueprint regeneration conflicts on sync
       - key: JWT_SECRET
         sync: false
+      - key: ADMIN_SECRET
+        generateValue: true
       - key: DATABASE_URL
         fromDatabase:
           name: vantage-earn-db

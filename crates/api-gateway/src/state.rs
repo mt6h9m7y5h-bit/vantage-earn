@@ -514,16 +514,22 @@ impl AppState {
     }
 
     pub fn admin_secret_configured() -> bool {
+        !Self::admin_secret_from_env().is_empty()
+    }
+
+    fn admin_secret_from_env() -> String {
         std::env::var("ADMIN_SECRET")
-            .map(|s| !s.is_empty())
-            .unwrap_or(false)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
     }
 
     pub fn verify_admin_secret(provided: Option<&str>) -> AppResult<()> {
-        let expected = std::env::var("ADMIN_SECRET").unwrap_or_default();
+        let expected = Self::admin_secret_from_env();
         if expected.is_empty() {
-            return Err(shared::AppError::Unauthorized);
+            return Err(shared::AppError::AdminNotConfigured);
         }
+        let provided = provided.map(str::trim).filter(|s| !s.is_empty());
         match provided {
             Some(s) if s == expected => Ok(()),
             _ => Err(shared::AppError::Unauthorized),
@@ -647,6 +653,26 @@ async fn connect_store_with_retry(database_url: &str) -> Store {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
+
+    #[test]
+    fn verify_admin_secret_trims_and_rejects_empty_config() {
+        let prior = std::env::var("ADMIN_SECRET").ok();
+        std::env::set_var("ADMIN_SECRET", "  secret  ");
+        assert!(AppState::verify_admin_secret(Some("secret")).is_ok());
+        assert!(AppState::verify_admin_secret(Some("  secret  ")).is_ok());
+        assert!(AppState::verify_admin_secret(Some("wrong")).is_err());
+
+        std::env::set_var("ADMIN_SECRET", "   ");
+        assert!(matches!(
+            AppState::verify_admin_secret(Some("anything")),
+            Err(shared::AppError::AdminNotConfigured)
+        ));
+
+        match prior {
+            Some(v) => std::env::set_var("ADMIN_SECRET", v),
+            None => std::env::remove_var("ADMIN_SECRET"),
+        }
+    }
 
     #[test]
     fn streak_increments_once_per_day() {

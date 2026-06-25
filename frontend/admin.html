@@ -195,6 +195,10 @@
   <div id="login-gate" class="card shell">
     <h1>Admin <span>Control Center</span></h1>
     <p class="muted">Geschützt durch <code>ADMIN_SECRET</code> (Header <code>X-Admin-Secret</code>).</p>
+    <p class="muted" style="margin-top:0.5rem;font-size:0.8rem">
+      Der Wert muss auf dem API-Server gesetzt sein (lokal: <code>.env</code>;
+      auf Render: Dashboard → Environment → <code>ADMIN_SECRET</code>).
+    </p>
     <input id="secret" type="password" placeholder="ADMIN_SECRET" autocomplete="off" />
     <button class="btn-primary" style="width:100%;margin-top:0.5rem" onclick="unlock()">Anmelden</button>
     <p id="login-error" class="error"></p>
@@ -307,7 +311,19 @@
     let selectedUserBanned = false;
 
     function secret() {
-      return (document.getElementById('secret-inline')?.value || document.getElementById('secret')?.value || '').trim();
+      const appVisible = !document.getElementById('app').classList.contains('hidden');
+      const el = appVisible
+        ? document.getElementById('secret-inline')
+        : document.getElementById('secret');
+      return (el?.value || '').trim();
+    }
+
+    const AUTH_ERROR_DE =
+      'Secret falsch oder ADMIN_SECRET nicht auf dem Server gesetzt. Auf Render: Umgebungsvariable ADMIN_SECRET im Dashboard setzen.';
+
+    function formatAuthError(status, serverError) {
+      if (status === 401 || status === 503) return AUTH_ERROR_DE;
+      return serverError || `Fehler ${status}`;
     }
 
     function headers() {
@@ -328,7 +344,11 @@
     async function api(path, opts = {}) {
       const res = await fetch(path, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
+      if (!res.ok) {
+        const err = new Error(formatAuthError(res.status, data.error));
+        err.status = res.status;
+        throw err;
+      }
       return data;
     }
 
@@ -342,24 +362,35 @@
     async function unlock() {
       const err = document.getElementById('login-error');
       err.textContent = '';
-      if (!secret()) { err.textContent = 'Bitte ADMIN_SECRET eingeben.'; return; }
+      const s = secret();
+      if (!s) { err.textContent = 'Bitte ADMIN_SECRET eingeben.'; return; }
       try {
         await api('/admin/stats');
-        localStorage.setItem('ve_admin_secret', secret());
+        localStorage.setItem('ve_admin_secret', s);
         document.getElementById('login-gate').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
-        document.getElementById('secret-inline').value = secret();
+        document.getElementById('secret-inline').value = s;
         loadStats();
       } catch (e) {
         err.textContent = e.message;
       }
     }
 
-    function saveSecret() {
+    async function saveSecret() {
       const s = secret();
-      if (s) localStorage.setItem('ve_admin_secret', s);
-      showError('');
-      loadStats();
+      if (!s) {
+        showError('Bitte ADMIN_SECRET eingeben.');
+        return;
+      }
+      try {
+        await api('/admin/stats');
+        localStorage.setItem('ve_admin_secret', s);
+        document.getElementById('secret-inline').value = s;
+        showError('');
+        loadStats();
+      } catch (e) {
+        showError(e.message);
+      }
     }
 
     async function loadStats() {
@@ -511,7 +542,7 @@
       }
     }
 
-    const saved = localStorage.getItem('ve_admin_secret');
+    const saved = localStorage.getItem('ve_admin_secret')?.trim();
     if (saved) {
       document.getElementById('secret').value = saved;
       document.getElementById('secret-inline').value = saved;

@@ -449,6 +449,7 @@ async fn admin_stats_requires_secret() {
     assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
 
     let ok = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/admin/stats")

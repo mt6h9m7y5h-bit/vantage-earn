@@ -18,6 +18,10 @@ impl IntoResponse for ApiError {
         let (status, msg) = match &self.0 {
             AppError::UserNotFound(_) => (StatusCode::NOT_FOUND, self.0.to_string()),
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, self.0.to_string()),
+            AppError::AdminNotConfigured => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                self.0.to_string(),
+            ),
             AppError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, self.0.to_string()),
             AppError::InsufficientBalance { .. } => (StatusCode::BAD_REQUEST, self.0.to_string()),
             AppError::FraudBlocked(_) => (StatusCode::FORBIDDEN, self.0.to_string()),

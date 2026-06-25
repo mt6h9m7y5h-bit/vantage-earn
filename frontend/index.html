@@ -256,15 +256,113 @@
       opacity: 0.35;
       border-radius: 2px 2px 0 0;
     }
-    .coming-soon-banner {
-      text-align: center;
-      padding: 1.25rem;
-      border-radius: var(--radius-lg);
-      background: var(--surface-elevated);
-      border: 1px dashed var(--border);
+    .hero-sparkline {
+      margin-top: 0.85rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border);
+    }
+    .hero-sparkline-label {
+      font-size: 0.7rem;
       color: var(--muted);
-      margin-bottom: 0.75rem;
-      font-size: 0.9rem;
+      margin-bottom: 0.35rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sparkline-svg {
+      display: block;
+      width: 100%;
+      height: 40px;
+    }
+    .period-toggle {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.85rem;
+    }
+    .period-btn {
+      padding: 0.45rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
+    }
+    .period-btn:hover:not(:disabled) {
+      color: var(--text);
+      border-color: rgba(255,255,255,0.16);
+    }
+    .period-btn.active {
+      background: var(--primary-soft);
+      color: var(--primary);
+      border-color: rgba(59, 130, 246, 0.35);
+    }
+    .period-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .analytics-chart-wrap {
+      position: relative;
+      min-height: 180px;
+      margin-top: 0.5rem;
+    }
+    .analytics-chart {
+      width: 100%;
+      height: 180px;
+      display: block;
+    }
+    .analytics-chart-bar {
+      fill: var(--primary);
+      opacity: 0.85;
+      transition: opacity var(--transition);
+    }
+    .analytics-chart-bar:hover {
+      opacity: 1;
+    }
+    .analytics-chart-axis {
+      font-size: 9px;
+      fill: var(--muted);
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    .analytics-chart-grid {
+      stroke: var(--border);
+      stroke-width: 1;
+    }
+    .analytics-hint {
+      margin-top: 0.75rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: var(--radius);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .analytics-hint strong { color: var(--text); font-weight: 600; }
+    #analytics-view.is-loading .stat-value,
+    #analytics-view.is-loading .analytics-chart-wrap {
+      color: transparent;
+      pointer-events: none;
+    }
+    #analytics-view.is-loading .stat-value {
+      background: linear-gradient(90deg, var(--surface-elevated) 25%, var(--surface-hover) 50%, var(--surface-elevated) 75%);
+      background-size: 200% 100%;
+      animation: skeleton 1.2s ease-in-out infinite;
+      border-radius: 6px;
+      min-height: 1.2em;
+    }
+    #analytics-view.is-loading .analytics-chart-wrap::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      background: linear-gradient(90deg, var(--surface-elevated) 25%, var(--surface-hover) 50%, var(--surface-elevated) 75%);
+      background-size: 200% 100%;
+      animation: skeleton 1.2s ease-in-out infinite;
     }
     .security-metric {
       display: flex;
@@ -1070,6 +1168,10 @@
             </div>
             <div class="balance" id="balance">0<span class="currency-suffix">USDT</span></div>
             <div class="local" id="local-balance">≈ 0 EUR</div>
+            <div class="hero-sparkline" id="hero-sparkline-wrap">
+              <div class="hero-sparkline-label">Verdienst · 7 Tage</div>
+              <svg id="hero-sparkline" class="sparkline-svg" viewBox="0 0 280 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+            </div>
             <p class="last-updated" id="last-updated"></p>
             <div class="hero-actions">
               <button class="secondary" type="button" onclick="navigateToView('payouts')">Auszahlen</button>
@@ -1218,36 +1320,58 @@
         </section>
 
         <!-- Analytics -->
-        <section class="view hidden" data-view="analytics">
-          <div class="coming-soon-banner">Detaillierte Analytics kommen bald — unten siehst du deine aktuellen Kennzahlen.</div>
+        <section class="view hidden" data-view="analytics" id="analytics-view">
           <div class="kpi-strip">
             <div class="stat-tile">
-              <span class="stat-label">Heute geschaut</span>
-              <span class="stat-value" id="analytics-watches-today">—</span>
+              <span class="stat-label">Heute verdient</span>
+              <span class="stat-value success" id="analytics-earned-today">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label" id="analytics-period-sum-label">7-Tage-Summe</span>
+              <span class="stat-value" id="analytics-period-sum">—</span>
             </div>
             <div class="stat-tile">
               <span class="stat-label">Videos gesamt</span>
               <span class="stat-value" id="analytics-total-watches">—</span>
             </div>
             <div class="stat-tile">
-              <span class="stat-label">Streak</span>
-              <span class="stat-value success" id="analytics-streak">—</span>
-            </div>
-            <div class="stat-tile">
-              <span class="stat-label">Empfehlungen</span>
+              <span class="stat-label">Referrals</span>
               <span class="stat-value" id="analytics-referrals">—</span>
             </div>
           </div>
           <section class="card">
-            <h2 class="section-title">Verlauf (Vorschau)</h2>
-            <div class="sparkline-placeholder" aria-hidden="true">
-              <span style="height:30%"></span><span style="height:45%"></span><span style="height:35%"></span>
-              <span style="height:60%"></span><span style="height:40%"></span><span style="height:55%"></span>
-              <span style="height:70%"></span><span style="height:50%"></span><span style="height:65%"></span>
-              <span style="height:45%"></span><span style="height:80%"></span><span style="height:55%"></span>
+            <div class="hero-top" style="margin-bottom:0.5rem">
+              <h2 class="section-title" style="margin:0">Täglicher Verdienst (USDT)</h2>
             </div>
-            <p class="payout-hint" style="margin-top:0.75rem;text-align:center">Zeitreihen-Charts folgen in Phase 2</p>
+            <div class="period-toggle" role="tablist" aria-label="Zeitraum">
+              <button type="button" class="period-btn active" data-period="7" onclick="setAnalyticsPeriod(7)">7 Tage</button>
+              <button type="button" class="period-btn" data-period="30" onclick="setAnalyticsPeriod(30)">30 Tage</button>
+              <button type="button" class="period-btn" data-period="90" disabled title="Bald verfügbar">90 Tage</button>
+              <button type="button" class="period-btn" data-period="365" disabled title="Bald verfügbar">365 Tage</button>
+            </div>
+            <div class="analytics-chart-wrap">
+              <svg id="analytics-bar-chart" class="analytics-chart" viewBox="0 0 320 180" role="img" aria-label="Täglicher USDT-Verdienst"></svg>
+            </div>
+            <div class="analytics-hint" id="analytics-conversion-hint">Lade Kennzahlen…</div>
           </section>
+          <div class="kpi-strip">
+            <div class="stat-tile">
+              <span class="stat-label">Heute geschaut</span>
+              <span class="stat-value" id="analytics-watches-today">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Streak</span>
+              <span class="stat-value success" id="analytics-streak">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Aktive Tage (7d)</span>
+              <span class="stat-value" id="analytics-active-days">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Ø pro Video</span>
+              <span class="stat-value" id="analytics-avg-watch">—</span>
+            </div>
+          </div>
         </section>
 
         <!-- Security -->
@@ -1382,6 +1506,8 @@
     let token = localStorage.getItem('ve_token');
     let deferredInstall = null;
     let stats = null;
+    let analyticsSummary = null;
+    let analyticsPeriod = 7;
     let streakReminderTimer = null;
     const REFERRER_BONUS = '0.001';
     const REFEREE_BONUS = '0.001';
@@ -1412,6 +1538,167 @@
       setText('view-subtitle', titles[1]);
       if (location.hash !== '#' + v) {
         history.replaceState(null, '', '#' + v);
+      }
+      if (v === 'analytics' && token && analyticsSummary) {
+        renderAnalytics(analyticsSummary);
+      }
+    }
+
+    function formatUsdt(value) {
+      const n = parseFloat(value);
+      if (!Number.isFinite(n)) return '0 USDT';
+      if (n === 0) return '0 USDT';
+      if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '') + ' USDT';
+      return n.toFixed(4).replace(/\.?0+$/, '') + ' USDT';
+    }
+
+    function analyticsDailySeries(summary) {
+      if (!summary) return [];
+      if (analyticsPeriod === 30) return summary.daily_earnings_30d || [];
+      return summary.earnings_last_7_days || [];
+    }
+
+    function renderSparklineSvg(svgEl, series) {
+      if (!svgEl || !series || !series.length) {
+        if (svgEl) svgEl.innerHTML = '';
+        return;
+      }
+      const values = series.map((d) => parseFloat(d.usdt) || 0);
+      const max = Math.max(...values, 0.000001);
+      const w = 280;
+      const h = 40;
+      const pad = 2;
+      const step = (w - pad * 2) / Math.max(1, values.length - 1);
+      const points = values.map((v, i) => {
+        const x = pad + i * step;
+        const y = h - pad - (v / max) * (h - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+      const area = `${pad},${h - pad} ${points.join(' ')} ${(pad + (values.length - 1) * step).toFixed(1)},${h - pad}`;
+      svgEl.innerHTML = `
+        <defs>
+          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--success)" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="var(--success)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <polygon points="${area}" fill="url(#sparkGrad)"/>
+        <polyline points="${points.join(' ')}" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      `;
+    }
+
+    function renderBarChart(svgEl, series) {
+      if (!svgEl) return;
+      if (!series || !series.length) {
+        svgEl.innerHTML = '<text x="160" y="90" text-anchor="middle" class="analytics-chart-axis">Noch keine Verdienstdaten</text>';
+        return;
+      }
+      const values = series.map((d) => parseFloat(d.usdt) || 0);
+      const max = Math.max(...values, 0.000001);
+      const w = 320;
+      const h = 180;
+      const padL = 36;
+      const padR = 8;
+      const padT = 12;
+      const padB = 28;
+      const chartW = w - padL - padR;
+      const chartH = h - padT - padB;
+      const barGap = 4;
+      const barW = Math.max(4, (chartW - barGap * (series.length - 1)) / series.length);
+      const bars = series.map((d, i) => {
+        const v = parseFloat(d.usdt) || 0;
+        const barH = (v / max) * chartH;
+        const x = padL + i * (barW + barGap);
+        const y = padT + chartH - barH;
+        const date = new Date(d.date + 'T12:00:00');
+        const label = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+        const showLabel = series.length <= 12 || i % Math.ceil(series.length / 8) === 0 || i === series.length - 1;
+        return `
+          <rect class="analytics-chart-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(barH, v > 0 ? 2 : 0).toFixed(1)}" rx="2">
+            <title>${label}: ${formatUsdt(d.usdt)}${d.watch_count ? ' · ' + d.watch_count + ' Aktivität(en)' : ''}</title>
+          </rect>
+          ${showLabel ? `<text class="analytics-chart-axis" x="${(x + barW / 2).toFixed(1)}" y="${h - 8}" text-anchor="middle">${label}</text>` : ''}
+        `;
+      }).join('');
+      const gridY = padT + chartH / 2;
+      svgEl.innerHTML = `
+        <line class="analytics-chart-grid" x1="${padL}" y1="${gridY}" x2="${w - padR}" y2="${gridY}"/>
+        <line class="analytics-chart-grid" x1="${padL}" y1="${padT + chartH}" x2="${w - padR}" y2="${padT + chartH}"/>
+        <text class="analytics-chart-axis" x="${padL - 6}" y="${padT + 4}" text-anchor="end">${formatUsdt(max)}</text>
+        <text class="analytics-chart-axis" x="${padL - 6}" y="${padT + chartH}" text-anchor="end">0</text>
+        ${bars}
+      `;
+    }
+
+    function renderAnalytics(summary) {
+      if (!summary) return;
+      const series7 = summary.earnings_last_7_days || [];
+      const series = analyticsDailySeries(summary);
+      const periodSum = analyticsPeriod === 30
+        ? parseFloat(summary.earnings_last_30_days)
+        : parseFloat(summary.earnings_last_7_days_total);
+
+      setText('analytics-earned-today', formatUsdt(summary.earnings_today));
+      setText('analytics-period-sum-label', analyticsPeriod === 30 ? '30-Tage-Summe' : '7-Tage-Summe');
+      setText('analytics-period-sum', formatUsdt(periodSum));
+      setText('analytics-total-watches', String(summary.total_watches ?? 0));
+      setText('analytics-referrals', String(summary.referral_count ?? 0));
+
+      const watchesToday = summary.watches_today ?? 0;
+      const remaining = stats ? stats.watches_remaining_today : 0;
+      setText('analytics-watches-today', watchesToday + ' / ' + (watchesToday + remaining));
+      const streakDays = summary.streak_days ?? 0;
+      setText('analytics-streak', streakDays + (streakDays === 1 ? ' Tag' : ' Tage'));
+
+      const hints = summary.conversion_hints || {};
+      setText('analytics-active-days', String(hints.active_days_7d ?? 0));
+      setText('analytics-avg-watch', hints.avg_usdt_per_watch
+        ? formatUsdt(hints.avg_usdt_per_watch)
+        : '—');
+
+      const hintEl = document.getElementById('analytics-conversion-hint');
+      if (hintEl) {
+        const avgDay = hints.avg_usdt_per_active_day_7d
+          ? formatUsdt(hints.avg_usdt_per_active_day_7d)
+          : '0 USDT';
+        const avgWatch = hints.avg_usdt_per_watch
+          ? formatUsdt(hints.avg_usdt_per_watch)
+          : null;
+        let html = `<strong>7-Tage-Insight:</strong> ${hints.active_days_7d || 0} aktive Tag(e), Ø ${avgDay} an Verdiensttagen.`;
+        if (avgWatch) {
+          html += ` Durchschnittlich ${avgWatch} pro Video (inkl. Boni).`;
+        }
+        hintEl.innerHTML = html;
+      }
+
+      document.querySelectorAll('.period-btn[data-period]').forEach((btn) => {
+        const p = parseInt(btn.dataset.period, 10);
+        btn.classList.toggle('active', p === analyticsPeriod);
+      });
+
+      renderBarChart(document.getElementById('analytics-bar-chart'), series);
+      renderSparklineSvg(document.getElementById('hero-sparkline'), series7);
+      window.__ve_debug.lastAnalytics = summary;
+    }
+
+    function setAnalyticsPeriod(days) {
+      if (days !== 7 && days !== 30) return;
+      analyticsPeriod = days;
+      if (analyticsSummary) renderAnalytics(analyticsSummary);
+    }
+
+    async function refreshAnalytics() {
+      if (!token) return;
+      const view = document.getElementById('analytics-view');
+      if (view) view.classList.add('is-loading');
+      try {
+        const data = await api('/users/me/analytics/summary');
+        analyticsSummary = data;
+        renderAnalytics(data);
+      } catch (e) {
+        if (!isAuthError(e)) console.warn('Analytics laden fehlgeschlagen', e);
+      } finally {
+        if (view) view.classList.remove('is-loading');
       }
     }
 
@@ -2057,9 +2344,11 @@
       setText('total-watches', totalWatches);
       setText('streak', streakStr);
       setText('analytics-watches-today', watchesToday);
-      setText('analytics-total-watches', totalWatches);
-      setText('analytics-streak', streakStr);
-      setText('analytics-referrals', String(s.referral_count || 0));
+      if (!analyticsSummary) {
+        setText('analytics-total-watches', totalWatches);
+        setText('analytics-streak', streakStr);
+        setText('analytics-referrals', String(s.referral_count || 0));
+      }
       setText('security-streak', streakStr);
       setText('security-watches-today', watchesToday);
       setText('security-total-watches', totalWatches);
@@ -2093,6 +2382,7 @@
       if (data.wallet) {
         applyWallet(data.wallet);
       }
+      refreshAnalytics();
       if (stats && data.wallet) {
         updatePayoutProgress(data.wallet, stats);
       } else if (stats && data.wallet == null) {
@@ -2415,6 +2705,7 @@
           api('/users/me/referral'),
           api('/users/me/stats'),
           api('/users/me/ledger'),
+          api('/users/me/analytics/summary'),
           fetch(API + '/leaderboard/weekly', { cache: 'no-store' })
             .then((r) => r.json())
             .catch(() => ({ entries: [] })),
@@ -2424,14 +2715,16 @@
         const ref = results[1].status === 'fulfilled' ? results[1].value : null;
         const statsData = results[2].status === 'fulfilled' ? results[2].value : null;
         const ledger = results[3].status === 'fulfilled' ? results[3].value : [];
-        const leaderboard = results[4].status === 'fulfilled' ? results[4].value : { entries: [] };
+        const analyticsData = results[4].status === 'fulfilled' ? results[4].value : null;
+        const leaderboard = results[5].status === 'fulfilled' ? results[5].value : { entries: [] };
 
         window.__ve_debug.lastRefresh = {
           at: new Date().toISOString(),
           wallet: wallet != null,
           stats: statsData != null,
+          analytics: analyticsData != null,
           failures: results
-            .map((r, i) => (r.status === 'rejected' ? ['wallet', 'referral', 'stats', 'ledger', 'leaderboard'][i] : null))
+            .map((r, i) => (r.status === 'rejected' ? ['wallet', 'referral', 'stats', 'ledger', 'analytics', 'leaderboard'][i] : null))
             .filter(Boolean),
         };
 
@@ -2497,6 +2790,10 @@
 
         if (ref) window._refCode = ref.referral_code;
         renderLedger(ledger);
+        if (analyticsData) {
+          analyticsSummary = analyticsData;
+          renderAnalytics(analyticsData);
+        }
         markUpdated();
       } catch (e) {
         if (!isAuthError(e)) {

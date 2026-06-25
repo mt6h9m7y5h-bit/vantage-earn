@@ -558,3 +558,43 @@ async fn daily_challenge_bonus_on_fifth_watch() {
         .iter()
         .any(|c| c["id"] == "daily_challenge" && c["status"] == "claimed"));
 }
+
+#[tokio::test]
+async fn analytics_summary_reflects_watch_earnings() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let watch = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs":30}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(watch.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(authed("GET", "/users/me/analytics/summary", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+
+    assert_eq!(json["total_watches"], 1);
+    assert_eq!(json["watches_today"], 1);
+    assert_eq!(json["streak_days"], 1);
+    assert!(json["earnings_today"].as_str().unwrap().parse::<f64>().unwrap() > 0.0);
+    assert!(json["earnings_last_7_days_total"]
+        .as_str()
+        .unwrap()
+        .parse::<f64>()
+        .unwrap()
+        > 0.0);
+    assert_eq!(json["earnings_last_7_days"].as_array().unwrap().len(), 7);
+    assert_eq!(json["daily_earnings_30d"].as_array().unwrap().len(), 30);
+    let last_day = &json["earnings_last_7_days"].as_array().unwrap()[6];
+    assert!(last_day["watch_count"].as_u64().unwrap() >= 1);
+}

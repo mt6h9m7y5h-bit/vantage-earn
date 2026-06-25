@@ -6,7 +6,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+
+use chrono::{DateTime, NaiveDate, Utc};
 use fraud_engine::{FraudEngine, WatchSessionCheck, MAX_WATCHES_PER_DAY};
 use liquidity_engine::LiquidityEngine;
 use referral_engine::ReferralEngine;
@@ -58,6 +60,7 @@ pub fn router() -> Router<AppState> {
         .route("/users/me/ledger", get(get_ledger))
         .route("/users/me/referral", get(get_referral))
         .route("/users/me/stats", get(get_stats))
+        .route("/users/me/analytics/summary", get(get_analytics_summary))
         .route("/users/me/watch/complete", post(watch_complete))
         .route("/users/me/payout/request", post(payout_request))
         .route("/users/me/ai/context", get(ai_context))
@@ -280,6 +283,132 @@ async fn get_ledger(
 ) -> Result<Json<Vec<crate::store::LedgerItem>>, ApiError> {
     let entries = state.ledger(user_id).await?;
     Ok(Json(entries))
+}
+
+#[derive(Serialize)]
+struct DailyEarnings {
+    date: NaiveDate,
+    usdt: Decimal,
+    watch_count: u32,
+}
+
+#[derive(Serialize)]
+struct AnalyticsConversionHints {
+    avg_usdt_per_watch: Option<Decimal>,
+    avg_usdt_per_active_day_7d: Decimal,
+    active_days_7d: u32,
+}
+
+#[derive(Serialize)]
+struct AnalyticsSummaryResponse {
+    earnings_last_7_days: Vec<DailyEarnings>,
+    earnings_last_30_days: Decimal,
+    earnings_last_7_days_total: Decimal,
+    earnings_today: Decimal,
+    daily_earnings_30d: Vec<DailyEarnings>,
+    total_watches: u32,
+    watches_today: u32,
+    streak_days: i32,
+    referral_count: i32,
+    conversion_hints: AnalyticsConversionHints,
+}
+
+fn build_analytics_summary(
+    ledger: &[crate::store::LedgerItem],
+    profile: &UserProfile,
+) -> AnalyticsSummaryResponse {
+    let today = Utc::now().date_naive();
+    let mut by_date: HashMap<NaiveDate, (Decimal, u32)> = HashMap::new();
+
+    for entry in ledger {
+        if entry.kind != "credit" {
+            continue;
+        }
+        let day = entry.created_at.date_naive();
+        let slot = by_date.entry(day).or_insert((Decimal::ZERO, 0));
+        slot.0 += entry.amount_usdt;
+        slot.1 += 1;
+    }
+
+    let watches_today = profile.effective_watches_today();
+    if watches_today > 0 {
+        let slot = by_date.entry(today).or_insert((Decimal::ZERO, 0));
+        slot.1 = slot.1.max(watches_today);
+    }
+
+    let daily_series = |days: i64| -> Vec<DailyEarnings> {
+        (0..days)
+            .map(|offset| {
+                let date = today - chrono::Duration::days(days - 1 - offset);
+                let (usdt, watch_count) = by_date
+                    .get(&date)
+                    .copied()
+                    .unwrap_or((Decimal::ZERO, 0));
+                DailyEarnings {
+                    date,
+                    usdt,
+                    watch_count,
+                }
+            })
+            .collect()
+    };
+
+    let earnings_last_7_days = daily_series(7);
+    let daily_earnings_30d = daily_series(30);
+
+    let earnings_last_7_days_total: Decimal = earnings_last_7_days.iter().map(|d| d.usdt).sum();
+    let earnings_last_30_days: Decimal = daily_earnings_30d.iter().map(|d| d.usdt).sum();
+    let earnings_today = earnings_last_7_days
+        .last()
+        .map(|d| d.usdt)
+        .unwrap_or(Decimal::ZERO);
+
+    let active_days_7d = earnings_last_7_days
+        .iter()
+        .filter(|d| d.usdt > Decimal::ZERO)
+        .count() as u32;
+    let avg_usdt_per_active_day_7d = if active_days_7d > 0 {
+        earnings_last_7_days_total / Decimal::from(active_days_7d)
+    } else {
+        Decimal::ZERO
+    };
+
+    let total_credits: Decimal = ledger
+        .iter()
+        .filter(|e| e.kind == "credit")
+        .map(|e| e.amount_usdt)
+        .sum();
+    let avg_usdt_per_watch = if profile.total_watches > 0 {
+        Some(total_credits / Decimal::from(profile.total_watches))
+    } else {
+        None
+    };
+
+    AnalyticsSummaryResponse {
+        earnings_last_7_days,
+        earnings_last_30_days,
+        earnings_last_7_days_total,
+        earnings_today,
+        daily_earnings_30d,
+        total_watches: profile.total_watches,
+        watches_today,
+        streak_days: profile.streak_days,
+        referral_count: profile.referral_count,
+        conversion_hints: AnalyticsConversionHints {
+            avg_usdt_per_watch,
+            avg_usdt_per_active_day_7d,
+            active_days_7d,
+        },
+    }
+}
+
+async fn get_analytics_summary(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<AnalyticsSummaryResponse>, ApiError> {
+    let profile = state.profile(user_id).await;
+    let ledger = state.ledger(user_id).await?;
+    Ok(Json(build_analytics_summary(&ledger, &profile)))
 }
 
 #[derive(Deserialize)]

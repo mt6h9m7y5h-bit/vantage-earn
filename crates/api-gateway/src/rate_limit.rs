@@ -81,6 +81,22 @@ pub async fn middleware(
     request: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
+    let path = request.uri().path();
+    // PWA shell + static assets: never rate-limit (dev reloads /demo often).
+    if matches!(
+        path,
+        "/"
+            | "/demo"
+            | "/admin"
+            | "/health"
+            | "/config"
+            | "/sw.js"
+            | "/manifest.webmanifest"
+    ) || path.starts_with("/icons/")
+    {
+        return next.run(request).await;
+    }
+
     if !limiter.allow(&client_key(&request)).await {
         return ApiError(shared::AppError::RateLimited).into_response();
     }

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Stoppt den laufenden Dev-Server auf PORT (default 3000) und startet neu.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+PORT="${PORT:-3000}"
+PID="$(lsof -t -iTCP:3000 -sTCP:LISTEN 2>/dev/null || true)"
+if [[ -n "${PID}" ]]; then
+  echo "Stoppe Prozess auf Port ${PORT} (PID ${PID})…"
+  kill "${PID}"
+  sleep 1
+fi
+echo "Starte vantage-earn auf Port ${PORT}…"
+exec cargo run -p api-gateway

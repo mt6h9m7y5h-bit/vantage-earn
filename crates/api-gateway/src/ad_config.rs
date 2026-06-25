@@ -41,7 +41,12 @@ impl Default for AdConfig {
         let watch_duration_secs = std::env::var("AD_WATCH_DURATION_SECS")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(30);
+            .unwrap_or_else(|| {
+                let production = std::env::var("RUST_ENV")
+                    .map(|v| v.eq_ignore_ascii_case("production"))
+                    .unwrap_or(false);
+                if production { 30 } else { 15 }
+            });
 
         Self {
             provider,

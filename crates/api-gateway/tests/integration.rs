@@ -94,7 +94,7 @@ async fn public_config_returns_mock_by_default() {
     assert_eq!(json["ad_provider"], "mock");
     assert!(json["applixir_app_id"].is_null());
     assert!(json["adinplay_tag_url"].is_null());
-    assert_eq!(json["watch_duration_secs"], 30);
+    assert_eq!(json["watch_duration_secs"], 15);
 }
 
 #[tokio::test]
@@ -233,6 +233,10 @@ async fn watch_complete_credits_wallet() {
     let (after_surprise, _) = BonusEngine::apply_surprise(base, user_id, today, 1);
     let expected_total = after_surprise + BonusEngine::daily_bonus_amount();
     assert_eq!(json["reward_usdt"], expected_total.to_string());
+    assert_eq!(json["stats"]["watches_today"], 1);
+    assert_eq!(json["stats"]["total_watches"], 1);
+    assert_eq!(json["stats"]["streak_days"], 1);
+    assert_eq!(json["wallet"]["balance_usdt"], json["reward_usdt"]);
     assert!(json["bonuses"].as_array().unwrap().iter().any(|b| {
         b["id"] == "daily_login"
     }));

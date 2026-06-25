@@ -194,6 +194,7 @@ impl AppState {
     }
 
     pub async fn balance(&self, user_id: Uuid) -> AppResult<Decimal> {
+        self.ensure_user(user_id).await;
         self.store.balance(user_id).await
     }
 

@@ -1,5 +1,5 @@
-const CACHE = 'vantage-earn-v2';
-const SHELL = ['/demo', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+const CACHE = 'vantage-earn-v7';
+const SHELL = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -20,11 +20,31 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/users/') || url.pathname.startsWith('/auth/')) return;
 
+  // HTML/PWA shell: always prefer network so UI updates are not stuck behind cache.
+  const isShell =
+    url.pathname === '/demo' ||
+    url.pathname === '/' ||
+    url.pathname === '/admin';
+
+  if (isShell) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => res)
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  if (url.pathname === '/sw.js') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((res) => {
-        if (res.ok && (url.pathname === '/demo' || url.pathname.startsWith('/icons/'))) {
+        if (res.ok && url.pathname.startsWith('/icons/')) {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         }

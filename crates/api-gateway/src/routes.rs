@@ -27,7 +27,7 @@ use crate::error::{map_ai_error, ApiError};
 use crate::extractors::AuthUser;
 use crate::pwa;
 use crate::rate_limit::{self, RateLimiter};
-use crate::state::AppState;
+use crate::state::{AppState, UserProfile};
 
 pub fn router() -> Router<AppState> {
     let rate_limiter = RateLimiter::from_env();
@@ -156,6 +156,7 @@ async fn get_wallet(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> Result<Json<WalletResponse>, ApiError> {
+    state.ensure_user(user_id).await;
     let balance = state.balance(user_id).await?;
     let currency = state.local_currency_for_user(user_id).await;
     let localized = state
@@ -220,17 +221,13 @@ struct UserStatsResponse {
     bonus_catalog: Vec<BonusCatalogItem>,
 }
 
-async fn get_stats(
-    State(state): State<AppState>,
-    AuthUser(user_id): AuthUser,
-) -> Result<Json<UserStatsResponse>, ApiError> {
-    let profile = state.profile(user_id).await;
+async fn build_user_stats(state: &AppState, profile: &UserProfile) -> UserStatsResponse {
     let watches_today = profile.effective_watches_today();
     let remaining = MAX_WATCHES_PER_DAY.saturating_sub(watches_today);
     let min_payout = state.min_payout_usdt().await;
     let streak_bonus_percent = RewardEngine::streak_bonus_percent(profile.streak_days);
-    let daily_bonus_claimed_today = AppState::daily_bonus_claimed_today(&profile);
-    let daily_challenge_completed_today = AppState::challenge_bonus_claimed_today(&profile);
+    let daily_bonus_claimed_today = AppState::daily_bonus_claimed_today(profile);
+    let daily_challenge_completed_today = AppState::challenge_bonus_claimed_today(profile);
     let next_milestone =
         BonusEngine::next_milestone(profile.total_watches, profile.milestones_claimed);
     let bonus_catalog = BonusEngine::build_catalog(CatalogInput {
@@ -244,7 +241,7 @@ async fn get_stats(
         challenge_bonus_claimed_today: daily_challenge_completed_today,
     });
 
-    Ok(Json(UserStatsResponse {
+    UserStatsResponse {
         streak_days: profile.streak_days,
         streak_bonus_percent,
         referral_count: profile.referral_count,
@@ -266,7 +263,15 @@ async fn get_stats(
         challenge_target: DAILY_CHALLENGE_TARGET,
         daily_challenge_completed_today,
         bonus_catalog,
-    }))
+    }
+}
+
+async fn get_stats(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<UserStatsResponse>, ApiError> {
+    let profile = state.profile(user_id).await;
+    Ok(Json(build_user_stats(&state, &profile).await))
 }
 
 async fn get_ledger(
@@ -299,6 +304,8 @@ struct WatchCompleteResponse {
     base_reward_usdt: Decimal,
     bonuses: Vec<BonusEarned>,
     message: String,
+    stats: UserStatsResponse,
+    wallet: WalletResponse,
 }
 
 async fn watch_complete(
@@ -357,6 +364,15 @@ async fn watch_complete(
     let flat_total = bonus_result.flat_total();
     let total_reward = watch_reward + flat_total;
 
+    tracing::info!(
+        user_id = %user_id,
+        watch_duration_secs = body.watch_duration_secs,
+        reward_usdt = %total_reward,
+        watches_today = profile.effective_watches_today(),
+        total_watches = profile.total_watches,
+        "watch completed"
+    );
+
     let session_id = body
         .ad_session_id
         .as_deref()
@@ -410,6 +426,26 @@ async fn watch_complete(
         base_reward_usdt: watch_reward,
         bonuses,
         message,
+        stats: build_user_stats(&state, &profile).await,
+        wallet: {
+            let balance = state.balance(user_id).await?;
+            let currency = state.local_currency_for_user(user_id).await;
+            let localized = state
+                .currency
+                .usdt_to_local(balance, currency)
+                .await
+                .unwrap_or(balance);
+            let tier = state.payout_tier_for_usdt(balance).await;
+            let trust_score = state.trust_score(user_id).await;
+            WalletResponse {
+                user_id,
+                balance_usdt: balance,
+                localized_balance: localized,
+                currency: currency.code().into(),
+                trust_score,
+                payout_tier: tier.as_str().into(),
+            }
+        },
     }))
 }
 

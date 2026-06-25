@@ -83,7 +83,8 @@ impl MemoryStore {
     }
 
     pub async fn balance(&self, user_id: Uuid) -> AppResult<Decimal> {
-        self.wallet.balance(user_id).await
+        let wallet = self.wallet.get_or_create(user_id).await;
+        Ok(wallet.balance_usdt)
     }
 
     pub async fn credit(&self, user_id: Uuid, amount: Decimal) -> AppResult<Decimal> {

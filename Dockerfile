@@ -2,10 +2,12 @@ FROM rust:1-bookworm AS builder
 WORKDIR /app
 # Render free tier can OOM during parallel release builds
 ENV CARGO_BUILD_JOBS=1
+ENV RUSTFLAGS="-C codegen-units=1"
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY frontend ./frontend
-RUN cargo build --locked --release -p api-gateway --bin vantage-earn
+RUN cargo build --locked --release -p api-gateway --bin vantage-earn \
+    && rm -rf target/release/deps target/release/build target/release/incremental
 
 FROM debian:bookworm-slim
 RUN apt-get update \

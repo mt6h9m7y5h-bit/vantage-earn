@@ -40,6 +40,7 @@ pub fn router() -> Router<AppState> {
         .route("/health", get(health))
         .route("/config", get(public_config))
         .route("/demo", get(pwa::demo_page))
+        .route("/legal/datenschutz", get(pwa::datenschutz_page))
         .route("/manifest.webmanifest", get(pwa::manifest))
         .route("/sw.js", get(pwa::service_worker))
         .route("/icons/icon-180.png", get(pwa::icon_180))

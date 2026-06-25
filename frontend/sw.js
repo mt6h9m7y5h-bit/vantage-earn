@@ -1,4 +1,4 @@
-const CACHE = 'vantage-earn-v9';
+const CACHE = 'vantage-earn-v10';
 const SHELL = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -25,7 +25,8 @@ self.addEventListener('fetch', (event) => {
     url.pathname === '/demo' ||
     url.pathname === '/' ||
     url.pathname === '/admin' ||
-    url.pathname === '/legal/datenschutz';
+    url.pathname === '/legal/datenschutz' ||
+    url.pathname === '/legal/impressum';
 
   if (isShell) {
     event.respondWith(

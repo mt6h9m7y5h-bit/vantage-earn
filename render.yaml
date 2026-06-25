@@ -12,8 +12,6 @@ services:
     healthCheckPath: /health
     dockerfilePath: ./Dockerfile
     envVars:
-      - key: PORT
-        value: "3000"
       - key: RUST_ENV
         value: production
       - key: JWT_SECRET

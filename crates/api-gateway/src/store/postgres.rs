@@ -13,9 +13,19 @@ pub struct PgStore {
     pool: PgPool,
 }
 
+/// Render and other managed Postgres providers require TLS unless sslmode is set.
+pub fn normalize_database_url(url: &str) -> String {
+    if url.contains("sslmode=") || url.contains("ssl=") {
+        return url.to_string();
+    }
+    let sep = if url.contains('?') { "&" } else { "?" };
+    format!("{url}{sep}sslmode=require")
+}
+
 impl PgStore {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
-        let pool = PgPool::connect(database_url).await?;
+        let url = normalize_database_url(database_url);
+        let pool = PgPool::connect(&url).await?;
         sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
     }

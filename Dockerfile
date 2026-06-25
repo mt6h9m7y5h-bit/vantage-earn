@@ -1,15 +1,19 @@
-FROM rust:1.85-bookworm AS builder
+FROM rust:1-bookworm AS builder
 WORKDIR /app
+# Render free tier can OOM during parallel release builds
+ENV CARGO_BUILD_JOBS=1
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY frontend ./frontend
-RUN cargo build --release -p api-gateway
+RUN cargo build --locked --release -p api-gateway --bin vantage-earn
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/vantage-earn /app/vantage-earn
 COPY crates/api-gateway/migrations ./migrations
+# Render injects PORT at runtime (default 10000); 3000 fallback for local docker-compose
 ENV PORT=3000
-EXPOSE 3000
 CMD ["./vantage-earn"]

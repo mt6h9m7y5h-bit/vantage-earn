@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 pub use ledger::LedgerItem;
 pub use memory::MemoryStore;
-pub use postgres::PgStore;
+pub use postgres::{normalize_database_url, PgStore};
 
 use crate::state::UserProfile;
 

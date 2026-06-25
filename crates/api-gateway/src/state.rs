@@ -139,13 +139,7 @@ impl AppState {
     pub async fn connect() -> Self {
         let store = if let Ok(url) = std::env::var("DATABASE_URL") {
             tracing::info!("connecting to PostgreSQL");
-            match Store::connect(&url).await {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::error!(error = %e, "database connection failed");
-                    std::process::exit(1);
-                }
-            }
+            connect_store_with_retry(&url).await
         } else {
             tracing::warn!("DATABASE_URL not set — using in-memory store");
             Store::memory()
@@ -528,6 +522,36 @@ impl AppState {
             _ => Err(shared::AppError::Unauthorized),
         }
     }
+}
+
+async fn connect_store_with_retry(database_url: &str) -> Store {
+    const MAX_ATTEMPTS: u32 = 15;
+    const RETRY_SECS: u64 = 3;
+    let mut last_err = None;
+    for attempt in 1..=MAX_ATTEMPTS {
+        match Store::connect(database_url).await {
+            Ok(s) => {
+                if attempt > 1 {
+                    tracing::info!(attempt, "database connection established");
+                }
+                return s;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    attempt,
+                    max = MAX_ATTEMPTS,
+                    error = %e,
+                    "database connection failed, retrying"
+                );
+                last_err = Some(e);
+                if attempt < MAX_ATTEMPTS {
+                    tokio::time::sleep(std::time::Duration::from_secs(RETRY_SECS)).await;
+                }
+            }
+        }
+    }
+    tracing::error!(error = ?last_err, "database connection failed after retries");
+    std::process::exit(1);
 }
 
 #[cfg(test)]

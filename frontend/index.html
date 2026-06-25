@@ -6,7 +6,7 @@
   <meta name="format-detection" content="telephone=no" />
   <title>VANTAGE-EARN</title>
   <meta name="description" content="Watch-to-Earn — USDT verdienen beim Schauen" />
-  <meta name="theme-color" content="#0A0F1A" />
+  <meta name="theme-color" content="#070B14" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -20,9 +20,12 @@
   <style>
     :root,
     [data-theme="dark"] {
-      --bg: #0A0F1A;
+      --bg: #070B14;
       --surface: #111827;
-      --surface-elevated: #1a2332;
+      --surface-elevated: #182233;
+      --sidebar-bg: #0B1220;
+      --sidebar-w: 280px;
+      --sidebar-collapsed: 72px;
       --surface-hover: #1f2937;
       --primary: #3B82F6;
       --primary-hover: #2563EB;
@@ -85,11 +88,221 @@
       padding: 0;
       padding-bottom: env(safe-area-inset-bottom);
     }
-    .wrap {
-      max-width: 480px;
+    .auth-screen {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem 1rem;
+      max-width: 420px;
       margin: 0 auto;
-      padding: 0 1rem 1.5rem;
     }
+    .app-shell {
+      display: flex;
+      min-height: 100vh;
+      width: 100%;
+    }
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 60;
+      transition: width var(--transition);
+    }
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1.25rem 1.25rem 1rem;
+      border-bottom: 1px solid var(--border);
+      min-height: var(--header-h);
+    }
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 0.65rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: 12px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition: background var(--transition), color var(--transition);
+      text-decoration: none;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .nav-item.active {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+    .nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+    .nav-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-footer {
+      padding: 0.85rem 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.7rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .sidebar-footer a { color: var(--muted); text-decoration: none; }
+    .sidebar-footer a:hover { color: var(--primary); }
+    .main-area {
+      flex: 1;
+      margin-left: var(--sidebar-w);
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .view-container {
+      flex: 1;
+      padding: 0 1.25rem 1.5rem;
+      max-width: 960px;
+    }
+    .view { animation: view-in 0.2s ease; }
+    @keyframes view-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .bottom-nav {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 70;
+      background: var(--sidebar-bg);
+      border-top: 1px solid var(--border);
+      padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom));
+      justify-content: space-around;
+      align-items: stretch;
+    }
+    .bottom-nav .nav-item {
+      flex-direction: column;
+      gap: 0.2rem;
+      padding: 0.45rem 0.25rem;
+      font-size: 0.65rem;
+      border-radius: 10px;
+      justify-content: center;
+      min-width: 0;
+    }
+    .bottom-nav .nav-item svg { width: 22px; height: 22px; }
+    .fab-watch {
+      display: none;
+      position: fixed;
+      right: 1rem;
+      bottom: calc(4.5rem + env(safe-area-inset-bottom));
+      z-index: 65;
+      width: auto;
+      margin: 0;
+      padding: 0.85rem 1.15rem;
+      border-radius: 99px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+      font-size: 0.85rem;
+      min-height: 48px;
+    }
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.65rem;
+      margin-bottom: 0.75rem;
+    }
+    @media (max-width: 900px) {
+      .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    }
+    .hero-balance-lg .balance {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+    }
+    @media (min-width: 1024px) {
+      .hero-balance-lg .balance { font-size: clamp(2.5rem, 4vw, 3.5rem); }
+    }
+    .sparkline-placeholder {
+      height: 48px;
+      margin-top: 0.75rem;
+      border-radius: var(--radius);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 3px;
+      padding: 0.5rem 0.75rem;
+      overflow: hidden;
+    }
+    .sparkline-placeholder span {
+      flex: 1;
+      max-width: 8px;
+      background: var(--primary);
+      opacity: 0.35;
+      border-radius: 2px 2px 0 0;
+    }
+    .coming-soon-banner {
+      text-align: center;
+      padding: 1.25rem;
+      border-radius: var(--radius-lg);
+      background: var(--surface-elevated);
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .security-metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .security-metric:last-child { border-bottom: none; }
+    .security-metric-value { font-size: 1.25rem; font-weight: 700; }
+    .profile-settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .profile-settings-row:last-child { border-bottom: none; }
+    @media (max-width: 1023px) {
+      .sidebar { width: var(--sidebar-collapsed); }
+      .sidebar-brand .brand-text,
+      .sidebar .nav-label,
+      .sidebar-footer .footer-text { display: none; }
+      .sidebar-brand { justify-content: center; padding: 1rem 0.5rem; }
+      .sidebar-nav { padding: 0.5rem 0.35rem; }
+      .nav-item { justify-content: center; padding: 0.75rem; }
+      .main-area { margin-left: var(--sidebar-collapsed); }
+      .sidebar-footer { text-align: center; padding: 0.65rem 0.35rem; }
+    }
+    @media (max-width: 767px) {
+      .sidebar { display: none; }
+      .main-area { margin-left: 0; padding-bottom: calc(4.5rem + env(safe-area-inset-bottom)); }
+      .bottom-nav { display: flex; }
+      .fab-watch { display: block; }
+      .view-container { padding: 0 1rem 1rem; }
+      .app-header { margin: 0 -1rem 0.75rem; }
+    }
+    .wrap { display: contents; }
     .app-header {
       position: sticky;
       top: 0;
@@ -99,15 +312,19 @@
       justify-content: space-between;
       gap: 0.75rem;
       min-height: var(--header-h);
-      margin: 0 -1rem 1rem;
-      padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.5rem;
-      background: rgba(10, 15, 26, 0.85);
+      margin: 0 0 1rem;
+      padding: calc(0.5rem + env(safe-area-inset-top)) 1.25rem 0.5rem;
+      background: rgba(7, 11, 20, 0.85);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
     }
     [data-theme="light"] .app-header {
       background: rgba(248, 250, 252, 0.9);
+    }
+    #streak-warning { margin: 0 1.25rem 0.75rem; }
+    @media (max-width: 767px) {
+      #streak-warning { margin: 0 1rem 0.75rem; }
     }
     .brand {
       display: flex;
@@ -760,191 +977,365 @@
     <div id="success-banner" class="toast hidden" role="status"></div>
   </div>
 
-  <div class="wrap">
-    <header class="app-header">
-      <div class="brand">
+  <div id="auth-card" class="card auth-card auth-screen">
+    <div class="brand-mark" aria-hidden="true">V</div>
+    <p class="card-title">Willkommen bei VANTAGE</p>
+    <p class="auth-hint">Institutionelles Watch-to-Earn. Starte in Sekunden — kein Passwort, dein Gerät bleibt angemeldet.</p>
+    <input id="referral" placeholder="Referral-Code (optional)" autocomplete="off" />
+    <button class="primary" type="button" id="register-btn">Kostenlos starten</button>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside class="sidebar" aria-label="Hauptnavigation">
+      <div class="sidebar-brand">
         <div class="brand-mark" aria-hidden="true">V</div>
-        <div>
+        <div class="brand-text">
           <div class="brand-name">VANTAGE</div>
           <div class="brand-tagline">Earn</div>
         </div>
       </div>
-      <div class="header-actions">
-        <span class="trust-badge hidden" id="header-trust" title="Trust Score">—</span>
-        <button class="icon-btn hidden" id="notify-btn" onclick="enableNotifications()" type="button" aria-label="Benachrichtigungen" title="Benachrichtigungen">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <nav class="sidebar-nav">
+        <button type="button" class="nav-item active" data-nav="dashboard" onclick="navigateToView('dashboard')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span class="nav-label">Dashboard</span>
         </button>
-        <button class="icon-btn hidden" id="refresh-btn" type="button" aria-label="Aktualisieren" title="Aktualisieren">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <button type="button" class="nav-item" data-nav="wallet" onclick="navigateToView('wallet')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15v-7"/></svg>
+          <span class="nav-label">Wallet</span>
         </button>
-        <button class="icon-btn" id="theme-toggle" onclick="toggleTheme()" aria-label="Theme wechseln" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <button type="button" class="nav-item" data-nav="earn" onclick="navigateToView('earn')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span class="nav-label">Verdienen</span>
         </button>
-        <button class="icon-btn text-btn hidden" id="logout-btn" onclick="logout()" type="button">Abmelden</button>
+        <button type="button" class="nav-item" data-nav="rewards" onclick="navigateToView('rewards')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          <span class="nav-label">Belohnungen</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="referrals" onclick="navigateToView('referrals')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span class="nav-label">Empfehlungen</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="payouts" onclick="navigateToView('payouts')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span class="nav-label">Auszahlungen</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="analytics" onclick="navigateToView('analytics')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span class="nav-label">Analytics</span>
+        </button>
+        <button type="button" class="nav-item" data-nav="security" onclick="navigateToView('security')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="nav-label">Sicherheit</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <p class="footer-text">VANTAGE Earn <span id="app-version">v—</span></p>
+        <p class="footer-text"><a href="/health" target="_blank" rel="noopener">API-Status</a> · <a href="/admin">Admin</a></p>
       </div>
-    </header>
+    </aside>
 
-    <div id="ptr-indicator" aria-hidden="true">Loslassen zum Aktualisieren…</div>
-    <div id="streak-warning" class="streak-warning hidden"></div>
-
-    <div id="install-card" class="card install-card hidden">
-      <p class="card-title">App installieren</p>
-      <p>Als Progressive Web App — kein App Store nötig.</p>
-      <button class="primary" id="install-btn" onclick="installApp()">Zum Home-Bildschirm hinzufügen</button>
-      <p id="ios-hint" class="ios-hint hidden" style="margin-top:0.75rem">
-        iPhone: <strong>Teilen</strong> → <strong>Zum Home-Bildschirm</strong>
-      </p>
-    </div>
-
-    <div id="auth-card" class="card auth-card">
-      <div class="brand-mark" aria-hidden="true">V</div>
-      <p class="card-title">Willkommen bei VANTAGE</p>
-      <p class="auth-hint">Institutionelles Watch-to-Earn. Starte in Sekunden — kein Passwort, dein Gerät bleibt angemeldet.</p>
-      <input id="referral" placeholder="Referral-Code (optional)" autocomplete="off" />
-      <button class="primary" type="button" id="register-btn">Kostenlos starten</button>
-    </div>
-
-    <div id="app" class="hidden">
-      <!-- 1. Hero Wallet -->
-      <section class="card hero-wallet">
-        <div class="hero-top">
-          <span class="balance-label">Verfügbares Guthaben</span>
-          <span class="usdt-pill">USDT</span>
-        </div>
-        <div class="balance" id="balance">0<span class="currency-suffix">USDT</span></div>
-        <div class="local" id="local-balance">≈ 0 EUR</div>
-        <p class="last-updated" id="last-updated"></p>
-        <div class="hero-actions">
-          <button class="secondary" type="button" onclick="document.getElementById('payout-section').scrollIntoView({behavior:'smooth'})">Auszahlen</button>
-          <button class="primary" id="watch-btn" onclick="startWatch()">Video ansehen</button>
-        </div>
-      </section>
-
-      <!-- 2. Statistics Grid -->
-      <section class="card">
-        <h2 class="section-title">Statistiken</h2>
-        <div class="stats-grid">
-          <div class="stat-tile">
-            <span class="stat-label">Heute geschaut</span>
-            <span class="stat-value" id="watches-today">—</span>
-          </div>
-          <div class="stat-tile">
-            <span class="stat-label">Videos gesamt</span>
-            <span class="stat-value" id="total-watches">—</span>
-          </div>
-          <div class="stat-tile">
-            <span class="stat-label">Streak</span>
-            <span class="stat-value success" id="streak">—</span>
-          </div>
-          <div class="stat-tile">
-            <span class="stat-label">Trust Score</span>
-            <span class="stat-value" id="trust">—</span>
+    <div class="main-area">
+      <header class="app-header">
+        <div class="brand">
+          <div>
+            <div class="brand-name" id="view-title">Dashboard</div>
+            <div class="brand-tagline" id="view-subtitle">Übersicht</div>
           </div>
         </div>
-        <span id="currency" class="sr-only">EUR</span>
-        <span id="referrals" class="sr-only">0</span>
-      </section>
-
-      <!-- 3. Primary Action + Daily Progress -->
-      <section class="card cta-card">
-        <h2 class="section-title">Nächstes Video</h2>
-        <p class="reward-hint" id="reward-hint">Schau 15s bis zum Ende → dann Belohnung</p>
-        <div class="cta-meta">
-          <span class="cta-pill" id="cta-duration">⏱ <strong>15s</strong> Dauer</span>
-          <span class="cta-pill" id="cta-reward">≈ <strong>0.001</strong> USDT</span>
+        <div class="header-actions">
+          <span class="trust-badge hidden" id="header-trust" title="Trust Score">—</span>
+          <button class="icon-btn hidden" id="notify-btn" onclick="enableNotifications()" type="button" aria-label="Benachrichtigungen" title="Benachrichtigungen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </button>
+          <button class="icon-btn hidden" id="refresh-btn" type="button" aria-label="Aktualisieren" title="Aktualisieren">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+          <button class="icon-btn" id="theme-toggle" onclick="toggleTheme()" aria-label="Theme wechseln" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+          <button class="icon-btn text-btn hidden" id="logout-btn" onclick="logout()" type="button">Abmelden</button>
         </div>
-        <button class="primary success-btn watch-btn-lg" type="button" onclick="startWatch()">Jetzt Video ansehen &amp; verdienen</button>
-        <div class="progress-wrap" style="margin-top:1.25rem">
-          <div class="progress-label">
-            <span>Tagesfortschritt</span>
-            <strong id="challenge-progress-text">0/5 Videos</strong>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" id="challenge-progress-fill" style="width: 0%"></div>
-          </div>
-          <div class="progress-pct" id="challenge-progress-pct">0%</div>
-          <p class="payout-hint" id="challenge-hint">5 Videos heute = Extra-Bonus!</p>
-        </div>
-      </section>
+      </header>
 
-      <!-- 4. Activity Feed -->
-      <section class="card">
-        <h2 class="section-title">Aktivität</h2>
-        <div id="ledger"><p class="empty">Noch keine Einträge</p></div>
-      </section>
+      <div id="ptr-indicator" aria-hidden="true">Loslassen zum Aktualisieren…</div>
+      <div id="streak-warning" class="streak-warning hidden"></div>
 
-      <!-- 5. Leaderboard -->
-      <section class="card" id="leaderboard-card">
-        <h2 class="section-title">Top dieser Woche</h2>
-        <div id="leaderboard-list"><p class="empty">Lade Rangliste…</p></div>
-      </section>
-
-      <!-- 6. Referral -->
-      <section class="card referral-card" id="referral-banner">
-        <h2 class="section-title">Empfehlungsprogramm</h2>
-        <p id="referral-banner-text">Empfehle VANTAGE und verdient beide einen Bonus in USDT.</p>
-        <div class="referral-code-box">
-          <code id="ref-code">—</code>
-          <button class="secondary copy-btn" type="button" onclick="copyReferralCode()">Kopieren</button>
-        </div>
-        <button class="primary" type="button" onclick="shareReferral()">Einladungslink teilen</button>
-      </section>
-
-      <!-- 7. Bonuses (collapsible) -->
-      <details class="card collapsible" id="bonuses-card" open>
-        <summary>Boni &amp; Belohnungen</summary>
-        <div style="margin-top:0.75rem">
-          <div class="row"><span>Streak-Bonus</span><span id="streak-bonus-pct">—</span></div>
-          <div class="streak-bonus-highlight" id="streak-bonus-highlight">+0%</div>
-          <div class="milestone-progress">
-            <div class="progress-label">
-              <span>Nächster Meilenstein</span>
-              <span id="milestone-progress-text">—</span>
+      <main class="view-container">
+        <!-- Dashboard -->
+        <section class="view" data-view="dashboard">
+          <section class="card hero-wallet hero-balance-lg">
+            <div class="hero-top">
+              <span class="balance-label">Verfügbares Guthaben</span>
+              <span class="usdt-pill">USDT</span>
             </div>
-            <div class="progress-bar">
-              <div class="progress-fill" id="milestone-progress-fill" style="width: 0%"></div>
+            <div class="balance" id="balance">0<span class="currency-suffix">USDT</span></div>
+            <div class="local" id="local-balance">≈ 0 EUR</div>
+            <p class="last-updated" id="last-updated"></p>
+            <div class="hero-actions">
+              <button class="secondary" type="button" onclick="navigateToView('payouts')">Auszahlen</button>
+              <button class="primary" id="watch-btn" onclick="startWatch()">Video ansehen</button>
+            </div>
+          </section>
+          <div class="kpi-strip">
+            <div class="stat-tile">
+              <span class="stat-label">Heute geschaut</span>
+              <span class="stat-value" id="watches-today">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Videos gesamt</span>
+              <span class="stat-value" id="total-watches">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Streak</span>
+              <span class="stat-value success" id="streak">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Trust Score</span>
+              <span class="stat-value" id="trust">—</span>
             </div>
           </div>
-          <div id="bonus-list"><p class="empty">Lade Boni…</p></div>
-        </div>
-      </details>
+          <span id="currency" class="sr-only">EUR</span>
+          <span id="referrals" class="sr-only">0</span>
+          <section class="card">
+            <h2 class="section-title">Letzte Aktivität</h2>
+            <div id="dashboard-ledger"><p class="empty">Noch keine Einträge</p></div>
+            <button class="secondary" type="button" style="margin-top:0.5rem" onclick="navigateToView('wallet')">Alle Transaktionen</button>
+          </section>
+          <section class="card referral-card" id="referral-dashboard">
+            <h2 class="section-title">Empfehlungen</h2>
+            <p id="referral-dashboard-text">Lade Empfehlungsdaten…</p>
+            <button class="primary" type="button" onclick="navigateToView('referrals')">Empfehlungsprogramm öffnen</button>
+          </section>
+        </section>
 
-      <!-- 8. Payout -->
-      <section class="card" id="payout-section">
-        <h2 class="section-title">Auszahlung <span id="demo-badge" class="demo-badge hidden">DEMO</span></h2>
-        <div class="progress-wrap">
-          <div class="progress-label">
-            <span>Fortschritt zum Ziel</span>
-            <span id="payout-progress-text">0 / 170 €</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" id="payout-progress-fill" style="width: 0%"></div>
-          </div>
-        </div>
-        <div class="row"><span>Mindestbetrag</span><span id="min-payout">—</span></div>
-        <label for="payout-method" class="payout-hint">Auszahlungsmethode</label>
-        <select id="payout-method" class="payout-method-select">
-          <option value="crypto">Krypto (USDT)</option>
-          <option value="amazon_gift_card">Amazon Gutschein</option>
-          <option value="paypal">PayPal</option>
-        </select>
-        <div class="payout-timing" id="payout-timing">
-          <span id="payout-timing-main">Bearbeitungszeit: —</span>
-          <div class="payout-timing-note" id="payout-timing-desc"></div>
-          <div class="payout-timing-note" id="payout-tier-note"></div>
-          <div class="payout-timing-note" id="payout-first-time-note"></div>
-        </div>
-        <p class="payout-hint" id="payout-threshold-hint"></p>
-        <button class="primary" id="payout-btn" onclick="requestPayout()">Alles auszahlen</button>
-      </section>
+        <!-- Earn -->
+        <section class="view hidden" data-view="earn">
+          <section class="card cta-card">
+            <h2 class="section-title">Verdienen</h2>
+            <p class="reward-hint" id="reward-hint">Schau 15s bis zum Ende → dann Belohnung</p>
+            <div class="cta-meta">
+              <span class="cta-pill" id="cta-duration">⏱ <strong>15s</strong> Dauer</span>
+              <span class="cta-pill" id="cta-reward">≈ <strong>0.001</strong> USDT</span>
+            </div>
+            <button class="primary success-btn watch-btn-lg" type="button" onclick="startWatch()">Jetzt Video ansehen &amp; verdienen</button>
+            <div class="progress-wrap" style="margin-top:1.25rem">
+              <div class="progress-label">
+                <span>Tagesfortschritt</span>
+                <strong id="challenge-progress-text">0/5 Videos</strong>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="challenge-progress-fill" style="width: 0%"></div>
+              </div>
+              <div class="progress-pct" id="challenge-progress-pct">0%</div>
+              <p class="payout-hint" id="challenge-hint">5 Videos heute = Extra-Bonus!</p>
+            </div>
+          </section>
+        </section>
 
-      <div id="log" aria-hidden="true"></div>
+        <!-- Wallet -->
+        <section class="view hidden" data-view="wallet">
+          <section class="card hero-wallet">
+            <div class="hero-top">
+              <span class="balance-label">Wallet-Guthaben</span>
+              <span class="usdt-pill">USDT</span>
+            </div>
+            <div class="balance" id="wallet-balance">0<span class="currency-suffix">USDT</span></div>
+            <div class="local" id="wallet-local">≈ 0 EUR</div>
+          </section>
+          <section class="card">
+            <h2 class="section-title">Transaktionsverlauf</h2>
+            <div id="ledger"><p class="empty">Noch keine Einträge</p></div>
+          </section>
+        </section>
+
+        <!-- Rewards -->
+        <section class="view hidden" data-view="rewards">
+          <section class="card" id="leaderboard-card">
+            <h2 class="section-title">Top dieser Woche</h2>
+            <div id="leaderboard-list"><p class="empty">Lade Rangliste…</p></div>
+          </section>
+          <details class="card collapsible" id="bonuses-card" open>
+            <summary>Boni &amp; Belohnungen</summary>
+            <div style="margin-top:0.75rem">
+              <div class="row"><span>Streak-Bonus</span><span id="streak-bonus-pct">—</span></div>
+              <div class="streak-bonus-highlight" id="streak-bonus-highlight">+0%</div>
+              <div class="milestone-progress">
+                <div class="progress-label">
+                  <span>Nächster Meilenstein</span>
+                  <span id="milestone-progress-text">—</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" id="milestone-progress-fill" style="width: 0%"></div>
+                </div>
+              </div>
+              <div id="bonus-list"><p class="empty">Lade Boni…</p></div>
+            </div>
+          </details>
+        </section>
+
+        <!-- Referrals -->
+        <section class="view hidden" data-view="referrals">
+          <section class="card referral-card" id="referral-banner">
+            <h2 class="section-title">Empfehlungsprogramm</h2>
+            <p id="referral-banner-text">Empfehle VANTAGE und verdient beide einen Bonus in USDT.</p>
+            <div class="referral-code-box">
+              <code id="ref-code">—</code>
+              <button class="secondary copy-btn" type="button" onclick="copyReferralCode()">Kopieren</button>
+            </div>
+            <button class="primary" type="button" onclick="shareReferral()">Einladungslink teilen</button>
+          </section>
+        </section>
+
+        <!-- Payouts -->
+        <section class="view hidden" data-view="payouts">
+          <section class="card" id="payout-section">
+            <h2 class="section-title">Auszahlung <span id="demo-badge" class="demo-badge hidden">DEMO</span></h2>
+            <div class="progress-wrap">
+              <div class="progress-label">
+                <span>Fortschritt zum Ziel</span>
+                <span id="payout-progress-text">0 / 170 €</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="payout-progress-fill" style="width: 0%"></div>
+              </div>
+            </div>
+            <div class="row"><span>Mindestbetrag</span><span id="min-payout">—</span></div>
+            <label for="payout-method" class="payout-hint">Auszahlungsmethode</label>
+            <select id="payout-method" class="payout-method-select">
+              <option value="crypto">Krypto (USDT)</option>
+              <option value="amazon_gift_card">Amazon Gutschein</option>
+              <option value="paypal">PayPal</option>
+            </select>
+            <div class="payout-timing" id="payout-timing">
+              <span id="payout-timing-main">Bearbeitungszeit: —</span>
+              <div class="payout-timing-note" id="payout-timing-desc"></div>
+              <div class="payout-timing-note" id="payout-tier-note"></div>
+              <div class="payout-timing-note" id="payout-first-time-note"></div>
+            </div>
+            <p class="payout-hint" id="payout-threshold-hint"></p>
+            <button class="primary" id="payout-btn" onclick="requestPayout()">Alles auszahlen</button>
+          </section>
+        </section>
+
+        <!-- Analytics -->
+        <section class="view hidden" data-view="analytics">
+          <div class="coming-soon-banner">Detaillierte Analytics kommen bald — unten siehst du deine aktuellen Kennzahlen.</div>
+          <div class="kpi-strip">
+            <div class="stat-tile">
+              <span class="stat-label">Heute geschaut</span>
+              <span class="stat-value" id="analytics-watches-today">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Videos gesamt</span>
+              <span class="stat-value" id="analytics-total-watches">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Streak</span>
+              <span class="stat-value success" id="analytics-streak">—</span>
+            </div>
+            <div class="stat-tile">
+              <span class="stat-label">Empfehlungen</span>
+              <span class="stat-value" id="analytics-referrals">—</span>
+            </div>
+          </div>
+          <section class="card">
+            <h2 class="section-title">Verlauf (Vorschau)</h2>
+            <div class="sparkline-placeholder" aria-hidden="true">
+              <span style="height:30%"></span><span style="height:45%"></span><span style="height:35%"></span>
+              <span style="height:60%"></span><span style="height:40%"></span><span style="height:55%"></span>
+              <span style="height:70%"></span><span style="height:50%"></span><span style="height:65%"></span>
+              <span style="height:45%"></span><span style="height:80%"></span><span style="height:55%"></span>
+            </div>
+            <p class="payout-hint" style="margin-top:0.75rem;text-align:center">Zeitreihen-Charts folgen in Phase 2</p>
+          </section>
+        </section>
+
+        <!-- Security -->
+        <section class="view hidden" data-view="security">
+          <section class="card">
+            <h2 class="section-title">Vertrauen &amp; Sicherheit</h2>
+            <div class="security-metric">
+              <div><div class="stat-label">Trust Score</div><div class="payout-hint">Basierend auf deinem Nutzungsverhalten</div></div>
+              <span class="security-metric-value" id="security-trust">—</span>
+            </div>
+            <div class="security-metric">
+              <div><div class="stat-label">Aktueller Streak</div></div>
+              <span class="security-metric-value success" id="security-streak">—</span>
+            </div>
+            <div class="security-metric">
+              <div><div class="stat-label">Videos heute</div></div>
+              <span class="security-metric-value" id="security-watches-today">—</span>
+            </div>
+            <div class="security-metric">
+              <div><div class="stat-label">Videos gesamt</div></div>
+              <span class="security-metric-value" id="security-total-watches">—</span>
+            </div>
+          </section>
+        </section>
+
+        <!-- Profile (mobile nav) -->
+        <section class="view hidden" data-view="profile">
+          <section class="card referral-card">
+            <h2 class="section-title">Profil &amp; Empfehlungen</h2>
+            <p id="profile-referral-text">Freund einladen und beide verdienen USDT.</p>
+            <div class="referral-code-box">
+              <code id="profile-ref-code">—</code>
+              <button class="secondary copy-btn" type="button" onclick="copyReferralCode()">Kopieren</button>
+            </div>
+            <button class="primary" type="button" onclick="shareReferral()">Einladungslink teilen</button>
+          </section>
+          <section class="card">
+            <h2 class="section-title">Einstellungen</h2>
+            <div class="profile-settings-row">
+              <span>Design</span>
+              <button class="secondary copy-btn" type="button" onclick="toggleTheme()">Theme wechseln</button>
+            </div>
+            <div class="profile-settings-row">
+              <span>Benachrichtigungen</span>
+              <button class="secondary copy-btn" type="button" onclick="enableNotifications()">Aktivieren</button>
+            </div>
+            <div class="profile-settings-row">
+              <span>Abmelden</span>
+              <button class="secondary copy-btn danger" type="button" onclick="logout()">Abmelden</button>
+            </div>
+          </section>
+          <div id="install-card" class="card install-card hidden">
+            <p class="card-title">App installieren</p>
+            <p>Als Progressive Web App — kein App Store nötig.</p>
+            <button class="primary" id="install-btn" onclick="installApp()">Zum Home-Bildschirm hinzufügen</button>
+            <p id="ios-hint" class="ios-hint hidden" style="margin-top:0.75rem">
+              iPhone: <strong>Teilen</strong> → <strong>Zum Home-Bildschirm</strong>
+            </p>
+          </div>
+        </section>
+      </main>
     </div>
 
-    <footer class="site-footer">
-      <p>VANTAGE Earn · Transparente Auszahlungen · Sichere Verarbeitung</p>
-      <p><a href="/health">Systemstatus</a></p>
-    </footer>
+    <nav class="bottom-nav" aria-label="Mobile Navigation">
+      <button type="button" class="nav-item active" data-nav="dashboard" onclick="navigateToView('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="earn" onclick="navigateToView('earn')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span class="nav-label">Earn</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="wallet" onclick="navigateToView('wallet')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15v-7"/></svg>
+        <span class="nav-label">Wallet</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="rewards" onclick="navigateToView('rewards')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <span class="nav-label">Rewards</span>
+      </button>
+      <button type="button" class="nav-item" data-nav="profile" onclick="navigateToView('profile')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span class="nav-label">Profil</span>
+      </button>
+    </nav>
+
+    <button class="primary success-btn fab-watch" id="fab-watch" type="button" onclick="startWatch()">Video ansehen</button>
+    <div id="log" aria-hidden="true"></div>
   </div>
 
   <div id="ad-overlay" class="ad-overlay" hidden aria-hidden="true">
@@ -995,6 +1386,59 @@
     const REFERRER_BONUS = '0.001';
     const REFEREE_BONUS = '0.001';
     const MIN_WATCH_SECS = 15;
+
+    const VIEW_TITLES = {
+      dashboard: ['Dashboard', 'Übersicht'],
+      earn: ['Verdienen', 'Videos schauen & USDT verdienen'],
+      wallet: ['Wallet', 'Guthaben & Transaktionen'],
+      rewards: ['Belohnungen', 'Boni, Streaks & Rangliste'],
+      referrals: ['Empfehlungen', 'Freunde einladen'],
+      payouts: ['Auszahlungen', 'USDT auszahlen'],
+      analytics: ['Analytics', 'Kennzahlen & Trends'],
+      security: ['Sicherheit', 'Trust & Nutzungsverhalten'],
+      profile: ['Profil', 'Einstellungen & Empfehlungen'],
+    };
+
+    function navigateToView(view) {
+      const v = view || 'dashboard';
+      document.querySelectorAll('.view[data-view]').forEach((el) => {
+        el.classList.toggle('hidden', el.dataset.view !== v);
+      });
+      document.querySelectorAll('[data-nav]').forEach((el) => {
+        el.classList.toggle('active', el.dataset.nav === v);
+      });
+      const titles = VIEW_TITLES[v] || VIEW_TITLES.dashboard;
+      setText('view-title', titles[0]);
+      setText('view-subtitle', titles[1]);
+      if (location.hash !== '#' + v) {
+        history.replaceState(null, '', '#' + v);
+      }
+    }
+
+    async function loadHealthVersion() {
+      try {
+        const res = await fetch(API + '/health', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const ver = data.version || data.git_sha || data.status || 'ok';
+        setText('app-version', 'v' + ver);
+      } catch {
+        setText('app-version', 'v—');
+      }
+    }
+
+    function ledgerItemHtml(e) {
+      const sign = e.kind === 'credit' ? '+' : '−';
+      const cls = e.kind === 'credit' ? 'ledger-credit' : 'ledger-debit';
+      const time = new Date(e.created_at).toLocaleString('de-DE', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      });
+      return `<div class="ledger-item">
+        <div><span class="${cls}">${sign}${e.amount_usdt} USDT</span>
+        <div class="ledger-meta">${time}</div></div>
+        <span class="ledger-meta">${e.balance_after}</span>
+      </div>`;
+    }
 
     function watchDurationSecs() {
       return adConfig.watch_duration_secs ?? MIN_WATCH_SECS;
@@ -1070,8 +1514,15 @@
     function applyWallet(w) {
       if (!w) return;
       animateBalance(String(w.balance_usdt));
-      setText('local-balance', '≈ ' + w.localized_balance + ' ' + w.currency);
+      const localStr = '≈ ' + w.localized_balance + ' ' + w.currency;
+      setText('local-balance', localStr);
+      const walletBal = document.getElementById('wallet-balance');
+      if (walletBal) {
+        walletBal.innerHTML = String(w.balance_usdt) + '<span class="currency-suffix">USDT</span>';
+      }
+      setText('wallet-local', localStr);
       setText('trust', String(w.trust_score));
+      setText('security-trust', String(w.trust_score));
       syncTrustBadge(w.trust_score);
       setText('currency', w.currency);
       window._balance = w.balance_usdt;
@@ -1079,7 +1530,8 @@
     }
 
     async function copyReferralCode() {
-      const code = document.getElementById('ref-code')?.textContent;
+      const code = document.getElementById('ref-code')?.textContent
+        || document.getElementById('profile-ref-code')?.textContent;
       if (!code || code === '—') {
         showError('Erst Account erstellen.');
         return;
@@ -1598,14 +2050,23 @@
 
     function applyQuickStats(s) {
       if (!s) return;
-      setText('watches-today',
-        s.watches_today + ' / ' + (s.watches_today + s.watches_remaining_today));
-      setText('total-watches', String(s.total_watches));
-      setText('streak', s.streak_days + (s.streak_days === 1 ? ' Tag' : ' Tage'));
+      const watchesToday = s.watches_today + ' / ' + (s.watches_today + s.watches_remaining_today);
+      const totalWatches = String(s.total_watches);
+      const streakStr = s.streak_days + (s.streak_days === 1 ? ' Tag' : ' Tage');
+      setText('watches-today', watchesToday);
+      setText('total-watches', totalWatches);
+      setText('streak', streakStr);
+      setText('analytics-watches-today', watchesToday);
+      setText('analytics-total-watches', totalWatches);
+      setText('analytics-streak', streakStr);
+      setText('analytics-referrals', String(s.referral_count || 0));
+      setText('security-streak', streakStr);
+      setText('security-watches-today', watchesToday);
+      setText('security-total-watches', totalWatches);
       const watchBtn = document.getElementById('watch-btn');
       const atLimit = s.watches_remaining_today === 0;
       if (watchBtn) watchBtn.disabled = atLimit;
-      document.querySelectorAll('.watch-btn-lg').forEach((b) => { b.disabled = atLimit; });
+      document.querySelectorAll('.watch-btn-lg, #fab-watch').forEach((b) => { b.disabled = atLimit; });
       renderChallenge(s);
       renderBonuses(s);
       updateStreakWarning(s);
@@ -1741,9 +2202,14 @@
     }
 
     function renderReferralBanner() {
-      const text = document.getElementById('referral-banner-text');
-      text.textContent =
-        'Freund einladen → du +' + REFERRER_BONUS + ' USDT, Freund +' + REFEREE_BONUS + ' USDT';
+      const msg = 'Freund einladen → du +' + REFERRER_BONUS + ' USDT, Freund +' + REFEREE_BONUS + ' USDT';
+      setText('referral-banner-text', msg);
+      const count = stats?.referral_count ?? 0;
+      setText('referral-dashboard-text',
+        count > 0
+          ? count + ' Empfehlung' + (count === 1 ? '' : 'en') + ' — ' + msg
+          : msg);
+      setText('profile-referral-text', msg);
     }
 
     function renderLeaderboard(data) {
@@ -1865,22 +2331,19 @@
 
     function renderLedger(entries) {
       const el = document.getElementById('ledger');
+      const dashEl = document.getElementById('dashboard-ledger');
       if (!entries || entries.length === 0) {
-        el.innerHTML = '<p class="empty">Noch keine Einträge</p>';
+        const empty = '<p class="empty">Noch keine Einträge</p>';
+        if (el) el.innerHTML = empty;
+        if (dashEl) dashEl.innerHTML = empty;
         return;
       }
-      el.innerHTML = entries.map(e => {
-        const sign = e.kind === 'credit' ? '+' : '−';
-        const cls = e.kind === 'credit' ? 'ledger-credit' : 'ledger-debit';
-        const time = new Date(e.created_at).toLocaleString('de-DE', {
-          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-        });
-        return `<div class="ledger-item">
-          <div><span class="${cls}">${sign}${e.amount_usdt} USDT</span>
-          <div class="ledger-meta">${time}</div></div>
-          <span class="ledger-meta">${e.balance_after}</span>
-        </div>`;
-      }).join('');
+      const html = entries.map(ledgerItemHtml).join('');
+      if (el) el.innerHTML = html;
+      if (dashEl) {
+        const snippet = entries.slice(0, 5).map(ledgerItemHtml).join('');
+        dashEl.innerHTML = snippet;
+      }
     }
 
     async function register() {
@@ -1895,6 +2358,7 @@
         document.getElementById('auth-card').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
         setAppChromeVisible(true);
+        navigateToView('dashboard');
         log('Account erstellt: ' + data.user_id.slice(0, 8) + '…');
         await refresh();
       } catch (e) {
@@ -2015,7 +2479,10 @@
         if (wallet) {
           applyWallet(wallet);
         }
-        if (ref) setText('ref-code', ref.referral_code);
+        if (ref) {
+          setText('ref-code', ref.referral_code);
+          setText('profile-ref-code', ref.referral_code);
+        }
 
         if (stats && wallet) {
           updatePayoutProgress(wallet, stats);
@@ -2075,6 +2542,8 @@
     function setWatchButtonsDisabled(disabled) {
       const heroBtn = document.getElementById('watch-btn');
       if (heroBtn) heroBtn.disabled = disabled;
+      const fab = document.getElementById('fab-watch');
+      if (fab) fab.disabled = disabled;
       document.querySelectorAll('.watch-btn-lg').forEach((b) => { b.disabled = disabled; });
     }
 
@@ -2096,6 +2565,7 @@
       document.getElementById('auth-card').classList.remove('hidden');
       setAppChromeVisible(false);
       syncTrustBadge(null);
+      history.replaceState(null, '', location.pathname + location.search);
     }
 
     async function startWatch() {
@@ -2258,6 +2728,18 @@
 
     (async function bootstrapUi() {
       await loadAdConfig();
+      loadHealthVersion();
+
+      const hashView = location.hash.replace('#', '');
+      if (hashView && VIEW_TITLES[hashView]) {
+        navigateToView(hashView);
+      } else {
+        navigateToView('dashboard');
+      }
+      window.addEventListener('hashchange', () => {
+        const v = location.hash.replace('#', '') || 'dashboard';
+        if (VIEW_TITLES[v]) navigateToView(v);
+      });
 
       const params = new URLSearchParams(location.search);
       if (params.has('reset')) {

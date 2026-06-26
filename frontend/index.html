@@ -2066,17 +2066,6 @@
 
     async function apiFetch(path, opts = {}) {
       const url = path.startsWith('http') ? path : API + path;
-      const method = (opts.method || 'GET').toUpperCase();
-      const cacheKey = method + ':' + url + ':' + (opts.body || '');
-      const isGet = method === 'GET';
-
-      if (isGet && !opts.bustCache) {
-        const cached = _fetchCache.get(cacheKey);
-        if (cached && Date.now() - cached.at < 500) return cached.promise;
-        const inflight = _fetchInflight.get(cacheKey);
-        if (inflight) return inflight;
-      }
-
       const maxRetries = 2;
       const backoff = [1000, 2000];
 
@@ -2115,13 +2104,7 @@
         throw new Error('network');
       };
 
-      const promise = run();
-      if (isGet) {
-        _fetchInflight.set(cacheKey, promise);
-        promise.finally(() => _fetchInflight.delete(cacheKey));
-        _fetchCache.set(cacheKey, { at: Date.now(), promise });
-      }
-      return promise;
+      return run();
     }
 
     const VIEW_TITLES = {
@@ -2426,8 +2409,37 @@
       }
     }
 
-    function applyWallet(w) {
-      if (!w) return;
+    function persistWalletSnapshot(w) {
+      if (!w || w.balance_usdt == null) return;
+      try {
+        sessionStorage.setItem('ve_wallet_snapshot', JSON.stringify({
+          balance_usdt: w.balance_usdt,
+          localized_balance: w.localized_balance,
+          currency: w.currency,
+          trust_score: w.trust_score,
+        }));
+      } catch (_) { /* private mode */ }
+    }
+
+    function showWalletSnapshot() {
+      try {
+        const raw = sessionStorage.getItem('ve_wallet_snapshot');
+        if (!raw) return;
+        const snap = JSON.parse(raw);
+        if (snap?.balance_usdt == null) return;
+        applyWallet({
+          balance_usdt: snap.balance_usdt,
+          localized_balance: snap.localized_balance || '0',
+          currency: snap.currency || 'EUR',
+          trust_score: snap.trust_score ?? 50,
+          payout_tier: 'instant',
+        }, { fromSnapshot: true });
+      } catch (_) { /* ignore */ }
+    }
+
+    function applyWallet(w, opts = {}) {
+      if (!w || w.balance_usdt == null) return;
+      if (!opts.fromSnapshot) persistWalletSnapshot(w);
       animateBalance(String(w.balance_usdt));
       const localStr = '≈ ' + w.localized_balance + ' ' + w.currency;
       setText('local-balance', localStr);
@@ -3101,33 +3113,58 @@
 
     async function api(path, opts = {}) {
       const silent = !!opts.silent;
+      const method = (opts.method || 'GET').toUpperCase();
+      const url = path.startsWith('http') ? path : API + path;
+      const cacheKey = method + ':' + url + ':' + (opts.body || '');
+      const isGet = method === 'GET';
+
       if (!navigator.onLine) {
         if (!silent) showError('offline');
         throw new Error('offline');
       }
-      let res;
-      try {
-        res = await apiFetch(path, opts);
-      } catch (err) {
-        if (!silent) showError(err.message || 'network');
-        throw err;
+
+      if (isGet && !opts.bustCache) {
+        const cached = _fetchCache.get(cacheKey);
+        if (cached && Date.now() - cached.at < 500) return cached.data;
+        const inflight = _fetchInflight.get(cacheKey);
+        if (inflight) return inflight;
       }
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data.error || ('Fehler ' + res.status);
-        if (res.status === 401) {
-          if (token) handleAuthFailure();
-        } else if (!silent) {
-          if (res.status === 429) {
-            showError('Zu viele Anfragen — bitte 10 Sekunden warten und erneut versuchen.');
-          } else {
-            showError(msg);
-          }
+
+      const promise = (async () => {
+        let res;
+        try {
+          res = await apiFetch(path, opts);
+        } catch (err) {
+          if (!silent) showError(err.message || 'network');
+          throw err;
         }
-        throw new Error(msg);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data.error || ('Fehler ' + res.status);
+          if (res.status === 401) {
+            if (token) handleAuthFailure();
+          } else if (!silent) {
+            if (res.status === 429) {
+              showError('Zu viele Anfragen — bitte 10 Sekunden warten und erneut versuchen.');
+            } else {
+              showError(msg);
+            }
+          }
+          throw new Error(msg);
+        }
+        if (!silent) document.getElementById('error-banner').classList.add('hidden');
+        return data;
+      })();
+
+      if (isGet && !opts.bustCache) {
+        _fetchInflight.set(cacheKey, promise);
+        promise.finally(() => _fetchInflight.delete(cacheKey));
+        promise.then((data) => {
+          _fetchCache.set(cacheKey, { at: Date.now(), data });
+        }).catch(() => {});
       }
-      if (!silent) document.getElementById('error-banner').classList.add('hidden');
-      return data;
+
+      return promise;
     }
 
     function bonusStatusLabel(status, item) {
@@ -3748,24 +3785,28 @@
       }
       const lastEl = document.getElementById('last-updated');
       if (lastEl) lastEl.textContent = 'Lade Daten…';
+      const bust = !!(opts.bustCache || opts.force);
+      const getOpts = (extra = {}) => ({ ...(bust ? { bustCache: true } : {}), ...extra });
       try {
         const results = await Promise.allSettled([
-          api('/users/me/wallet'),
-          api('/users/me/referral'),
-          api('/users/me/stats'),
-          api('/users/me/ledger'),
-          api('/users/me/analytics/summary', { silent: true }),
+          api('/users/me/wallet', getOpts()),
+          api('/users/me/referral', getOpts()),
+          api('/users/me/stats', getOpts()),
+          api('/users/me/ledger', getOpts()),
+          api('/users/me/analytics/summary', getOpts({ silent: true })),
           fetch(API + '/leaderboard/weekly', { cache: 'no-store' })
             .then((r) => r.json())
             .catch(() => ({ entries: [] })),
         ]);
 
-        const wallet = results[0].status === 'fulfilled' ? results[0].value : null;
+        const walletRaw = results[0].status === 'fulfilled' ? results[0].value : null;
+        const wallet = walletRaw?.balance_usdt != null ? walletRaw : null;
         const ref = results[1].status === 'fulfilled' ? results[1].value : null;
         const statsData = results[2].status === 'fulfilled' ? results[2].value : null;
         const ledger = results[3].status === 'fulfilled' ? results[3].value : [];
         const analyticsData = results[4].status === 'fulfilled' ? results[4].value : null;
         const leaderboard = results[5].status === 'fulfilled' ? results[5].value : { entries: [] };
+        let resolvedWallet = wallet;
 
         window.__ve_debug.lastRefresh = {
           at: new Date().toISOString(),
@@ -3812,29 +3853,29 @@
               const suffix = time ? ' — ' + time : '';
               return `<option value="${m}">${label}${suffix}</option>`;
             }).join('');
-            methodSelect.onchange = () => renderPayoutTiming(stats, wallet);
+            methodSelect.onchange = () => renderPayoutTiming(stats, resolvedWallet);
           }
         }
 
         renderLeaderboard(leaderboard);
 
-        if (wallet) {
+        if (resolvedWallet) {
           const watchWallet = window.__ve_debug?.lastWatchResponse?.wallet;
           const watchAt = window.__ve_debug?.lastWatchResponse?._appliedAt;
           if (watchWallet && watchAt && Date.now() - watchAt < 15000) {
-            wallet = fresherWallet(wallet, watchWallet);
+            resolvedWallet = fresherWallet(resolvedWallet, watchWallet);
           }
-          applyWallet(wallet);
+          applyWallet(resolvedWallet);
         }
         if (ref) {
           setText('ref-code', ref.referral_code);
           setText('profile-ref-code', ref.referral_code);
         }
 
-        if (stats && wallet) {
-          updatePayoutProgress(wallet, stats);
-          renderPayoutTiming(stats, wallet);
-          const canPayout = parseFloat(wallet.balance_usdt) >= parseFloat(stats.min_payout_usdt);
+        if (stats && resolvedWallet) {
+          updatePayoutProgress(resolvedWallet, stats);
+          renderPayoutTiming(stats, resolvedWallet);
+          const canPayout = parseFloat(resolvedWallet.balance_usdt) >= parseFloat(stats.min_payout_usdt);
           const payoutBtn = document.getElementById('payout-btn');
           if (payoutBtn) payoutBtn.disabled = !canPayout;
           setText('payout-threshold-hint', canPayout
@@ -3910,6 +3951,7 @@
     function logout() {
       token = null;
       localStorage.removeItem('ve_token');
+      try { sessionStorage.removeItem('ve_wallet_snapshot'); } catch (_) {}
       watchActive = false;
       AdPlayer.cancel();
       hideAdOverlay();
@@ -4138,14 +4180,15 @@
             btn.title = 'Benachrichtigungen aktiv';
           }
         }
+        showWalletSnapshot();
         try {
-          await api('/users/me/stats');
-          await refresh();
+          invalidateUserDataCache();
+          await refresh({ bustCache: true, quiet: true });
         } catch (e) {
           if (isAuthError(e)) {
             handleAuthFailure();
           } else {
-            refresh().catch((err) => {
+            refresh({ bustCache: true }).catch((err) => {
               if (!isAuthError(err)) showError(err.message || 'Laden fehlgeschlagen');
             });
           }

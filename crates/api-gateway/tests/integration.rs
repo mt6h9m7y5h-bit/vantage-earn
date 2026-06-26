@@ -465,6 +465,7 @@ async fn watch_complete_credits_wallet() {
     }));
 
     let wallet = app
+        .clone()
         .oneshot(authed("GET", "/users/me/wallet", &token, None))
         .await
         .unwrap();
@@ -472,6 +473,56 @@ async fn watch_complete_credits_wallet() {
     let wallet_json = body_json(wallet).await;
     assert_eq!(wallet_json["balance_usdt"], json["reward_usdt"]);
     assert!(wallet_json["trust_score"].as_i64().unwrap() > 0);
+
+    // Simulate full page reload: fresh GET wallet + stats must still reflect credited balance.
+    let stats = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/stats", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(stats.status(), StatusCode::OK);
+    let stats_json = body_json(stats).await;
+    assert_eq!(stats_json["watches_today"], 1);
+    assert_eq!(stats_json["total_watches"], 1);
+
+    let wallet_reload = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/wallet", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(wallet_reload.status(), StatusCode::OK);
+    let reload_json = body_json(wallet_reload).await;
+    assert_eq!(reload_json["balance_usdt"], json["reward_usdt"]);
+    assert!(
+        reload_json["balance_usdt"].as_str().unwrap() != "0",
+        "wallet balance must persist after reload-style GET"
+    );
+}
+
+#[tokio::test]
+async fn wallet_and_auth_responses_are_not_cacheable() {
+    let app = Router::new()
+        .merge(routes::router())
+        .layer(axum::middleware::from_fn(
+            api_gateway::middleware::security_headers_middleware,
+        ))
+        .with_state(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let wallet = app
+        .oneshot(authed("GET", "/users/me/wallet", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(wallet.status(), StatusCode::OK);
+    let cache_control = wallet
+        .headers()
+        .get("cache-control")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        cache_control.contains("no-store"),
+        "wallet must not be cached by intermediaries: {cache_control}"
+    );
 }
 
 #[tokio::test]

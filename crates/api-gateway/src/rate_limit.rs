@@ -69,6 +69,24 @@ impl RateLimiter {
     }
 }
 
+/// Paths that bypass rate limiting (PWA shells, health probes, admin polling, public banners).
+pub(crate) fn is_exempt(path: &str) -> bool {
+    matches!(
+        path,
+        "/"
+            | "/demo"
+            | "/admin"
+            | "/health"
+            | "/config"
+            | "/announcements/active"
+            | "/sw.js"
+            | "/manifest.webmanifest"
+    ) || path.starts_with("/icons/")
+        || path.starts_with("/admin/")
+        || path.starts_with("/announcements/")
+        || (!release_info::is_production() && path.starts_with("/dev/"))
+}
+
 fn client_key(request: &Request<axum::body::Body>) -> String {
     request
         .extensions()
@@ -82,23 +100,7 @@ pub async fn middleware(
     request: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    let path = request.uri().path();
-    // PWA shell + static assets: never rate-limit (dev reloads /demo often).
-    // Admin API: dashboard polls /admin/live every 8s plus stats/health — must not 429.
-    // Dev routes: seed-demo / reset in local development only.
-    if matches!(
-        path,
-        "/"
-            | "/demo"
-            | "/admin"
-            | "/health"
-            | "/config"
-            | "/sw.js"
-            | "/manifest.webmanifest"
-    ) || path.starts_with("/icons/")
-        || path.starts_with("/admin/")
-        || (!release_info::is_production() && path.starts_with("/dev/"))
-    {
+    if is_exempt(request.uri().path()) {
         return next.run(request).await;
     }
 
@@ -106,4 +108,52 @@ pub async fn middleware(
         return ApiError(shared::AppError::RateLimited).into_response();
     }
     next.run(request).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exempt_pwa_and_health_paths() {
+        for path in [
+            "/",
+            "/demo",
+            "/admin",
+            "/health",
+            "/config",
+            "/announcements/active",
+            "/sw.js",
+            "/manifest.webmanifest",
+            "/icons/icon-192.png",
+        ] {
+            assert!(is_exempt(path), "{path} should be exempt");
+        }
+    }
+
+    #[test]
+    fn exempt_admin_api_paths() {
+        for path in [
+            "/admin/live",
+            "/admin/stats",
+            "/admin/health",
+            "/admin/users?limit=10",
+            "/admin/search?q=test",
+            "/admin/announcements",
+        ] {
+            assert!(is_exempt(path), "{path} should be exempt");
+        }
+    }
+
+    #[test]
+    fn exempt_announcements_prefix() {
+        assert!(is_exempt("/announcements/active"));
+    }
+
+    #[test]
+    fn auth_paths_are_rate_limited() {
+        assert!(!is_exempt("/auth/register"));
+        assert!(!is_exempt("/auth/login"));
+        assert!(!is_exempt("/leaderboard/weekly"));
+    }
 }

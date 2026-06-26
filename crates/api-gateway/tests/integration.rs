@@ -689,6 +689,49 @@ async fn admin_stats_requires_secret() {
     assert!(json["recent_payout_count"].as_i64().unwrap() >= 0);
 }
 
+#[tokio::test]
+async fn admin_api_paths_are_not_rate_limited() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    std::env::set_var("AUTH_RATE_LIMIT_MAX", "3");
+    let app = app(AppState::new());
+
+    for _ in 0..25 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/admin/stats")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(
+            response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "admin/stats must bypass auth rate limit"
+        );
+    }
+
+    for _ in 0..25 {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/admin/live")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(
+            response.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "admin/live must bypass auth rate limit"
+        );
+    }
+}
+
 fn admin_req(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
     let builder = Request::builder()
         .method(method)

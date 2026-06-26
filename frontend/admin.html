@@ -1105,6 +1105,9 @@
       'Secret falsch oder ADMIN_SECRET nicht auf dem Server gesetzt. Auf Render: Umgebungsvariable ADMIN_SECRET im Dashboard setzen.';
 
     function formatAuthError(status, serverError) {
+      if (status === 429) {
+        return 'Zu viele Anfragen — bitte kurz warten und erneut versuchen.';
+      }
       if (status === 401 || status === 503) return AUTH_ERROR_DE;
       return serverError || `Fehler ${status}`;
     }

@@ -1084,3 +1084,115 @@ async fn admin_bulk_credit_preview_and_execute() {
                 && e["details"]["user_count"] == 2
         }));
 }
+
+#[tokio::test]
+async fn admin_search_live_notes_timeline_export() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (user_id, _) = register(&app).await;
+
+    let search = app
+        .clone()
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/search?q={user_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(search.status(), StatusCode::OK);
+    let search_json = body_json(search).await;
+    assert!(!search_json["users"].as_array().unwrap().is_empty());
+
+    let live = app
+        .clone()
+        .oneshot(admin_req("GET", "/admin/live", None))
+        .await
+        .unwrap();
+    assert_eq!(live.status(), StatusCode::OK);
+    let live_json = body_json(live).await;
+    assert!(live_json["pending_payouts"].is_number());
+
+    let detail = app
+        .clone()
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/users/{user_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    let detail_json = body_json(detail).await;
+    assert!(detail_json["risk_level"].is_string());
+    assert!(detail_json["total_earnings_usdt"].is_string());
+
+    let note = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/users/{user_id}/notes"),
+            Some(r#"{"note":"Test-Notiz","created_by":"qa"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(note.status(), StatusCode::OK);
+
+    let notes = app
+        .clone()
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/users/{user_id}/notes"),
+            None,
+        ))
+        .await
+        .unwrap();
+    let notes_json = body_json(notes).await;
+    assert_eq!(notes_json["notes"].as_array().unwrap().len(), 1);
+
+    let timeline = app
+        .clone()
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/users/{user_id}/timeline"),
+            None,
+        ))
+        .await
+        .unwrap();
+    let timeline_json = body_json(timeline).await;
+    assert!(!timeline_json["events"].as_array().unwrap().is_empty());
+
+    let users_list = app
+        .clone()
+        .oneshot(admin_req("GET", "/admin/users?limit=10", None))
+        .await
+        .unwrap();
+    assert_eq!(users_list.status(), StatusCode::OK);
+
+    let export = app
+        .clone()
+        .oneshot(admin_req("GET", "/admin/export/users?format=json&limit=5", None))
+        .await
+        .unwrap();
+    assert_eq!(export.status(), StatusCode::OK);
+
+    let flags = app
+        .oneshot(admin_req("GET", "/admin/feature-flags", None))
+        .await
+        .unwrap();
+    let flags_json = body_json(flags).await;
+    assert!(flags_json["flags"].as_array().unwrap().len() >= 4);
+}
+
+#[tokio::test]
+async fn admin_stats_includes_premium_kpis() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let response = app
+        .oneshot(admin_req("GET", "/admin/stats", None))
+        .await
+        .unwrap();
+    let json = body_json(response).await;
+    assert!(json["pending_withdrawal_count"].is_number());
+    assert!(json["approved_payouts_today"].is_number());
+    assert!(json["pending_sparkline"].is_array());
+}

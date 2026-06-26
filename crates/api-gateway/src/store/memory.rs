@@ -11,7 +11,12 @@ use wallet_engine::{LedgerKind, WalletEngine};
 
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::{AdminAuditEntry, AdminDailyMetric, BulkUserFilter, LedgerItem, PayoutListFilter, PayoutRequestRow};
+use crate::store::{
+    AdminAuditEntry, AdminDailyMetric, AdminExportUserRow, AdminLiveSnapshot, AdminSearchAuditHit,
+    AdminSearchPayoutHit, AdminSearchReferralHit, AdminSearchResponse, AdminSearchUserHit,
+    AdminTimelineEvent, AdminUserListRow, AdminUserNote, BulkUserFilter, LedgerItem, PayoutListFilter,
+    PayoutRequestRow,
+};
 
 #[derive(Clone)]
 pub struct MemoryStore {
@@ -25,6 +30,8 @@ pub struct MemoryStore {
     revenue_events: Arc<RwLock<Vec<(DateTime<Utc>, Decimal)>>>,
     audit_log: Arc<RwLock<Vec<AdminAuditEntry>>>,
     feature_flags: Arc<RwLock<HashMap<String, serde_json::Value>>>,
+    feature_flag_times: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+    admin_notes: Arc<RwLock<Vec<AdminUserNote>>>,
 }
 
 #[derive(Clone)]
@@ -52,6 +59,8 @@ impl MemoryStore {
             revenue_events: Arc::new(RwLock::new(Vec::new())),
             audit_log: Arc::new(RwLock::new(Vec::new())),
             feature_flags: Arc::new(RwLock::new(HashMap::new())),
+            feature_flag_times: Arc::new(RwLock::new(HashMap::new())),
+            admin_notes: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -492,6 +501,10 @@ impl MemoryStore {
             .write()
             .await
             .insert(key.to_string(), value);
+        self.feature_flag_times
+            .write()
+            .await
+            .insert(key.to_string(), Utc::now());
         Ok(())
     }
 
@@ -524,6 +537,350 @@ impl MemoryStore {
         ids.sort();
         ids.truncate(limit as usize);
         Ok(ids)
+    }
+
+    pub async fn admin_list_users(&self, limit: u32) -> AppResult<Vec<AdminUserListRow>> {
+        let users = self.users.read().await;
+        let scores = self.trust_scores.read().await;
+        let mut rows = Vec::new();
+        for (user_id, profile) in users.iter() {
+            let balance = self.wallet.balance(*user_id).await?;
+            rows.push(AdminUserListRow {
+                user_id: *user_id,
+                referral_code: ReferralEngine::code_for_user(*user_id),
+                balance_usdt: balance,
+                trust_score: *scores.get(user_id).unwrap_or(&50),
+                banned: profile.banned,
+                created_at: profile.created_at,
+                total_watches: profile.total_watches,
+                referral_count: profile.referral_count,
+            });
+        }
+        rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        rows.truncate(limit as usize);
+        Ok(rows)
+    }
+
+    pub async fn admin_global_search(&self, query: &str, limit: u32) -> AppResult<AdminSearchResponse> {
+        let q = query.trim();
+        let pattern = format!("%{}%", q);
+        let limit = limit.clamp(1, 50) as usize;
+        let mut users = Vec::new();
+        let mut payouts = Vec::new();
+        let mut audit = Vec::new();
+        let mut referrals = Vec::new();
+
+        if !q.is_empty() {
+            for id in self.search_users(q).await? {
+                users.push(AdminSearchUserHit {
+                    user_id: id,
+                    referral_code: ReferralEngine::code_for_user(id),
+                    label: format!("Nutzer {}", id),
+                });
+            }
+
+            let requests = self.payout_requests.read().await;
+            for p in requests.iter() {
+                let hay = format!("{} {} {}", p.id, p.user_id, p.amount_usdt);
+                if hay.to_lowercase().contains(&q.to_lowercase())
+                    || p.id.to_string().to_lowercase().contains(&q.to_lowercase())
+                {
+                    payouts.push(AdminSearchPayoutHit {
+                        payout_id: p.id,
+                        user_id: p.user_id,
+                        amount_usdt: p.amount_usdt,
+                        status: p.status.clone(),
+                        label: format!("Auszahlung {} — {}", p.amount_usdt, p.status),
+                    });
+                }
+            }
+
+            let log = self.audit_log.read().await;
+            for e in log.iter().rev() {
+                let hay = format!("{} {:?} {}", e.action, e.user_id, e.details);
+                if hay.to_lowercase().contains(&q.to_lowercase()) {
+                    audit.push(AdminSearchAuditHit {
+                        audit_id: e.id,
+                        action: e.action.clone(),
+                        user_id: e.user_id,
+                        label: format!("Audit: {}", e.action),
+                    });
+                }
+            }
+
+            if q.len() >= 3 {
+                let all_users = self.users.read().await;
+                for (id, _) in all_users.iter() {
+                    let code = ReferralEngine::code_for_user(*id);
+                    if code.to_lowercase().contains(&q.to_lowercase()) {
+                        referrals.push(AdminSearchReferralHit {
+                            user_id: *id,
+                            referral_code: code.clone(),
+                            label: format!("Referral {}", code),
+                        });
+                    }
+                }
+            }
+        }
+
+        users.truncate(limit);
+        payouts.truncate(limit);
+        audit.truncate(limit);
+        referrals.truncate(limit);
+        let _ = pattern;
+        Ok(AdminSearchResponse {
+            users,
+            payouts,
+            audit,
+            referrals,
+        })
+    }
+
+    pub async fn admin_user_notes(&self, user_id: Uuid) -> AppResult<Vec<AdminUserNote>> {
+        let notes = self.admin_notes.read().await;
+        let mut rows: Vec<AdminUserNote> = notes
+            .iter()
+            .filter(|n| n.user_id == user_id)
+            .cloned()
+            .collect();
+        rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(rows)
+    }
+
+    pub async fn admin_add_user_note(
+        &self,
+        user_id: Uuid,
+        note: &str,
+        created_by: &str,
+    ) -> AppResult<AdminUserNote> {
+        let entry = AdminUserNote {
+            id: Uuid::new_v4(),
+            user_id,
+            admin_note: note.to_string(),
+            created_at: Utc::now(),
+            created_by: created_by.to_string(),
+        };
+        self.admin_notes.write().await.push(entry.clone());
+        Ok(entry)
+    }
+
+    pub async fn admin_user_timeline(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<AdminTimelineEvent>> {
+        let mut events = Vec::new();
+        if let Ok(profile) = self.profile(user_id).await {
+            events.push(AdminTimelineEvent {
+                kind: "registration".into(),
+                title: "Registrierung".into(),
+                details: serde_json::json!({ "locale": profile.locale }),
+                occurred_at: profile.created_at,
+            });
+        }
+
+        let ledger = self.ledger(user_id).await?;
+        for item in ledger {
+            let title = if item.kind == "credit" {
+                "Gutschrift"
+            } else {
+                "Abbuchung"
+            };
+            events.push(AdminTimelineEvent {
+                kind: format!("ledger_{}", item.kind),
+                title: title.into(),
+                details: serde_json::json!({
+                    "amount_usdt": item.amount_usdt,
+                    "balance_after": item.balance_after,
+                }),
+                occurred_at: item.created_at,
+            });
+        }
+
+        let requests = self.payout_requests.read().await;
+        for p in requests.iter().filter(|p| p.user_id == user_id) {
+            events.push(AdminTimelineEvent {
+                kind: "payout".into(),
+                title: format!("Auszahlung ({})", p.status),
+                details: serde_json::json!({
+                    "payout_id": p.id,
+                    "amount_usdt": p.amount_usdt,
+                    "status": p.status,
+                    "method": p.payout_method,
+                }),
+                occurred_at: p.created_at,
+            });
+        }
+
+        let log = self.audit_log.read().await;
+        for e in log.iter().filter(|e| e.user_id == Some(user_id)) {
+            events.push(AdminTimelineEvent {
+                kind: "audit".into(),
+                title: e.action.clone(),
+                details: e.details.clone(),
+                occurred_at: e.created_at,
+            });
+        }
+
+        events.sort_by(|a, b| b.occurred_at.cmp(&a.occurred_at));
+        events.truncate(limit as usize);
+        Ok(events)
+    }
+
+    pub async fn admin_live_snapshot(&self, since: DateTime<Utc>) -> AppResult<AdminLiveSnapshot> {
+        let pending = self
+            .payout_requests
+            .read()
+            .await
+            .iter()
+            .filter(|p| {
+                p.status == "pending_validation" || p.status == "pending_fraud_review"
+            })
+            .count() as i64;
+        let users = self.users.read().await;
+        let new_users = users
+            .values()
+            .filter(|p| p.created_at >= since)
+            .count() as i64;
+        let audit_count = self
+            .audit_log
+            .read()
+            .await
+            .iter()
+            .filter(|e| e.created_at >= since)
+            .count() as i64;
+        Ok(AdminLiveSnapshot {
+            pending_payouts: pending,
+            new_users_since: new_users,
+            recent_audit_count: audit_count,
+        })
+    }
+
+    pub async fn admin_export_users(&self, limit: u32) -> AppResult<Vec<AdminExportUserRow>> {
+        let rows = self.admin_list_users(limit).await?;
+        let users = self.users.read().await;
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let locale = users
+                    .get(&r.user_id)
+                    .map(|p| p.locale.clone())
+                    .unwrap_or_else(|| "en_US".into());
+                AdminExportUserRow {
+                    user_id: r.user_id,
+                    referral_code: r.referral_code,
+                    balance_usdt: r.balance_usdt,
+                    trust_score: r.trust_score,
+                    banned: r.banned,
+                    created_at: r.created_at,
+                    total_watches: r.total_watches,
+                    referral_count: r.referral_count,
+                    locale,
+                }
+            })
+            .collect())
+    }
+
+    pub async fn admin_export_audit(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        self.admin_audit_log(limit).await
+    }
+
+    pub async fn admin_export_payouts(&self, limit: u32) -> AppResult<Vec<PayoutRequestRow>> {
+        self.list_payout_requests(PayoutListFilter::All, limit).await
+    }
+
+    pub async fn payout_actions_today(&self, day: NaiveDate) -> AppResult<(i64, i64)> {
+        let requests = self.payout_requests.read().await;
+        let approved = requests
+            .iter()
+            .filter(|p| {
+                p.created_at.date_naive() == day
+                    && (p.status == "approved" || p.status == "paid_out")
+            })
+            .count() as i64;
+        let rejected = requests
+            .iter()
+            .filter(|p| p.created_at.date_naive() == day && p.status == "rejected")
+            .count() as i64;
+        Ok((approved, rejected))
+    }
+
+    pub async fn registrations_on(&self, day: NaiveDate) -> AppResult<i64> {
+        let users = self.users.read().await;
+        Ok(users
+            .values()
+            .filter(|p| p.created_at.date_naive() == day)
+            .count() as i64)
+    }
+
+    pub async fn rewards_on(&self, day: NaiveDate) -> AppResult<Decimal> {
+        let ledger = self.wallet.all_ledger().await;
+        Ok(ledger
+            .iter()
+            .filter(|e| e.kind == LedgerKind::Credit && e.created_at.date_naive() == day)
+            .map(|e| e.amount_usdt)
+            .sum())
+    }
+
+    pub async fn active_users_on(&self, day: NaiveDate) -> AppResult<i64> {
+        let users = self.users.read().await;
+        Ok(users
+            .values()
+            .filter(|p| p.last_active_date == Some(day))
+            .count() as i64)
+    }
+
+    pub async fn user_payouts(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<PayoutRequestRow>> {
+        let requests = self.payout_requests.read().await;
+        let mut rows: Vec<PayoutRequestRow> = requests
+            .iter()
+            .filter(|p| p.user_id == user_id)
+            .map(|p| PayoutRequestRow {
+                id: p.id,
+                user_id: p.user_id,
+                amount_usdt: p.amount_usdt,
+                tier: p.tier.clone(),
+                status: p.status.clone(),
+                payout_method: p.payout_method.clone(),
+                created_at: p.created_at,
+            })
+            .collect();
+        rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        rows.truncate(limit as usize);
+        Ok(rows)
+    }
+
+    pub async fn user_total_earnings(&self, user_id: Uuid) -> AppResult<Decimal> {
+        let ledger = self.ledger(user_id).await?;
+        Ok(ledger
+            .iter()
+            .filter(|e| e.kind == "credit")
+            .map(|e| e.amount_usdt)
+            .sum())
+    }
+
+    pub async fn user_last_activity(&self, user_id: Uuid) -> AppResult<Option<DateTime<Utc>>> {
+        let mut latest = None;
+        let ledger = self.ledger(user_id).await?;
+        for e in ledger {
+            latest = Some(latest.map_or(e.created_at, |l: DateTime<Utc>| l.max(e.created_at)));
+        }
+        if let Ok(profile) = self.profile(user_id).await {
+            if let Some(day) = profile.last_active_date {
+                let dt = day.and_hms_opt(12, 0, 0).unwrap().and_utc();
+                latest = Some(latest.map_or(dt, |l| l.max(dt)));
+            }
+        }
+        Ok(latest)
+    }
+
+    pub async fn feature_flag_timestamps(&self) -> AppResult<HashMap<String, DateTime<Utc>>> {
+        Ok(self.feature_flag_times.read().await.clone())
+    }
+
+    pub async fn latest_feature_flags_audit(&self) -> AppResult<Option<(DateTime<Utc>, serde_json::Value)>> {
+        let log = self.audit_log.read().await;
+        Ok(log
+            .iter()
+            .rev()
+            .find(|e| e.action == "feature_flags_update")
+            .map(|e| (e.created_at, e.details.clone())))
     }
 }
 

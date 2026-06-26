@@ -247,6 +247,90 @@
     .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
     #login-gate { max-width: 400px; margin: 4rem auto; text-align: center; }
     #app.hidden { display: none; }
+    .header-main { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; flex: 1; min-width: 280px; }
+    .global-search-wrap { position: relative; flex: 1; min-width: 220px; max-width: 420px; }
+  .global-search-wrap input { width: 100%; }
+    .search-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      max-height: 320px; overflow-y: auto; z-index: 50; box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    }
+    .search-group { padding: 0.5rem 0.75rem 0.25rem; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .search-item {
+      display: block; width: 100%; text-align: left; background: transparent; color: var(--text);
+      border: none; padding: 0.55rem 0.85rem; font-weight: 500; border-radius: 8px; margin: 0 0.35rem 0.2rem;
+    }
+    .search-item:hover, .search-item.active { background: var(--accent-dim); color: var(--accent); }
+    .live-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .live-badge {
+      font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 999px;
+      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+    }
+    .live-badge strong { color: var(--accent); }
+    .kpi .trend { font-size: 0.72rem; margin-top: 0.2rem; }
+    .kpi .trend.up { color: var(--accent); }
+    .kpi .trend.down { color: var(--danger); }
+    .kpi .spark { display: block; margin-top: 0.35rem; opacity: 0.85; }
+    .table-wrap { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+    .table-wrap thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+    .table-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem; }
+    .table-toolbar input, .table-toolbar select { width: auto; min-width: 140px; }
+    .pagination { display: flex; gap: 0.35rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+    .pagination button { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, #162033 50%, var(--surface) 75%);
+      background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 8px; min-height: 1rem;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .drawer-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+    }
+    .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+    .user-drawer {
+      position: fixed; top: 0; right: 0; height: 100%; width: min(480px, 100vw);
+      background: var(--card); border-left: 1px solid var(--border); z-index: 210;
+      transform: translateX(100%); transition: transform 0.28s ease;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .user-drawer.open { transform: translateX(0); }
+    .drawer-head { padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; }
+    .drawer-body { padding: 1rem 1.1rem; overflow-y: auto; flex: 1; }
+    .drawer-tabs { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.85rem; }
+    .drawer-tab {
+      background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+      padding: 0.4rem 0.7rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500;
+    }
+    .drawer-tab.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(0,212,170,0.25); }
+    .drawer-pane { display: none; }
+    .drawer-pane.active { display: block; }
+    .risk-low { color: var(--accent); }
+    .risk-medium { color: var(--warn); }
+    .risk-high, .risk-critical { color: var(--danger); }
+    .cmd-palette {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      width: 100%; max-width: 520px; max-height: 70vh; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .cmd-input { border: none; border-bottom: 1px solid var(--border); border-radius: 0; }
+    .cmd-list { overflow-y: auto; padding: 0.35rem; }
+    .cmd-item {
+      display: flex; justify-content: space-between; width: 100%; text-align: left;
+      background: transparent; color: var(--text); border: none; padding: 0.6rem 0.75rem;
+      border-radius: 8px; font-weight: 500;
+    }
+    .cmd-item:hover, .cmd-item.active { background: var(--accent-dim); color: var(--accent); }
+    .cmd-item kbd { font-size: 0.72rem; color: var(--muted); font-weight: 500; }
+    .row-actions-menu { position: relative; display: inline-block; }
+    .row-actions-pop {
+      position: absolute; right: 0; top: 100%; min-width: 160px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 10px; padding: 0.35rem; z-index: 20;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .row-actions-pop button {
+      display: block; width: 100%; text-align: left; background: transparent; color: var(--text);
+      border: none; padding: 0.45rem 0.6rem; font-size: 0.82rem; border-radius: 6px;
+    }
+    .row-actions-pop button:hover { background: var(--surface); }
     @media (max-width: 640px) {
       .action-form .row, .action-form .row-2 { grid-template-columns: 1fr; }
     }
@@ -268,7 +352,19 @@
   <div id="app" class="shell hidden">
     <header>
       <h1>Admin <span>Control Center</span></h1>
+      <div class="header-main">
+        <div class="global-search-wrap">
+          <input id="global-search" type="search" placeholder="Globale Suche (UUID, Referral, Auszahlung…)" autocomplete="off" />
+          <div id="search-dropdown" class="search-dropdown hidden"></div>
+        </div>
+        <div class="live-badges" id="live-badges" title="Live-Updates alle 8s (Polling statt SSE — siehe README)">
+          <span class="live-badge">Offen: <strong id="live-pending">—</strong></span>
+          <span class="live-badge">Neu: <strong id="live-users">—</strong></span>
+          <span class="live-badge">Audit: <strong id="live-audit">—</strong></span>
+        </div>
+      </div>
       <div class="auth-bar">
+        <button class="btn-ghost" onclick="openCommandPalette()" title="Befehle (⌘K)">⌘K</button>
         <input id="secret-inline" type="password" placeholder="ADMIN_SECRET" autocomplete="off" />
         <button class="btn-ghost" onclick="saveSecret()">Speichern</button>
       </div>
@@ -294,10 +390,12 @@
           <div class="kpi"><div class="label">Umsatz 7 Tage</div><div class="value" id="kpi-rev7">—</div></div>
           <div class="kpi"><div class="label">Umsatz 30 Tage</div><div class="value" id="kpi-rev30">—</div></div>
           <div class="kpi"><div class="label">Nutzer gesamt</div><div class="value" id="kpi-users">—</div></div>
-          <div class="kpi"><div class="label">Aktiv heute</div><div class="value" id="kpi-active">—</div></div>
-          <div class="kpi"><div class="label">Registrierungen heute</div><div class="value" id="kpi-reg">—</div></div>
+          <div class="kpi"><div class="label">Aktiv heute</div><div class="value" id="kpi-active">—</div><div class="trend" id="kpi-active-trend"></div><svg class="spark" id="spark-active" width="100%" height="24" viewBox="0 0 80 24"></svg></div>
+          <div class="kpi"><div class="label">Registrierungen heute</div><div class="value" id="kpi-reg">—</div><div class="trend" id="kpi-reg-trend"></div></div>
           <div class="kpi"><div class="label">Videos heute</div><div class="value" id="kpi-videos">—</div></div>
-          <div class="kpi"><div class="label">Rewards heute</div><div class="value" id="kpi-rewards">—</div></div>
+          <div class="kpi"><div class="label">Rewards heute</div><div class="value" id="kpi-rewards">—</div><div class="trend" id="kpi-rewards-trend"></div></div>
+          <div class="kpi"><div class="label">Freigegeben heute</div><div class="value" id="kpi-approved-today">—</div></div>
+          <div class="kpi"><div class="label">Abgelehnt heute</div><div class="value" id="kpi-rejected-today">—</div></div>
           <div class="kpi"><div class="label">Ø Trust-Score</div><div class="value" id="kpi-trust">—</div></div>
           <div class="kpi"><div class="label">Ausstehende Auszahlungen</div><div class="value" id="kpi-pending">—</div></div>
           <div class="kpi"><div class="label">Zurückgehalten</div><div class="value" id="kpi-held">—</div></div>
@@ -326,42 +424,65 @@
     <section id="panel-payouts" class="panel">
       <div class="card">
         <h2>Auszahlungs-Warteschlange</h2>
-        <div class="filter-row">
-          <select id="payout-status" onchange="loadPayouts()">
+        <div class="table-toolbar">
+          <select id="payout-status" onchange="payoutsTable.resetPage(); loadPayouts()">
             <option value="pending">Offen (Prüfung)</option>
             <option value="approved">Freigegeben</option>
             <option value="rejected">Abgelehnt</option>
             <option value="all">Alle</option>
           </select>
+          <input id="payouts-filter" type="text" placeholder="Filter…" oninput="payoutsTable.applyFilter(this.value)" />
+          <button class="btn-ghost" onclick="exportCsv('payouts')">CSV Export</button>
           <button class="btn-ghost" onclick="loadPayouts()">Aktualisieren</button>
         </div>
-        <div style="overflow-x:auto">
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Datum</th>
-                <th>Nutzer</th>
-                <th>Betrag</th>
+                <th data-sort="created_at" onclick="payoutsTable.sort('created_at')">Datum</th>
+                <th data-sort="user_id" onclick="payoutsTable.sort('user_id')">Nutzer</th>
+                <th data-sort="amount_usdt" onclick="payoutsTable.sort('amount_usdt')">Betrag</th>
                 <th>Methode</th>
-                <th>Status</th>
+                <th data-sort="status" onclick="payoutsTable.sort('status')">Status</th>
                 <th>Aktionen</th>
               </tr>
             </thead>
             <tbody id="payouts-body"></tbody>
           </table>
         </div>
+        <div class="pagination" id="payouts-pagination"></div>
         <p id="payouts-empty" class="muted hidden">Keine Auszahlungen in dieser Ansicht.</p>
       </div>
     </section>
 
     <section id="panel-users" class="panel">
       <div class="card">
-        <h2>Nutzersuche</h2>
-        <div class="search-row">
-          <input id="search-q" type="text" placeholder="UUID, Teil-UUID oder Referral-Code" />
+        <h2>Nutzerverwaltung</h2>
+        <div class="table-toolbar">
+          <input id="search-q" type="text" placeholder="UUID, Referral-Code…" />
           <button class="btn-primary" onclick="searchUsers()">Suchen</button>
+          <input id="users-filter" type="text" placeholder="Tabellenfilter…" oninput="usersTable.applyFilter(this.value)" />
+          <button class="btn-ghost" onclick="exportCsv('users')">CSV Export</button>
+          <button class="btn-ghost" onclick="loadUsersTable()">Aktualisieren</button>
         </div>
         <ul class="user-list" id="user-results"></ul>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-sort="referral_code" onclick="usersTable.sort('referral_code')">Referral</th>
+                <th data-sort="user_id" onclick="usersTable.sort('user_id')">UUID</th>
+                <th data-sort="balance_usdt" onclick="usersTable.sort('balance_usdt')">Guthaben</th>
+                <th data-sort="trust_score" onclick="usersTable.sort('trust_score')">Trust</th>
+                <th data-sort="total_watches" onclick="usersTable.sort('total_watches')">Videos</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="users-pagination"></div>
       </div>
 
       <div id="user-detail" class="card hidden">
@@ -434,7 +555,8 @@
     <section id="panel-settings" class="panel">
       <div class="card">
         <h2>Feature-Flags</h2>
-        <p class="muted" style="margin:0 0 1rem">Laufzeit-Einstellungen ohne Redeploy. DB-Werte überschreiben Umgebungsvariablen.</p>
+        <p class="muted" style="margin:0 0 1rem">Laufzeit-Einstellungen ohne Redeploy. Metadaten aus DB + Audit-Log.</p>
+        <div id="flags-meta" class="muted" style="margin-bottom:0.75rem;font-size:0.82rem"></div>
         <div class="actions">
           <div class="action-form">
             <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem">
@@ -465,13 +587,30 @@
     <section id="panel-audit" class="panel">
       <div class="card">
         <h2>Admin-Audit-Log</h2>
-        <button class="btn-ghost" style="margin-bottom:0.75rem" onclick="loadAudit()">Aktualisieren</button>
-        <div style="overflow-x:auto">
+        <div class="table-toolbar">
+          <select id="audit-action-filter" onchange="auditTable.resetPage(); renderAuditTable()">
+            <option value="">Alle Aktionen</option>
+            <option value="credit">credit</option>
+            <option value="debit">debit</option>
+            <option value="ban">ban</option>
+            <option value="payout_approve">payout_approve</option>
+            <option value="payout_reject">payout_reject</option>
+            <option value="feature_flags_update">feature_flags_update</option>
+            <option value="bulk_credit">bulk_credit</option>
+            <option value="user_note">user_note</option>
+          </select>
+          <input id="audit-date-from" type="date" onchange="auditTable.resetPage(); renderAuditTable()" />
+          <input id="audit-date-to" type="date" onchange="auditTable.resetPage(); renderAuditTable()" />
+          <input id="audit-filter" type="text" placeholder="Textsuche…" oninput="auditTable.applyFilter(this.value)" />
+          <button class="btn-ghost" onclick="exportCsv('audit')">CSV Export</button>
+          <button class="btn-ghost" onclick="loadAudit()">Aktualisieren</button>
+        </div>
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Zeit</th>
-                <th>Aktion</th>
+                <th data-sort="created_at" onclick="auditTable.sort('created_at')">Zeit</th>
+                <th data-sort="action" onclick="auditTable.sort('action')">Aktion</th>
                 <th>Nutzer</th>
                 <th>Details</th>
               </tr>
@@ -479,6 +618,7 @@
             <tbody id="audit-body"></tbody>
           </table>
         </div>
+        <div class="pagination" id="audit-pagination"></div>
       </div>
     </section>
   </div>
@@ -496,12 +636,233 @@
     </div>
   </div>
 
+  <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeUserDrawer()"></div>
+  <aside id="user-drawer" class="user-drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <h3 style="margin:0;font-size:1rem" id="drawer-title">Nutzerprofil</h3>
+        <p class="muted" style="margin:0.25rem 0 0;font-size:0.82rem" id="drawer-subtitle"></p>
+      </div>
+      <button class="btn-ghost" onclick="closeUserDrawer()">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-tabs">
+        <button class="drawer-tab active" data-drawer-tab="overview" onclick="switchDrawerTab('overview')">Übersicht</button>
+        <button class="drawer-tab" data-drawer-tab="ledger" onclick="switchDrawerTab('ledger')">Ledger</button>
+        <button class="drawer-tab" data-drawer-tab="withdrawals" onclick="switchDrawerTab('withdrawals')">Auszahlungen</button>
+        <button class="drawer-tab" data-drawer-tab="referrals" onclick="switchDrawerTab('referrals')">Referrals</button>
+        <button class="drawer-tab" data-drawer-tab="notes" onclick="switchDrawerTab('notes')">Notizen</button>
+        <button class="drawer-tab" data-drawer-tab="timeline" onclick="switchDrawerTab('timeline')">Timeline</button>
+      </div>
+      <div id="drawer-pane-overview" class="drawer-pane active"></div>
+      <div id="drawer-pane-ledger" class="drawer-pane"></div>
+      <div id="drawer-pane-withdrawals" class="drawer-pane"></div>
+      <div id="drawer-pane-referrals" class="drawer-pane"></div>
+      <div id="drawer-pane-notes" class="drawer-pane"></div>
+      <div id="drawer-pane-timeline" class="drawer-pane"></div>
+    </div>
+  </aside>
+
+  <div id="cmd-modal" class="modal-backdrop hidden" onclick="if(event.target===this)closeCommandPalette()">
+    <div class="cmd-palette" role="dialog" aria-label="Befehlspalette">
+      <input id="cmd-input" class="cmd-input" type="text" placeholder="Befehl suchen…" autocomplete="off" />
+      <div id="cmd-list" class="cmd-list"></div>
+    </div>
+  </div>
+
   <script>
     let selectedUserId = null;
     let selectedUserBanned = false;
     let chartPeriod = 7;
     let analyticsCache = null;
     let rejectPayoutId = null;
+    let livePollTimer = null;
+    let liveSince = new Date().toISOString();
+    let searchDebounce = null;
+    let searchActiveIndex = -1;
+    let cmdActiveIndex = 0;
+    let auditCache = [];
+    let payoutsCache = [];
+    let usersCache = [];
+    let drawerUser = null;
+
+    function trendPct(today, yesterday) {
+      if (yesterday == null || yesterday === 0) return today > 0 ? '+100%' : '—';
+      const pct = ((today - yesterday) / yesterday) * 100;
+      const sign = pct >= 0 ? '+' : '';
+      return `${sign}${pct.toFixed(0)}% vs. gestern`;
+    }
+
+    function setTrend(elId, today, yesterday) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      const text = trendPct(Number(today), Number(yesterday));
+      el.textContent = text;
+      el.className = 'trend ' + (text.startsWith('+') ? 'up' : text.startsWith('-') ? 'down' : '');
+    }
+
+    function renderSparkline(svgId, values) {
+      const svg = document.getElementById(svgId);
+      if (!svg || !values?.length) return;
+      const max = Math.max(...values, 1);
+      const pts = values.map((v, i) => {
+        const x = (i / Math.max(values.length - 1, 1)) * 78 + 1;
+        const y = 22 - (v / max) * 18;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      svg.innerHTML = `<polyline fill="none" stroke="var(--accent)" stroke-width="1.5" points="${pts}"/>`;
+    }
+
+    function createAdminTable({ tbodyId, paginationId, pageSize = 15, rowRenderer, tableRef }) {
+      let rows = [];
+      let filtered = [];
+      let sortKey = null;
+      let sortDir = 1;
+      let page = 0;
+      let textFilter = '';
+
+      function applyFilter(q) {
+        textFilter = (q || '').toLowerCase();
+        page = 0;
+        render();
+      }
+
+      function sort(key) {
+        if (sortKey === key) sortDir *= -1;
+        else { sortKey = key; sortDir = 1; }
+        render();
+      }
+
+      function resetPage() { page = 0; }
+
+      function setData(data) {
+        rows = data || [];
+        page = 0;
+        render();
+      }
+
+      function prevPage() { if (page > 0) { page--; render(); } }
+      function nextPage() {
+        const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+        if (page < pages - 1) { page++; render(); }
+      }
+
+      function render() {
+        filtered = rows.filter(r => JSON.stringify(r).toLowerCase().includes(textFilter));
+        if (sortKey) {
+          filtered.sort((a, b) => {
+            const av = a[sortKey], bv = b[sortKey];
+            if (av == null) return 1;
+            if (bv == null) return -1;
+            if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sortDir;
+            return String(av).localeCompare(String(bv)) * sortDir;
+          });
+        }
+        const start = page * pageSize;
+        const slice = filtered.slice(start, start + pageSize);
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.innerHTML = slice.length
+          ? slice.map(rowRenderer).join('')
+          : '<tr><td colspan="99" class="muted">Keine Einträge</td></tr>';
+        const pag = document.getElementById(paginationId);
+        if (pag) {
+          const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+          pag.innerHTML = `
+            <button class="btn-ghost" data-page-prev ${page <= 0 ? 'disabled' : ''}>←</button>
+            <span class="muted">Seite ${page + 1} / ${pages} (${filtered.length})</span>
+            <button class="btn-ghost" data-page-next ${page >= pages - 1 ? 'disabled' : ''}>→</button>`;
+          pag.querySelector('[data-page-prev]')?.addEventListener('click', prevPage);
+          pag.querySelector('[data-page-next]')?.addEventListener('click', nextPage);
+        }
+      }
+
+      const api = {
+        setData, applyFilter, sort, resetPage, render,
+        prev: prevPage,
+        next: nextPage,
+      };
+      if (tableRef) tableRef.current = api;
+      return api;
+    }
+
+    const payoutsTableRef = { current: null };
+    const usersTableRef = { current: null };
+    const auditTableRef = { current: null };
+
+    const payoutsTable = createAdminTable({
+      tbodyId: 'payouts-body',
+      paginationId: 'payouts-pagination',
+      tableRef: payoutsTableRef,
+      rowRenderer: (p) => {
+        const actions = [];
+        if (canApprove(p.status)) {
+          const label = p.status === 'approved' ? 'Als ausgezahlt' : 'Freigeben';
+          actions.push(`<button class="btn-primary" onclick="approvePayout('${p.id}')">${label}</button>`);
+        }
+        if (canReject(p.status)) {
+          actions.push(`<button class="btn-danger" onclick="openRejectModal('${p.id}', '${p.amount_usdt}')">Ablehnen</button>`);
+        }
+        return `<tr>
+          <td>${new Date(p.created_at).toLocaleString('de-DE')}</td>
+          <td><code class="link-user" onclick="openUserDrawer('${p.user_id}')">${p.user_id}</code></td>
+          <td>${fmtUsdt(p.amount_usdt)}</td>
+          <td>${p.payout_method || '—'}</td>
+          <td><span class="status-pill ${payoutStatusClass(p.status)}">${payoutStatusLabel(p.status)}</span></td>
+          <td><div class="table-actions">${actions.join('') || '<span class="muted">—</span>'}</div></td>
+        </tr>`;
+      },
+    });
+
+    const usersTable = createAdminTable({
+      tbodyId: 'users-body',
+      paginationId: 'users-pagination',
+      tableRef: usersTableRef,
+      rowRenderer: (u) => `<tr>
+        <td><code>${u.referral_code}</code></td>
+        <td><code class="link-user" onclick="openUserDrawer('${u.user_id}')">${u.user_id}</code></td>
+        <td>${fmtUsdt(u.balance_usdt)}</td>
+        <td>${u.trust_score}</td>
+        <td>${u.total_watches}</td>
+        <td><span class="badge ${u.banned ? 'badge-banned' : 'badge-ok'}">${u.banned ? 'Gesperrt' : 'Aktiv'}</span></td>
+        <td>${userRowActions(u)}</td>
+      </tr>`,
+    });
+
+    const auditTable = createAdminTable({
+      tbodyId: 'audit-body',
+      paginationId: 'audit-pagination',
+      tableRef: auditTableRef,
+      rowRenderer: (e) => `<tr>
+        <td>${new Date(e.created_at).toLocaleString('de-DE')}</td>
+        <td>${e.action}</td>
+        <td>${e.user_id ? `<code class="link-user" onclick="openUserDrawer('${e.user_id}')">${e.user_id}</code>` : '—'}</td>
+        <td><code>${JSON.stringify(e.details)}</code></td>
+      </tr>`,
+    });
+
+    function userRowActions(u) {
+      const id = u.user_id;
+      return `<div class="table-actions">
+        <button class="btn-ghost" onclick="openUserDrawer('${id}')">Profil</button>
+        <button class="btn-ghost" onclick="quickCredit('${id}')">Gutschrift</button>
+        <button class="btn-ghost" onclick="quickDebit('${id}')">Abbuchung</button>
+        <button class="btn-danger" onclick="quickBan('${id}', ${!u.banned})">${u.banned ? 'Entsperren' : 'Sperren'}</button>
+        <button class="btn-ghost" onclick="openUserDrawer('${id}', 'timeline')">Timeline</button>
+        <button class="btn-ghost" onclick="quickNote('${id}')">Notiz</button>
+      </div>`;
+    }
+
+    async function exportCsv(kind) {
+      const url = `/admin/export/${kind}?format=csv&limit=1000`;
+      const res = await fetch(url, { headers: headers() });
+      if (!res.ok) { showError(formatAuthError(res.status, '')); return; }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${kind}.csv`;
+      a.click();
+    }
 
     function secret() {
       const appVisible = !document.getElementById('app').classList.contains('hidden');
@@ -550,8 +911,274 @@
       document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
       if (name === 'overview') { loadStats(); loadAnalytics(); }
       if (name === 'payouts') loadPayouts();
+      if (name === 'users') { loadUsersTable(); }
       if (name === 'settings') loadFeatureFlags();
       if (name === 'audit') loadAudit();
+    }
+
+    function startLivePoll() {
+      if (livePollTimer) clearInterval(livePollTimer);
+      pollLive();
+      livePollTimer = setInterval(pollLive, 8000);
+    }
+
+    async function pollLive() {
+      if (document.getElementById('app').classList.contains('hidden')) return;
+      try {
+        const d = await api(`/admin/live?since=${encodeURIComponent(liveSince)}`);
+        document.getElementById('live-pending').textContent = d.pending_payouts ?? '—';
+        document.getElementById('live-users').textContent = d.new_users_since ?? '—';
+        document.getElementById('live-audit').textContent = d.recent_audit_count ?? '—';
+        const pendingEl = document.getElementById('kpi-pending-count');
+        if (pendingEl && d.pending_payouts != null) pendingEl.textContent = d.pending_payouts;
+      } catch (_) { /* silent on poll */ }
+    }
+
+    let globalSearchResults = [];
+
+    function scheduleGlobalSearch() {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(runGlobalSearch, 250);
+    }
+
+    async function runGlobalSearch() {
+      const q = document.getElementById('global-search').value.trim();
+      const dd = document.getElementById('search-dropdown');
+      if (!q) { dd.classList.add('hidden'); return; }
+      try {
+        const d = await api(`/admin/search?q=${encodeURIComponent(q)}`);
+        globalSearchResults = [];
+        const sections = [
+          ['Nutzer', d.users || [], (hit) => ({ type: 'user', id: hit.user_id, label: hit.label || hit.referral_code })],
+          ['Auszahlungen', d.payouts || [], (hit) => ({ type: 'payout', id: hit.payout_id, userId: hit.user_id, label: hit.label })],
+          ['Audit', d.audit || [], (hit) => ({ type: 'audit', id: hit.audit_id, label: hit.label })],
+          ['Referrals', d.referrals || [], (hit) => ({ type: 'referral', id: hit.user_id, label: hit.label })],
+        ];
+        let html = '';
+        sections.forEach(([title, items, map]) => {
+          if (!items.length) return;
+          html += `<div class="search-group">${title}</div>`;
+          items.forEach((item) => {
+            const mapped = map(item);
+            globalSearchResults.push(mapped);
+            const idx = globalSearchResults.length - 1;
+            html += `<button type="button" class="search-item" data-idx="${idx}" onclick="activateSearchResult(${idx})">${mapped.label}</button>`;
+          });
+        });
+        if (!html) html = '<div class="search-group">Keine Treffer</div>';
+        dd.innerHTML = html;
+        dd.classList.remove('hidden');
+        searchActiveIndex = -1;
+      } catch (e) {
+        dd.classList.add('hidden');
+      }
+    }
+
+    function activateSearchResult(idx) {
+      const hit = globalSearchResults[idx];
+      if (!hit) return;
+      document.getElementById('search-dropdown').classList.add('hidden');
+      if (hit.type === 'user' || hit.type === 'referral') openUserDrawer(hit.id);
+      else if (hit.type === 'payout') openUserDrawer(hit.userId);
+      else if (hit.type === 'audit') { switchTab('audit'); loadAudit(); }
+    }
+
+    const COMMANDS = [
+      { id: 'tab-overview', label: 'Gehe zu: Übersicht', run: () => switchTab('overview') },
+      { id: 'tab-users', label: 'Gehe zu: Nutzer', run: () => switchTab('users') },
+      { id: 'tab-payouts', label: 'Gehe zu: Auszahlungen', run: () => switchTab('payouts') },
+      { id: 'tab-actions', label: 'Gehe zu: Aktionen (Bonus)', run: () => switchTab('actions') },
+      { id: 'tab-settings', label: 'Gehe zu: Feature Flags', run: () => switchTab('settings') },
+      { id: 'tab-audit', label: 'Gehe zu: Audit', run: () => switchTab('audit') },
+      { id: 'search', label: 'Nutzer suchen', run: () => document.getElementById('global-search').focus() },
+      { id: 'refresh', label: 'Dashboard aktualisieren', run: () => { loadStats(); loadAnalytics(); } },
+    ];
+
+    function openCommandPalette() {
+      document.getElementById('cmd-modal').classList.remove('hidden');
+      const input = document.getElementById('cmd-input');
+      input.value = '';
+      cmdActiveIndex = 0;
+      renderCommands('');
+      input.focus();
+    }
+
+    function closeCommandPalette() {
+      document.getElementById('cmd-modal').classList.add('hidden');
+    }
+
+    function renderCommands(filter) {
+      const q = filter.toLowerCase();
+      const list = COMMANDS.filter(c => c.label.toLowerCase().includes(q));
+      cmdActiveIndex = Math.min(cmdActiveIndex, Math.max(list.length - 1, 0));
+      document.getElementById('cmd-list').innerHTML = list.map((c, i) =>
+        `<button type="button" class="cmd-item ${i === cmdActiveIndex ? 'active' : ''}" data-cmd="${c.id}" onclick="runCommand('${c.id}')">
+          <span>${c.label}</span><kbd>↵</kbd>
+        </button>`).join('') || '<p class="muted" style="padding:0.75rem">Keine Befehle</p>';
+      window._cmdFiltered = list;
+    }
+
+    function runCommand(id) {
+      const cmd = COMMANDS.find(c => c.id === id);
+      closeCommandPalette();
+      cmd?.run();
+    }
+
+    function switchDrawerTab(name) {
+      document.querySelectorAll('.drawer-tab').forEach(t => t.classList.toggle('active', t.dataset.drawerTab === name));
+      document.querySelectorAll('.drawer-pane').forEach(p => p.classList.toggle('active', p.id === `drawer-pane-${name}`));
+    }
+
+    async function openUserDrawer(userId, tab = 'overview') {
+      selectedUserId = userId;
+      document.getElementById('drawer-backdrop').classList.add('open');
+      const drawer = document.getElementById('user-drawer');
+      drawer.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
+      switchDrawerTab(tab);
+      document.getElementById('drawer-pane-overview').innerHTML = '<div class="skeleton" style="height:120px"></div>';
+      try {
+        const u = await api(`/admin/users/${userId}`);
+        drawerUser = u;
+        selectedUserBanned = u.banned;
+        document.getElementById('drawer-title').textContent = u.referral_code;
+        document.getElementById('drawer-subtitle').textContent = u.user_id;
+        const riskClass = `risk-${(u.risk_level || 'low').toLowerCase()}`;
+        document.getElementById('drawer-pane-overview').innerHTML = `
+          <div class="detail-grid">
+            <div class="detail-item"><div class="k">Risiko</div><div class="v ${riskClass}">${u.risk_level} (${u.risk_score})</div></div>
+            <div class="detail-item"><div class="k">Guthaben</div><div class="v">${fmtUsdt(u.balance_usdt)}</div></div>
+            <div class="detail-item"><div class="k">Verdienst gesamt</div><div class="v">${fmtUsdt(u.total_earnings_usdt)}</div></div>
+            <div class="detail-item"><div class="k">Trust-Score</div><div class="v">${u.trust_score}</div></div>
+            <div class="detail-item"><div class="k">Videos heute / gesamt</div><div class="v">${u.watches_today} / ${u.total_watches}</div></div>
+            <div class="detail-item"><div class="k">Referrals</div><div class="v">${u.referral_count}</div></div>
+            <div class="detail-item"><div class="k">Kontoalter</div><div class="v">${u.account_age_days} Tage</div></div>
+            <div class="detail-item"><div class="k">Letzte Aktivität</div><div class="v">${u.last_activity ? new Date(u.last_activity).toLocaleString('de-DE') : '—'}</div></div>
+            <div class="detail-item"><div class="k">Auszahlungen</div><div class="v">${u.payout_history}</div></div>
+            <div class="detail-item"><div class="k">Status</div><div class="v"><span class="badge ${u.banned ? 'badge-banned' : 'badge-ok'}">${u.banned ? 'Gesperrt' : 'Aktiv'}</span></div></div>
+          </div>
+          <div class="table-actions" style="margin-top:0.75rem">${userRowActions({ user_id: userId, banned: u.banned })}</div>`;
+        loadDrawerLedger(userId);
+        loadDrawerWithdrawals(userId);
+        document.getElementById('drawer-pane-referrals').innerHTML = `<p class="muted">Referral-Code: <code>${u.referral_code}</code><br>Referrals: ${u.referral_count}</p>`;
+        loadDrawerNotes(userId);
+        loadDrawerTimeline(userId);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function closeUserDrawer() {
+      document.getElementById('drawer-backdrop').classList.remove('open');
+      const drawer = document.getElementById('user-drawer');
+      drawer.classList.remove('open');
+      drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    async function loadDrawerLedger(userId) {
+      try {
+        const rows = await api(`/admin/users/${userId}/timeline`);
+        const ledger = (rows.events || []).filter(e => e.kind.startsWith('ledger_'));
+        document.getElementById('drawer-pane-ledger').innerHTML = ledger.length
+          ? `<table><thead><tr><th>Datum</th><th>Titel</th><th>Betrag</th></tr></thead><tbody>
+            ${ledger.map(e => `<tr><td>${new Date(e.occurred_at).toLocaleString('de-DE')}</td><td>${e.title}</td><td>${fmtUsdt(e.details?.amount_usdt)}</td></tr>`).join('')}
+            </tbody></table>` : '<p class="muted">Keine Ledger-Einträge</p>';
+      } catch (_) {}
+    }
+
+    async function loadDrawerWithdrawals(userId) {
+      try {
+        const d = await api(`/admin/payouts?status=all&limit=50`);
+        const rows = (d.payouts || []).filter(p => p.user_id === userId);
+        document.getElementById('drawer-pane-withdrawals').innerHTML = rows.length
+          ? `<table><thead><tr><th>Datum</th><th>Betrag</th><th>Status</th></tr></thead><tbody>
+            ${rows.map(p => `<tr><td>${new Date(p.created_at).toLocaleString('de-DE')}</td><td>${fmtUsdt(p.amount_usdt)}</td><td>${payoutStatusLabel(p.status)}</td></tr>`).join('')}
+            </tbody></table>` : '<p class="muted">Keine Auszahlungen</p>';
+      } catch (_) {}
+    }
+
+    async function loadDrawerNotes(userId) {
+      try {
+        const d = await api(`/admin/users/${userId}/notes`);
+        const notes = d.notes || [];
+        document.getElementById('drawer-pane-notes').innerHTML = `
+          <textarea id="drawer-new-note" rows="2" placeholder="Interne Notiz…"></textarea>
+          <button class="btn-primary" style="margin:0.5rem 0" onclick="saveDrawerNote('${userId}')">Notiz speichern</button>
+          <ul class="user-list">${notes.map(n => `<li><strong>${n.created_by}</strong> · ${new Date(n.created_at).toLocaleString('de-DE')}<br>${n.admin_note}</li>`).join('') || '<li class="muted">Keine Notizen</li>'}</ul>`;
+      } catch (_) {}
+    }
+
+    async function saveDrawerNote(userId) {
+      const note = document.getElementById('drawer-new-note')?.value?.trim();
+      if (!note) return;
+      await api(`/admin/users/${userId}/notes`, { method: 'POST', body: JSON.stringify({ note }) });
+      loadDrawerNotes(userId);
+    }
+
+    async function loadDrawerTimeline(userId) {
+      try {
+        const d = await api(`/admin/users/${userId}/timeline`);
+        const events = d.events || [];
+        document.getElementById('drawer-pane-timeline').innerHTML = events.length
+          ? `<ul class="user-list">${events.map(e => `<li><strong>${e.title}</strong><br><span class="muted">${new Date(e.occurred_at).toLocaleString('de-DE')}</span><br><code>${JSON.stringify(e.details)}</code></li>`).join('')}</ul>`
+          : '<p class="muted">Keine Ereignisse</p>';
+      } catch (_) {}
+    }
+
+    async function quickCredit(id) {
+      const amount = prompt('Betrag (USDT):', '0.01');
+      if (!amount) return;
+      const reason = prompt('Grund:', 'Admin-Gutschrift') || 'Admin-Gutschrift';
+      await api(`/admin/users/${id}/credit`, { method: 'POST', body: JSON.stringify({ amount_usdt: amount, reason }) });
+      openUserDrawer(id);
+      loadUsersTable();
+    }
+
+    async function quickDebit(id) {
+      const amount = prompt('Betrag (USDT):', '0.01');
+      if (!amount) return;
+      const reason = prompt('Grund:', 'Admin-Abbuchung') || 'Admin-Abbuchung';
+      await api(`/admin/users/${id}/debit`, { method: 'POST', body: JSON.stringify({ amount_usdt: amount, reason }) });
+      openUserDrawer(id);
+      loadUsersTable();
+    }
+
+    async function quickBan(id, banned) {
+      const reason = prompt('Grund:', banned ? 'Admin-Sperre' : 'Admin-Entsperrung') || 'Admin';
+      await api(`/admin/users/${id}/ban`, { method: 'POST', body: JSON.stringify({ banned, reason }) });
+      openUserDrawer(id);
+      loadUsersTable();
+    }
+
+    async function quickNote(id) {
+      const note = prompt('Interne Notiz:');
+      if (!note) return;
+      await api(`/admin/users/${id}/notes`, { method: 'POST', body: JSON.stringify({ note }) });
+      openUserDrawer(id, 'notes');
+    }
+
+    async function loadUsersTable() {
+      const tbody = document.getElementById('users-body');
+      tbody.innerHTML = '<tr><td colspan="99"><div class="skeleton" style="height:2rem"></div></td></tr>';
+      try {
+        const d = await api('/admin/users?limit=500');
+        usersCache = d.users || [];
+        usersTable.setData(usersCache);
+        showError('');
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function renderAuditTable() {
+      let rows = auditCache.slice();
+      const action = document.getElementById('audit-action-filter')?.value;
+      const from = document.getElementById('audit-date-from')?.value;
+      const to = document.getElementById('audit-date-to')?.value;
+      if (action) rows = rows.filter(e => e.action === action);
+      if (from) rows = rows.filter(e => e.created_at.slice(0, 10) >= from);
+      if (to) rows = rows.filter(e => e.created_at.slice(0, 10) <= to);
+      auditTable.setData(rows);
     }
 
     function setChartPeriod(days) {
@@ -650,33 +1277,13 @@
 
     async function loadPayouts() {
       const status = document.getElementById('payout-status').value;
+      const tbody = document.getElementById('payouts-body');
+      tbody.innerHTML = '<tr><td colspan="99"><div class="skeleton" style="height:2rem"></div></td></tr>';
       try {
-        const d = await api(`/admin/payouts?status=${encodeURIComponent(status)}&limit=100`);
-        const tbody = document.getElementById('payouts-body');
-        const empty = document.getElementById('payouts-empty');
-        tbody.innerHTML = '';
-        const rows = d.payouts || [];
-        empty.classList.toggle('hidden', rows.length > 0);
-        rows.forEach(p => {
-          const tr = document.createElement('tr');
-          const actions = [];
-          if (canApprove(p.status)) {
-            const label = p.status === 'approved' ? 'Als ausgezahlt' : 'Freigeben';
-            actions.push(`<button class="btn-primary" onclick="approvePayout('${p.id}')">${label}</button>`);
-          }
-          if (canReject(p.status)) {
-            actions.push(`<button class="btn-danger" onclick="openRejectModal('${p.id}', '${p.amount_usdt}')">Ablehnen</button>`);
-          }
-          tr.innerHTML = `
-            <td>${new Date(p.created_at).toLocaleString('de-DE')}</td>
-            <td><code>${p.user_id}</code></td>
-            <td>${fmtUsdt(p.amount_usdt)}</td>
-            <td>${p.payout_method || '—'}</td>
-            <td><span class="status-pill ${payoutStatusClass(p.status)}">${payoutStatusLabel(p.status)}</span></td>
-            <td><div class="table-actions">${actions.join('') || '<span class="muted">—</span>'}</div></td>
-          `;
-          tbody.appendChild(tr);
-        });
+        const d = await api(`/admin/payouts?status=${encodeURIComponent(status)}&limit=200`);
+        payoutsCache = d.payouts || [];
+        payoutsTable.setData(payoutsCache);
+        document.getElementById('payouts-empty')?.classList.toggle('hidden', payoutsCache.length > 0);
         showError('');
       } catch (e) {
         showError(e.message);
@@ -740,6 +1347,7 @@
         document.getElementById('secret-inline').value = s;
         loadStats();
         loadAnalytics();
+        startLivePoll();
       } catch (e) {
         err.textContent = e.message;
       }
@@ -758,13 +1366,16 @@
         showError('');
         loadStats();
         loadAnalytics();
+        startLivePoll();
       } catch (e) {
         showError(e.message);
       }
     }
 
     async function loadStats() {
+      const grid = document.getElementById('kpi-grid');
       try {
+        grid?.querySelectorAll('.value').forEach(el => { el.textContent = '…'; });
         const d = await api('/admin/stats');
         document.getElementById('kpi-revenue').textContent = fmtUsdt(d.total_revenue);
         document.getElementById('kpi-rev24').textContent = fmtUsdt(d.revenue_24h);
@@ -775,6 +1386,12 @@
         document.getElementById('kpi-reg').textContent = d.registrations_today;
         document.getElementById('kpi-videos').textContent = d.videos_today;
         document.getElementById('kpi-rewards').textContent = fmtUsdt(d.rewards_today_usdt);
+        document.getElementById('kpi-approved-today').textContent = d.approved_payouts_today ?? '—';
+        document.getElementById('kpi-rejected-today').textContent = d.rejected_payouts_today ?? '—';
+        setTrend('kpi-rewards-trend', d.rewards_today_usdt, d.rewards_yesterday_usdt);
+        setTrend('kpi-active-trend', d.active_users_today, d.active_users_yesterday);
+        setTrend('kpi-reg-trend', d.registrations_today, d.registrations_yesterday);
+        renderSparkline('spark-active', d.pending_sparkline || []);
         document.getElementById('kpi-trust').textContent = d.avg_trust_score?.toFixed(1) ?? '—';
         document.getElementById('kpi-pending').textContent = fmtUsdt(d.pending_payouts);
         document.getElementById('kpi-held').textContent = fmtUsdt(d.held_payouts);
@@ -799,7 +1416,7 @@
         d.users.forEach(u => {
           const li = document.createElement('li');
           li.innerHTML = `<span><code>${u.referral_code}</code> · ${u.user_id}</span><span class="muted">→</span>`;
-          li.onclick = () => loadUser(u.user_id);
+          li.onclick = () => openUserDrawer(u.user_id);
           ul.appendChild(li);
         });
         showError('');
@@ -903,6 +1520,12 @@
           f.watch_duration_source === 'db' ? f.watch_duration_secs : '';
         document.getElementById('flag-watch-source').textContent =
           `Aktuelle Watch-Dauer: ${f.watch_duration_secs}s (${f.watch_duration_source === 'db' ? 'DB' : 'Env'})`;
+        const meta = (f.flags || []).map(fl =>
+          `<div style="margin-bottom:0.35rem"><code>${fl.key}</code> — ${fl.description}<br>
+          Wert: ${JSON.stringify(fl.current_value)} · Quelle: ${fl.source}
+          ${fl.last_modified ? ` · Geändert: ${new Date(fl.last_modified).toLocaleString('de-DE')}` : ''}</div>`
+        ).join('');
+        document.getElementById('flags-meta').innerHTML = meta;
         settingsMsg('');
         showError('');
       } catch (e) {
@@ -1005,25 +1628,37 @@
     }
 
     async function loadAudit() {
+      const tbody = document.getElementById('audit-body');
+      tbody.innerHTML = '<tr><td colspan="99"><div class="skeleton" style="height:2rem"></div></td></tr>';
       try {
-        const d = await api('/admin/audit-log?limit=50');
-        const tbody = document.getElementById('audit-body');
-        tbody.innerHTML = '';
-        (d.entries || []).forEach(e => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${new Date(e.created_at).toLocaleString('de-DE')}</td>
-            <td>${e.action}</td>
-            <td>${e.user_id ? `<code>${e.user_id}</code>` : '—'}</td>
-            <td><code>${JSON.stringify(e.details)}</code></td>
-          `;
-          tbody.appendChild(tr);
-        });
+        const d = await api('/admin/audit-log?limit=200');
+        auditCache = d.entries || [];
+        renderAuditTable();
         showError('');
       } catch (e) {
         showError(e.message);
       }
     }
+
+    document.getElementById('global-search')?.addEventListener('input', scheduleGlobalSearch);
+    document.getElementById('global-search')?.addEventListener('keydown', (e) => {
+      const items = document.querySelectorAll('.search-item');
+      if (e.key === 'ArrowDown') { e.preventDefault(); searchActiveIndex = Math.min(searchActiveIndex + 1, items.length - 1); items.forEach((el, i) => el.classList.toggle('active', i === searchActiveIndex)); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); searchActiveIndex = Math.max(searchActiveIndex - 1, 0); items.forEach((el, i) => el.classList.toggle('active', i === searchActiveIndex)); }
+      if (e.key === 'Enter' && searchActiveIndex >= 0) { e.preventDefault(); activateSearchResult(searchActiveIndex); }
+      if (e.key === 'Escape') document.getElementById('search-dropdown').classList.add('hidden');
+    });
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openCommandPalette(); }
+      if (!document.getElementById('cmd-modal').classList.contains('hidden')) {
+        const input = document.getElementById('cmd-input');
+        if (e.key === 'Escape') closeCommandPalette();
+        if (e.key === 'ArrowDown') { e.preventDefault(); cmdActiveIndex++; renderCommands(input.value); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); cmdActiveIndex = Math.max(cmdActiveIndex - 1, 0); renderCommands(input.value); }
+        if (e.key === 'Enter' && window._cmdFiltered?.[cmdActiveIndex]) runCommand(window._cmdFiltered[cmdActiveIndex].id);
+      }
+    });
+    document.getElementById('cmd-input')?.addEventListener('input', (e) => { cmdActiveIndex = 0; renderCommands(e.target.value); });
 
     const saved = localStorage.getItem('ve_admin_secret')?.trim();
     if (saved) {

@@ -207,7 +207,13 @@ impl AppState {
 
     pub async fn feature_flags_view(&self) -> AppResult<FeatureFlagsView> {
         let flags = self.store.get_all_feature_flags().await?;
-        Ok(FeatureFlagsView::resolve(&flags))
+        let timestamps = self.store.feature_flag_timestamps().await?;
+        let audit = self.store.latest_feature_flags_audit().await?;
+        Ok(FeatureFlagsView::resolve_with_meta(
+            &flags,
+            &timestamps,
+            audit.as_ref(),
+        ))
     }
 
     pub async fn patch_feature_flags(&self, patch: FeatureFlagsPatch) -> AppResult<FeatureFlagsView> {
@@ -661,25 +667,95 @@ impl AppState {
 
     pub async fn admin_stats_extended(&self) -> AppResult<crate::admin::AdminStatsExtended> {
         let today = Utc::now().date_naive();
+        let yesterday = today - chrono::Duration::days(1);
+        let (approved_today, rejected_today) = self.store.payout_actions_today(today).await?;
+        let pending_count = self.store.pending_payout_request_count().await?;
+        let rewards_today = self.store_rewards_today_usdt(today).await?;
+        let rewards_yesterday = self.store.rewards_on(yesterday).await?;
+        let active_today = self.store_active_users_today(today).await?;
+        let active_yesterday = self.store.active_users_on(yesterday).await?;
+        let reg_today = self.store_registrations_today(today).await?;
+        let reg_yesterday = self.store.registrations_on(yesterday).await?;
+        let sparkline = self.store.admin_daily_metrics(7).await?;
         Ok(crate::admin::AdminStatsExtended {
             total_revenue: self.total_revenue().await?,
             pending_payouts: self.pending_payouts().await?,
             held_payouts: self.held_payouts().await?,
             user_count: self.user_count().await?,
             recent_payout_count: self.recent_payout_count().await?,
-            active_users_today: self.store_active_users_today(today).await?,
-            registrations_today: self.store_registrations_today(today).await?,
+            active_users_today: active_today,
+            registrations_today: reg_today,
             videos_today: self.store_videos_today(today).await?,
-            rewards_today_usdt: self.store_rewards_today_usdt(today).await?,
+            rewards_today_usdt: rewards_today,
             avg_trust_score: self.store_avg_trust_score().await?,
             revenue_24h: self.store_revenue_in_period_hours(24).await?,
             revenue_7d: self.store_revenue_in_period_days(7).await?,
             revenue_30d: self.store_revenue_in_period_days(30).await?,
+            pending_withdrawal_count: pending_count,
+            approved_payouts_today: approved_today,
+            rejected_payouts_today: rejected_today,
+            active_users_yesterday: active_yesterday,
+            rewards_yesterday_usdt: rewards_yesterday,
+            registrations_yesterday: reg_yesterday,
+            pending_sparkline: sparkline.iter().map(|d| d.watch_count as i64).collect(),
         })
     }
 
     pub async fn admin_lookup_users(&self, query: &str) -> AppResult<Vec<Uuid>> {
         self.store_search_users(query).await
+    }
+
+    pub async fn admin_live_snapshot(&self, since: DateTime<Utc>) -> AppResult<crate::store::AdminLiveSnapshot> {
+        self.store.admin_live_snapshot(since).await
+    }
+
+    pub async fn admin_global_search(&self, query: &str, limit: u32) -> AppResult<crate::store::AdminSearchResponse> {
+        self.store.admin_global_search(query, limit).await
+    }
+
+    pub async fn admin_list_users(&self, limit: u32) -> AppResult<Vec<crate::store::AdminUserListRow>> {
+        self.store.admin_list_users(limit).await
+    }
+
+    pub async fn admin_user_notes(&self, user_id: Uuid) -> AppResult<Vec<crate::store::AdminUserNote>> {
+        self.store.admin_user_notes(user_id).await
+    }
+
+    pub async fn admin_add_user_note(
+        &self,
+        user_id: Uuid,
+        note: &str,
+        created_by: &str,
+    ) -> AppResult<crate::store::AdminUserNote> {
+        self.store.admin_add_user_note(user_id, note, created_by).await
+    }
+
+    pub async fn admin_user_timeline(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<crate::store::AdminTimelineEvent>> {
+        self.store.admin_user_timeline(user_id, limit).await
+    }
+
+    pub async fn admin_export_users(&self, limit: u32) -> AppResult<Vec<crate::store::AdminExportUserRow>> {
+        self.store.admin_export_users(limit).await
+    }
+
+    pub async fn admin_export_audit(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        self.store.admin_export_audit(limit).await
+    }
+
+    pub async fn admin_export_payouts(&self, limit: u32) -> AppResult<Vec<crate::store::PayoutRequestRow>> {
+        self.store.admin_export_payouts(limit).await
+    }
+
+    pub async fn user_total_earnings(&self, user_id: Uuid) -> AppResult<Decimal> {
+        self.store.user_total_earnings(user_id).await
+    }
+
+    pub async fn user_last_activity(&self, user_id: Uuid) -> AppResult<Option<DateTime<Utc>>> {
+        self.store.user_last_activity(user_id).await
+    }
+
+    pub async fn user_payouts(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<crate::store::PayoutRequestRow>> {
+        self.store.user_payouts(user_id, limit).await
     }
 
     pub async fn admin_audit_log(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {

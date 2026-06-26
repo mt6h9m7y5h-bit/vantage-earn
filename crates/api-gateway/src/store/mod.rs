@@ -1,3 +1,4 @@
+mod admin_extra;
 mod audit;
 mod flags;
 mod ledger;
@@ -12,6 +13,11 @@ use rust_decimal::Decimal;
 use shared::AppResult;
 use uuid::Uuid;
 
+pub use admin_extra::{
+    compute_risk, csv_escape, AdminExportUserRow, AdminLiveSnapshot, AdminSearchAuditHit,
+    AdminSearchPayoutHit, AdminSearchReferralHit, AdminSearchResponse, AdminSearchUserHit,
+    AdminTimelineEvent, AdminUserListRow, AdminUserNote,
+};
 pub use audit::AdminAuditEntry;
 pub use ledger::LedgerItem;
 pub use memory::MemoryStore;
@@ -381,6 +387,137 @@ impl Store {
         match self {
             Self::Memory(s) => s.list_users_for_bulk(filter, limit).await,
             Self::Postgres(s) => s.list_users_for_bulk(filter, limit).await,
+        }
+    }
+
+    pub async fn admin_list_users(&self, limit: u32) -> AppResult<Vec<AdminUserListRow>> {
+        match self {
+            Self::Memory(s) => s.admin_list_users(limit).await,
+            Self::Postgres(s) => s.admin_list_users(limit).await,
+        }
+    }
+
+    pub async fn admin_global_search(&self, query: &str, limit: u32) -> AppResult<AdminSearchResponse> {
+        match self {
+            Self::Memory(s) => s.admin_global_search(query, limit).await,
+            Self::Postgres(s) => s.admin_global_search(query, limit).await,
+        }
+    }
+
+    pub async fn admin_user_notes(&self, user_id: Uuid) -> AppResult<Vec<AdminUserNote>> {
+        match self {
+            Self::Memory(s) => s.admin_user_notes(user_id).await,
+            Self::Postgres(s) => s.admin_user_notes(user_id).await,
+        }
+    }
+
+    pub async fn admin_add_user_note(
+        &self,
+        user_id: Uuid,
+        note: &str,
+        created_by: &str,
+    ) -> AppResult<AdminUserNote> {
+        match self {
+            Self::Memory(s) => s.admin_add_user_note(user_id, note, created_by).await,
+            Self::Postgres(s) => s.admin_add_user_note(user_id, note, created_by).await,
+        }
+    }
+
+    pub async fn admin_user_timeline(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<AdminTimelineEvent>> {
+        match self {
+            Self::Memory(s) => s.admin_user_timeline(user_id, limit).await,
+            Self::Postgres(s) => s.admin_user_timeline(user_id, limit).await,
+        }
+    }
+
+    pub async fn admin_live_snapshot(&self, since: DateTime<Utc>) -> AppResult<AdminLiveSnapshot> {
+        match self {
+            Self::Memory(s) => s.admin_live_snapshot(since).await,
+            Self::Postgres(s) => s.admin_live_snapshot(since).await,
+        }
+    }
+
+    pub async fn admin_export_users(&self, limit: u32) -> AppResult<Vec<AdminExportUserRow>> {
+        match self {
+            Self::Memory(s) => s.admin_export_users(limit).await,
+            Self::Postgres(s) => s.admin_export_users(limit).await,
+        }
+    }
+
+    pub async fn admin_export_audit(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        match self {
+            Self::Memory(s) => s.admin_export_audit(limit).await,
+            Self::Postgres(s) => s.admin_export_audit(limit).await,
+        }
+    }
+
+    pub async fn admin_export_payouts(&self, limit: u32) -> AppResult<Vec<PayoutRequestRow>> {
+        match self {
+            Self::Memory(s) => s.admin_export_payouts(limit).await,
+            Self::Postgres(s) => s.admin_export_payouts(limit).await,
+        }
+    }
+
+    pub async fn payout_actions_today(&self, day: NaiveDate) -> AppResult<(i64, i64)> {
+        match self {
+            Self::Memory(s) => s.payout_actions_today(day).await,
+            Self::Postgres(s) => s.payout_actions_today(day).await,
+        }
+    }
+
+    pub async fn registrations_on(&self, day: NaiveDate) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.registrations_on(day).await,
+            Self::Postgres(s) => s.registrations_on(day).await,
+        }
+    }
+
+    pub async fn rewards_on(&self, day: NaiveDate) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.rewards_on(day).await,
+            Self::Postgres(s) => s.rewards_on(day).await,
+        }
+    }
+
+    pub async fn active_users_on(&self, day: NaiveDate) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.active_users_on(day).await,
+            Self::Postgres(s) => s.active_users_on(day).await,
+        }
+    }
+
+    pub async fn user_payouts(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<PayoutRequestRow>> {
+        match self {
+            Self::Memory(s) => s.user_payouts(user_id, limit).await,
+            Self::Postgres(s) => s.user_payouts(user_id, limit).await,
+        }
+    }
+
+    pub async fn user_total_earnings(&self, user_id: Uuid) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.user_total_earnings(user_id).await,
+            Self::Postgres(s) => s.user_total_earnings(user_id).await,
+        }
+    }
+
+    pub async fn user_last_activity(&self, user_id: Uuid) -> AppResult<Option<DateTime<Utc>>> {
+        match self {
+            Self::Memory(s) => s.user_last_activity(user_id).await,
+            Self::Postgres(s) => s.user_last_activity(user_id).await,
+        }
+    }
+
+    pub async fn feature_flag_timestamps(&self) -> AppResult<std::collections::HashMap<String, DateTime<Utc>>> {
+        match self {
+            Self::Memory(s) => s.feature_flag_timestamps().await,
+            Self::Postgres(s) => s.feature_flag_timestamps().await,
+        }
+    }
+
+    pub async fn latest_feature_flags_audit(&self) -> AppResult<Option<(DateTime<Utc>, serde_json::Value)>> {
+        match self {
+            Self::Memory(s) => s.latest_feature_flags_audit().await,
+            Self::Postgres(s) => s.latest_feature_flags_audit().await,
         }
     }
 }

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::ad_config::AdConfig;
@@ -14,6 +15,17 @@ pub const DEFAULT_MAINTENANCE_MESSAGE: &str =
     "Wartungsarbeiten – bitte später erneut versuchen.";
 
 #[derive(Debug, Clone, Serialize)]
+pub struct FeatureFlagMeta {
+    pub key: String,
+    pub description: String,
+    pub default_value: serde_json::Value,
+    pub current_value: serde_json::Value,
+    pub source: String,
+    pub last_modified: Option<DateTime<Utc>>,
+    pub changed_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct FeatureFlagsView {
     pub maintenance_mode: bool,
     pub maintenance_message: String,
@@ -21,6 +33,7 @@ pub struct FeatureFlagsView {
     pub payout_demo_mode_source: String,
     pub watch_duration_secs: u32,
     pub watch_duration_source: String,
+    pub flags: Vec<FeatureFlagMeta>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -37,6 +50,14 @@ pub struct FeatureFlagsPatch {
 
 impl FeatureFlagsView {
     pub fn resolve(db: &HashMap<String, serde_json::Value>) -> Self {
+        Self::resolve_with_meta(db, &HashMap::new(), None)
+    }
+
+    pub fn resolve_with_meta(
+        db: &HashMap<String, serde_json::Value>,
+        timestamps: &HashMap<String, DateTime<Utc>>,
+        latest_audit: Option<&(DateTime<Utc>, serde_json::Value)>,
+    ) -> Self {
         let maintenance_mode = db
             .get(KEY_MAINTENANCE_MODE)
             .and_then(|v| v.as_bool())
@@ -57,7 +78,7 @@ impl FeatureFlagsView {
         } else {
             payout_demo_env
         };
-        let payout_demo_mode_source = if payout_demo_mode_overridden {
+        let payout_demo_mode_source: String = if payout_demo_mode_overridden {
             "db".into()
         } else {
             "env".into()
@@ -73,11 +94,68 @@ impl FeatureFlagsView {
         } else {
             watch_env
         };
-        let watch_duration_source = if watch_duration_overridden {
+        let watch_duration_source: String = if watch_duration_overridden {
             "db".into()
         } else {
             "env".into()
         };
+
+        let changed_by = latest_audit.and_then(|(_, details)| {
+            details
+                .get("admin_ip")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .or_else(|| Some("admin".into()))
+        });
+
+        let flags = vec![
+            FeatureFlagMeta {
+                key: KEY_MAINTENANCE_MODE.into(),
+                description: "Wartungsmodus — blockiert Watch/Earn".into(),
+                default_value: serde_json::json!(false),
+                current_value: serde_json::json!(maintenance_mode),
+                source: if db.contains_key(KEY_MAINTENANCE_MODE) {
+                    "db".into()
+                } else {
+                    "default".into()
+                },
+                last_modified: timestamps.get(KEY_MAINTENANCE_MODE).copied().or_else(|| {
+                    latest_audit.map(|(t, _)| *t)
+                }),
+                changed_by: changed_by.clone(),
+            },
+            FeatureFlagMeta {
+                key: KEY_MAINTENANCE_MESSAGE.into(),
+                description: "Nachricht im Wartungsmodus".into(),
+                default_value: serde_json::json!(DEFAULT_MAINTENANCE_MESSAGE),
+                current_value: serde_json::json!(maintenance_message),
+                source: if db.contains_key(KEY_MAINTENANCE_MESSAGE) {
+                    "db".into()
+                } else {
+                    "default".into()
+                },
+                last_modified: timestamps.get(KEY_MAINTENANCE_MESSAGE).copied(),
+                changed_by: changed_by.clone(),
+            },
+            FeatureFlagMeta {
+                key: KEY_PAYOUT_DEMO_MODE.into(),
+                description: "Payout-Demo-Modus (niedrigere Mindestauszahlung)".into(),
+                default_value: serde_json::json!(payout_demo_env),
+                current_value: serde_json::json!(payout_demo_mode),
+                source: payout_demo_mode_source.clone(),
+                last_modified: timestamps.get(KEY_PAYOUT_DEMO_MODE).copied(),
+                changed_by: changed_by.clone(),
+            },
+            FeatureFlagMeta {
+                key: KEY_WATCH_DURATION_SECS.into(),
+                description: "Watch-Dauer in Sekunden".into(),
+                default_value: serde_json::json!(watch_env),
+                current_value: serde_json::json!(watch_duration_secs),
+                source: watch_duration_source.clone(),
+                last_modified: timestamps.get(KEY_WATCH_DURATION_SECS).copied(),
+                changed_by,
+            },
+        ];
 
         Self {
             maintenance_mode,
@@ -86,6 +164,7 @@ impl FeatureFlagsView {
             payout_demo_mode_source,
             watch_duration_secs,
             watch_duration_source,
+            flags,
         }
     }
 }

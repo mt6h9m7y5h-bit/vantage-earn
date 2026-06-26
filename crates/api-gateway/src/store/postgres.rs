@@ -6,9 +6,15 @@ use shared::{AppError, AppResult};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use referral_engine::ReferralEngine;
 use crate::state::UserProfile;
 use crate::store::week_start_utc;
-use crate::store::{AdminAuditEntry, AdminDailyMetric, BulkUserFilter, LedgerItem, PayoutListFilter, PayoutRequestRow};
+use crate::store::{
+    AdminAuditEntry, AdminDailyMetric, AdminExportUserRow, AdminLiveSnapshot, AdminSearchAuditHit,
+    AdminSearchPayoutHit, AdminSearchReferralHit, AdminSearchResponse, AdminSearchUserHit,
+    AdminTimelineEvent, AdminUserListRow, AdminUserNote, BulkUserFilter, LedgerItem,
+    PayoutListFilter, PayoutRequestRow,
+};
 
 #[derive(Clone)]
 pub struct PgStore {
@@ -911,6 +917,521 @@ impl PgStore {
             }
         };
         Ok(ids.into_iter().map(|(id,)| id).collect())
+    }
+
+    pub async fn admin_list_users(&self, limit: u32) -> AppResult<Vec<AdminUserListRow>> {
+        let rows = sqlx::query_as::<_, UserListRow>(
+            r#"
+            SELECT u.id AS user_id,
+                   COALESCE(w.balance_usdt, 0) AS balance_usdt,
+                   COALESCE(t.score, 50) AS trust_score,
+                   u.banned,
+                   u.created_at,
+                   u.total_watches,
+                   u.referral_count
+            FROM users u
+            LEFT JOIN wallets w ON w.user_id = u.id
+            LEFT JOIN trust_scores t ON t.user_id = u.id
+            ORDER BY u.created_at DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows
+            .into_iter()
+            .map(|r| AdminUserListRow {
+                user_id: r.user_id,
+                referral_code: ReferralEngine::code_for_user(r.user_id),
+                balance_usdt: r.balance_usdt,
+                trust_score: r.trust_score,
+                banned: r.banned,
+                created_at: r.created_at,
+                total_watches: r.total_watches as u32,
+                referral_count: r.referral_count,
+            })
+            .collect())
+    }
+
+    pub async fn admin_global_search(&self, query: &str, limit: u32) -> AppResult<AdminSearchResponse> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(AdminSearchResponse {
+                users: vec![],
+                payouts: vec![],
+                audit: vec![],
+                referrals: vec![],
+            });
+        }
+        let pattern = format!("%{q}%");
+        let lim = limit.clamp(1, 50) as i64;
+
+        let user_rows = sqlx::query_as::<_, (Uuid,)>(
+            r#"
+            SELECT u.id FROM users u
+            LEFT JOIN wallets w ON w.user_id = u.id
+            WHERE u.id::text ILIKE $1
+               OR w.balance_usdt::text ILIKE $1
+            ORDER BY u.created_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(&pattern)
+        .bind(lim)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        let mut users: Vec<AdminSearchUserHit> = user_rows
+            .into_iter()
+            .map(|(id,)| AdminSearchUserHit {
+                user_id: id,
+                referral_code: ReferralEngine::code_for_user(id),
+                label: format!("Nutzer {id}"),
+            })
+            .collect();
+
+        if users.is_empty() {
+            users = self
+                .search_users(q)
+                .await?
+                .into_iter()
+                .map(|id| AdminSearchUserHit {
+                    user_id: id,
+                    referral_code: ReferralEngine::code_for_user(id),
+                    label: format!("Nutzer {id}"),
+                })
+                .collect();
+        }
+
+        let payout_rows = sqlx::query_as::<_, PayoutRow>(
+            r#"
+            SELECT id, user_id, amount_usdt, tier, status, payout_method, created_at
+            FROM payout_requests
+            WHERE id::text ILIKE $1 OR user_id::text ILIKE $1 OR amount_usdt::text ILIKE $1
+            ORDER BY created_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(&pattern)
+        .bind(lim)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        let payouts = payout_rows
+            .into_iter()
+            .map(|r| {
+                let row: PayoutRequestRow = r.into();
+                AdminSearchPayoutHit {
+                    payout_id: row.id,
+                    user_id: row.user_id,
+                    amount_usdt: row.amount_usdt,
+                    status: row.status.clone(),
+                    label: format!("Auszahlung {} — {}", row.amount_usdt, row.status),
+                }
+            })
+            .collect();
+
+        let audit_rows = sqlx::query_as::<_, AuditRow>(
+            r#"
+            SELECT id, admin_ip, action, user_id, details, created_at
+            FROM admin_audit_log
+            WHERE action ILIKE $1 OR details::text ILIKE $1 OR user_id::text ILIKE $1
+            ORDER BY created_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(&pattern)
+        .bind(lim)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        let audit = audit_rows
+            .into_iter()
+            .map(|r| {
+                let entry: AdminAuditEntry = r.into();
+                AdminSearchAuditHit {
+                    audit_id: entry.id,
+                    action: entry.action.clone(),
+                    user_id: entry.user_id,
+                    label: format!("Audit: {}", entry.action),
+                }
+            })
+            .collect();
+
+        let mut referrals = Vec::new();
+        if q.len() >= 3 {
+            if let Some(id) = self.find_user_by_referral_code(q).await? {
+                referrals.push(AdminSearchReferralHit {
+                    user_id: id,
+                    referral_code: ReferralEngine::code_for_user(id),
+                    label: format!("Referral {}", ReferralEngine::code_for_user(id)),
+                });
+            }
+        }
+
+        Ok(AdminSearchResponse {
+            users,
+            payouts,
+            audit,
+            referrals,
+        })
+    }
+
+    pub async fn admin_user_notes(&self, user_id: Uuid) -> AppResult<Vec<AdminUserNote>> {
+        let rows = sqlx::query_as::<_, NoteRow>(
+            r#"
+            SELECT id, user_id, admin_note, created_at, created_by
+            FROM admin_user_notes
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    pub async fn admin_add_user_note(
+        &self,
+        user_id: Uuid,
+        note: &str,
+        created_by: &str,
+    ) -> AppResult<AdminUserNote> {
+        let row = sqlx::query_as::<_, NoteRow>(
+            r#"
+            INSERT INTO admin_user_notes (user_id, admin_note, created_by)
+            VALUES ($1, $2, $3)
+            RETURNING id, user_id, admin_note, created_at, created_by
+            "#,
+        )
+        .bind(user_id)
+        .bind(note)
+        .bind(created_by)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.into())
+    }
+
+    pub async fn admin_user_timeline(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<AdminTimelineEvent>> {
+        let mut events = Vec::new();
+
+        if let Ok(profile) = self.profile(user_id).await {
+            events.push(AdminTimelineEvent {
+                kind: "registration".into(),
+                title: "Registrierung".into(),
+                details: serde_json::json!({ "locale": profile.locale }),
+                occurred_at: profile.created_at,
+            });
+        }
+
+        let ledger = self.ledger(user_id).await?;
+        for item in ledger {
+            let title = if item.kind == "credit" {
+                "Gutschrift"
+            } else {
+                "Abbuchung"
+            };
+            events.push(AdminTimelineEvent {
+                kind: format!("ledger_{}", item.kind),
+                title: title.into(),
+                details: serde_json::json!({
+                    "amount_usdt": item.amount_usdt,
+                    "balance_after": item.balance_after,
+                }),
+                occurred_at: item.created_at,
+            });
+        }
+
+        let payouts = self.user_payouts(user_id, 200).await?;
+        for p in payouts {
+            events.push(AdminTimelineEvent {
+                kind: "payout".into(),
+                title: format!("Auszahlung ({})", p.status),
+                details: serde_json::json!({
+                    "payout_id": p.id,
+                    "amount_usdt": p.amount_usdt,
+                    "status": p.status,
+                    "method": p.payout_method,
+                }),
+                occurred_at: p.created_at,
+            });
+        }
+
+        let audit_rows = sqlx::query_as::<_, AuditRow>(
+            r#"
+            SELECT id, admin_ip, action, user_id, details, created_at
+            FROM admin_audit_log
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 100
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        for r in audit_rows {
+            let e: AdminAuditEntry = r.into();
+            events.push(AdminTimelineEvent {
+                kind: "audit".into(),
+                title: e.action.clone(),
+                details: e.details.clone(),
+                occurred_at: e.created_at,
+            });
+        }
+
+        events.sort_by(|a, b| b.occurred_at.cmp(&a.occurred_at));
+        events.truncate(limit as usize);
+        Ok(events)
+    }
+
+    pub async fn admin_live_snapshot(&self, since: DateTime<Utc>) -> AppResult<AdminLiveSnapshot> {
+        let pending: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM payout_requests
+            WHERE status IN ('pending_validation', 'pending_fraud_review')
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        let new_users: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE created_at >= $1",
+        )
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        let audit_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM admin_audit_log WHERE created_at >= $1",
+        )
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        Ok(AdminLiveSnapshot {
+            pending_payouts: pending.0,
+            new_users_since: new_users.0,
+            recent_audit_count: audit_count.0,
+        })
+    }
+
+    pub async fn admin_export_users(&self, limit: u32) -> AppResult<Vec<AdminExportUserRow>> {
+        let rows = sqlx::query_as::<_, ExportUserRow>(
+            r#"
+            SELECT u.id AS user_id,
+                   COALESCE(w.balance_usdt, 0) AS balance_usdt,
+                   COALESCE(t.score, 50) AS trust_score,
+                   u.banned,
+                   u.created_at,
+                   u.total_watches,
+                   u.referral_count,
+                   u.locale
+            FROM users u
+            LEFT JOIN wallets w ON w.user_id = u.id
+            LEFT JOIN trust_scores t ON t.user_id = u.id
+            ORDER BY u.created_at DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows
+            .into_iter()
+            .map(|r| AdminExportUserRow {
+                user_id: r.user_id,
+                referral_code: ReferralEngine::code_for_user(r.user_id),
+                balance_usdt: r.balance_usdt,
+                trust_score: r.trust_score,
+                banned: r.banned,
+                created_at: r.created_at,
+                total_watches: r.total_watches as u32,
+                referral_count: r.referral_count,
+                locale: r.locale,
+            })
+            .collect())
+    }
+
+    pub async fn admin_export_audit(&self, limit: u32) -> AppResult<Vec<AdminAuditEntry>> {
+        self.admin_audit_log(limit).await
+    }
+
+    pub async fn admin_export_payouts(&self, limit: u32) -> AppResult<Vec<PayoutRequestRow>> {
+        self.list_payout_requests(PayoutListFilter::All, limit).await
+    }
+
+    pub async fn payout_actions_today(&self, day: NaiveDate) -> AppResult<(i64, i64)> {
+        let approved: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM payout_requests
+            WHERE created_at::date = $1 AND status IN ('approved', 'paid_out')
+            "#,
+        )
+        .bind(day)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        let rejected: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM payout_requests
+            WHERE created_at::date = $1 AND status = 'rejected'
+            "#,
+        )
+        .bind(day)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok((approved.0, rejected.0))
+    }
+
+    pub async fn registrations_on(&self, day: NaiveDate) -> AppResult<i64> {
+        self.registrations_today(day).await
+    }
+
+    pub async fn rewards_on(&self, day: NaiveDate) -> AppResult<Decimal> {
+        let row: (Option<Decimal>,) = sqlx::query_as(
+            r#"
+            SELECT COALESCE(SUM(amount_usdt), 0)
+            FROM ledger_entries
+            WHERE kind = 'credit' AND created_at::date = $1
+            "#,
+        )
+        .bind(day)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    pub async fn active_users_on(&self, day: NaiveDate) -> AppResult<i64> {
+        self.active_users_today(day).await
+    }
+
+    pub async fn user_payouts(&self, user_id: Uuid, limit: u32) -> AppResult<Vec<PayoutRequestRow>> {
+        let rows = sqlx::query_as::<_, PayoutRow>(
+            r#"
+            SELECT id, user_id, amount_usdt, tier, status, payout_method, created_at
+            FROM payout_requests
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(user_id)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
+    pub async fn user_total_earnings(&self, user_id: Uuid) -> AppResult<Decimal> {
+        let row: (Option<Decimal>,) = sqlx::query_as(
+            r#"
+            SELECT COALESCE(SUM(amount_usdt), 0)
+            FROM ledger_entries
+            WHERE user_id = $1 AND kind = 'credit'
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0.unwrap_or(Decimal::ZERO))
+    }
+
+    pub async fn user_last_activity(&self, user_id: Uuid) -> AppResult<Option<DateTime<Utc>>> {
+        let row: (Option<DateTime<Utc>>,) = sqlx::query_as(
+            r#"
+            SELECT MAX(created_at) FROM ledger_entries WHERE user_id = $1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn feature_flag_timestamps(&self) -> AppResult<HashMap<String, DateTime<Utc>>> {
+        let rows = sqlx::query_as::<_, (String, DateTime<Utc>)>(
+            "SELECT key, updated_at FROM feature_flags",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().collect())
+    }
+
+    pub async fn latest_feature_flags_audit(&self) -> AppResult<Option<(DateTime<Utc>, serde_json::Value)>> {
+        let row = sqlx::query_as::<_, (DateTime<Utc>, serde_json::Value)>(
+            r#"
+            SELECT created_at, details
+            FROM admin_audit_log
+            WHERE action = 'feature_flags_update'
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row)
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct UserListRow {
+    user_id: Uuid,
+    balance_usdt: Decimal,
+    trust_score: i32,
+    banned: bool,
+    created_at: DateTime<Utc>,
+    total_watches: i32,
+    referral_count: i32,
+}
+
+#[derive(sqlx::FromRow)]
+struct ExportUserRow {
+    user_id: Uuid,
+    balance_usdt: Decimal,
+    trust_score: i32,
+    banned: bool,
+    created_at: DateTime<Utc>,
+    total_watches: i32,
+    referral_count: i32,
+    locale: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct NoteRow {
+    id: Uuid,
+    user_id: Uuid,
+    admin_note: String,
+    created_at: DateTime<Utc>,
+    created_by: String,
+}
+
+impl From<NoteRow> for AdminUserNote {
+    fn from(row: NoteRow) -> Self {
+        Self {
+            id: row.id,
+            user_id: row.user_id,
+            admin_note: row.admin_note,
+            created_at: row.created_at,
+            created_by: row.created_by,
+        }
     }
 }
 

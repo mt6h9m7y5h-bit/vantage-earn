@@ -12,6 +12,7 @@ use axum::{
 use tokio::sync::Mutex;
 
 use crate::error::ApiError;
+use crate::release_info;
 
 #[derive(Clone)]
 pub struct RateLimiter {
@@ -83,6 +84,8 @@ pub async fn middleware(
 ) -> Response {
     let path = request.uri().path();
     // PWA shell + static assets: never rate-limit (dev reloads /demo often).
+    // Admin API: dashboard polls /admin/live every 8s plus stats/health — must not 429.
+    // Dev routes: seed-demo / reset in local development only.
     if matches!(
         path,
         "/"
@@ -93,6 +96,8 @@ pub async fn middleware(
             | "/sw.js"
             | "/manifest.webmanifest"
     ) || path.starts_with("/icons/")
+        || path.starts_with("/admin/")
+        || (!release_info::is_production() && path.starts_with("/dev/"))
     {
         return next.run(request).await;
     }

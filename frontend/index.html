@@ -491,6 +491,109 @@
       .fab-watch { display: block; }
       .view-container { padding: 0 1rem 1rem; }
       .app-header { margin: 0 -1rem 0.75rem; }
+      .card { padding: var(--space-md) var(--space-lg); }
+      .hero-wallet { padding: 1.1rem 0.95rem; }
+      .kpi-strip { gap: 0.5rem; }
+      .kpi-strip > * { min-width: 0; }
+      .stat-tile { padding: 0.7rem 0.65rem; }
+      .balance,
+      #balance,
+      #wallet-balance {
+        font-size: clamp(1.2rem, 4.8vw + 0.35rem, 1.85rem);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        word-break: break-all;
+      }
+      .hero-balance-lg .balance {
+        font-size: clamp(1.35rem, 5vw + 0.4rem, 2rem);
+      }
+      .balance .currency-suffix {
+        font-size: 0.7rem;
+        margin-left: 0.25rem;
+      }
+      .local,
+      #local-balance,
+      #wallet-local {
+        font-size: 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .stat-value {
+        font-size: clamp(0.78rem, 3.2vw + 0.2rem, 0.92rem);
+      }
+      .security-metric { gap: 0.65rem; }
+      .security-metric > div:first-child { min-width: 0; flex: 1; }
+      .security-metric-value {
+        font-size: clamp(0.9rem, 3.8vw + 0.2rem, 1.1rem);
+        flex-shrink: 0;
+        max-width: 42%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: right;
+      }
+      .ledger-item { gap: 0.5rem; min-width: 0; }
+      .ledger-item > div:first-child { min-width: 0; flex: 1; overflow: hidden; }
+      .ledger-credit,
+      .ledger-debit {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.8rem;
+      }
+      .ledger-item > .ledger-meta:last-child {
+        flex-shrink: 0;
+        max-width: 38%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: right;
+      }
+      .row { gap: 0.5rem; min-width: 0; }
+      .row span { min-width: 0; }
+      .row span:last-child {
+        flex-shrink: 0;
+        max-width: 52%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: right;
+      }
+      .progress-label { gap: 0.35rem; min-width: 0; }
+      .progress-label span,
+      .progress-label strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .progress-label strong { flex-shrink: 0; max-width: 55%; text-align: right; }
+      .streak-bonus-highlight {
+        font-size: clamp(1rem, 4.5vw + 0.25rem, 1.2rem);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .bonus-amount {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 55%;
+        text-align: right;
+      }
+      .bonus-meta { gap: 0.5rem; min-width: 0; }
+      .cta-pill { font-size: 0.7rem; padding: 0.3rem 0.5rem; }
+      .referral-code-box code {
+        font-size: clamp(0.85rem, 3.5vw + 0.2rem, 1rem);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
     }
     .wrap { display: contents; }
     .app-header {

@@ -590,6 +590,72 @@ async fn stats_returns_streak_and_estimates() {
 }
 
 #[tokio::test]
+async fn video_offers_returns_tiered_catalog() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let response = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/video-offers", &token, None))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    let offers = json["offers"].as_array().unwrap();
+    assert_eq!(offers.len(), 4);
+
+    assert_eq!(offers[0]["tier"], "quick");
+    assert_eq!(offers[0]["duration_secs"], 30);
+    assert_eq!(offers[0]["label_de"], "Schnell");
+    assert_eq!(offers[0]["reward_usdt"], "0.001");
+    assert!(offers[0]["reward_eur_display"]
+        .as_str()
+        .unwrap()
+        .starts_with('≈'));
+    assert!(offers[0]["reward_eur_display"]
+        .as_str()
+        .unwrap()
+        .contains(','));
+
+    assert_eq!(offers[1]["duration_secs"], 60);
+    assert_eq!(offers[2]["duration_secs"], 90);
+    assert_eq!(offers[3]["tier"], "mega");
+    assert_eq!(offers[3]["duration_secs"], 120);
+    assert_eq!(offers[3]["bonus_multiplier"], 2);
+
+    let expected_60 = RewardEngine::calculate_watch_reward(60, 0);
+    assert_eq!(json_decimal(&offers[1]["reward_usdt"]), expected_60);
+
+    let stats = app
+        .oneshot(authed("GET", "/users/me/stats", &token, None))
+        .await
+        .unwrap();
+    let stats_json = body_json(stats).await;
+    assert_eq!(stats_json["video_offers"].as_array().unwrap().len(), 4);
+}
+
+#[tokio::test]
+async fn watch_complete_honors_chosen_duration() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let response = app
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 120}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    let expected = RewardEngine::calculate_watch_reward(120, 1);
+    assert_eq!(json_decimal(&json["base_reward_usdt"]), expected);
+}
+
+#[tokio::test]
 async fn watch_complete_updates_streak() {
     let app = app(AppState::new());
     let (_user_id, token) = register(&app).await;

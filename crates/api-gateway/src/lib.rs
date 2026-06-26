@@ -17,3 +17,4 @@ pub mod release_info;
 pub mod routes;
 pub mod state;
 pub mod store;
+pub mod video_offers;

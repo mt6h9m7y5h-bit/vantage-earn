@@ -1076,6 +1076,73 @@
       color: var(--text);
     }
     .cta-pill strong { color: var(--success); }
+    .offer-pick-hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 0 0 0.75rem;
+      text-align: center;
+    }
+    .video-offers {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.65rem;
+      margin-bottom: 1rem;
+    }
+    @media (min-width: 480px) {
+      .video-offers { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    .video-offer-card {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.25rem;
+      padding: 0.75rem 0.6rem;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--surface-elevated);
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      min-height: 88px;
+      touch-action: manipulation;
+      transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+    }
+    .video-offer-card:hover:not(:disabled) {
+      border-color: rgba(59, 130, 246, 0.45);
+    }
+    .video-offer-card:active:not(:disabled) { transform: scale(0.97); }
+    .video-offer-card:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .video-offer-card.is-bonus {
+      border-color: rgba(234, 179, 8, 0.5);
+      background: linear-gradient(135deg, var(--surface-elevated) 0%, rgba(234, 179, 8, 0.08) 100%);
+    }
+    .video-offer-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .video-offer-duration {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .video-offer-reward {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--success);
+      font-variant-numeric: tabular-nums;
+    }
+    .video-offer-bonus {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #eab308;
+      margin-top: auto;
+    }
     button {
       width: 100%;
       border: none;
@@ -1976,12 +2043,11 @@
         <section class="view hidden" data-view="earn">
           <section class="card cta-card">
             <h2 class="section-title">Verdienen</h2>
-            <p class="reward-hint" id="reward-hint">Schau 15s bis zum Ende → dann Belohnung</p>
-            <div class="cta-meta">
-              <span class="cta-pill" id="cta-duration">⏱ <strong>15s</strong> Dauer</span>
-              <span class="cta-pill" id="cta-reward">≈ <strong>0.001</strong> USDT</span>
+            <p class="reward-hint" id="reward-hint">Wähle ein Video-Angebot — Provision wird automatisch berechnet.</p>
+            <p class="offer-pick-hint">Du wählst selbst, wie lange du schaust.</p>
+            <div class="video-offers" id="video-offers" role="list" aria-label="Video-Angebote">
+              <p class="empty">Lade Angebote…</p>
             </div>
-            <button class="primary success-btn watch-btn-lg" type="button" onclick="startWatch()">Jetzt Video ansehen &amp; verdienen</button>
             <div class="progress-wrap" style="margin-top:1.25rem">
               <div class="progress-label">
                 <span>Tagesfortschritt</span>
@@ -2390,6 +2456,7 @@
     let token = localStorage.getItem('ve_token');
     let deferredInstall = null;
     let stats = null;
+    let selectedOffer = null;
     let analyticsSummary = null;
     let analyticsPeriod = 7;
     let profileStats = null;
@@ -2400,6 +2467,7 @@
     const REFERRER_BONUS = '0.001';
     const REFEREE_BONUS = '0.001';
     const MIN_WATCH_SECS = 15;
+    const USDT_TO_EUR_UI = 0.92;
     let refreshInFlight = null;
     let submitInFlight = false;
     let registerInFlight = false;
@@ -2956,14 +3024,55 @@
       }
     }
 
-    function updateCtaPills(statsData) {
-      const dur = document.getElementById('cta-duration');
-      const rew = document.getElementById('cta-reward');
-      const secs = watchDurationSecs();
-      if (dur) dur.innerHTML = '⏱ <strong>' + secs + 's</strong> Dauer';
-      if (rew && statsData) {
-        rew.innerHTML = '≈ <strong>' + formatBalanceAmount(statsData.reward_estimate_30s) + '</strong> USDT';
+    function usdtToEurDisplay(usdt) {
+      const n = parseFloat(usdt);
+      if (!Number.isFinite(n)) return '≈ 0,00 €';
+      return '≈ ' + formatLocalizedAmount(n * USDT_TO_EUR_UI) + ' €';
+    }
+
+    function formatOfferDuration(secs) {
+      return secs + ' Sek.';
+    }
+
+    function renderVideoOffers(statsData) {
+      const container = document.getElementById('video-offers');
+      if (!container) return;
+      const offers = statsData?.video_offers;
+      const limitReached = statsData?.watches_remaining_today === 0;
+      if (!offers || !offers.length) {
+        container.innerHTML = '<p class="empty">Keine Angebote verfügbar</p>';
+        return;
       }
+      container.innerHTML = offers.map((offer) => {
+        const bonus = offer.bonus_multiplier
+          ? '<span class="video-offer-bonus">' + offer.bonus_multiplier + '× Bonus</span>'
+          : '';
+        const eur = offer.reward_eur_display || usdtToEurDisplay(offer.reward_usdt);
+        const bonusClass = offer.bonus_multiplier ? ' is-bonus' : '';
+        return '<button type="button" class="video-offer-card' + bonusClass + '" role="listitem"'
+          + ' data-tier="' + offer.tier + '"'
+          + ' data-duration="' + offer.duration_secs + '"'
+          + (limitReached ? ' disabled' : '')
+          + ' onclick="startWatchFromOffer(this)">'
+          + '<span class="video-offer-label">' + offer.label_de + '</span>'
+          + '<span class="video-offer-duration">' + formatOfferDuration(offer.duration_secs) + '</span>'
+          + '<span class="video-offer-reward">' + eur + '</span>'
+          + bonus
+          + '</button>';
+      }).join('');
+    }
+
+    function startWatchFromOffer(el) {
+      if (!el || watchActive) return;
+      const duration = parseInt(el.dataset.duration, 10);
+      const tier = el.dataset.tier || null;
+      const offers = stats?.video_offers || [];
+      const offer = offers.find((o) => o.tier === tier && o.duration_secs === duration) || null;
+      startWatch({ durationSecs: duration, offer });
+    }
+
+    function updateCtaPills(_statsData) {
+      /* legacy hook — offer cards replace CTA pills */
     }
 
     const WALLET_SNAPSHOT_KEY = 've_wallet_snapshot';
@@ -3115,15 +3224,14 @@
     }
 
     function updateRewardHint(statsData) {
-      const secs = watchDurationSecs();
       const hint = document.getElementById('reward-hint');
       if (!hint || !statsData) return;
+      const streak = statsData.streak_bonus_percent > 0
+        ? ' Streak-Bonus: +' + statsData.streak_bonus_percent + '%.'
+        : '';
       hint.textContent =
-        'Schau ' + secs + 's → verdien ~' + formatBalanceAmount(statsData.reward_estimate_30s) + ' USDT'
-        + (statsData.streak_bonus_percent > 0
-          ? ' (+' + statsData.streak_bonus_percent + '% Streak!)'
-          : '');
-      updateCtaPills(statsData);
+        'Provision automatisch nach Videolänge — Surprise-Bonus möglich.' + streak;
+      renderVideoOffers(statsData);
     }
 
     function initTheme() {
@@ -3583,10 +3691,10 @@
       }
       updateAdProviderUi();
       const hint = document.getElementById('reward-hint');
-      if (hint) {
-        hint.textContent = 'Schau ' + watchDurationSecs() + 's bis zum Ende → dann Belohnung';
+      if (hint && !stats) {
+        hint.textContent = 'Wähle ein Video-Angebot — Provision wird automatisch berechnet.';
       }
-      updateCtaPills(stats);
+      if (stats) renderVideoOffers(stats);
       return adConfig;
     }
 
@@ -4683,6 +4791,7 @@
       const fab = document.getElementById('fab-watch');
       if (fab) fab.disabled = disabled;
       document.querySelectorAll('.watch-btn-lg').forEach((b) => { b.disabled = disabled; });
+      document.querySelectorAll('.video-offer-card').forEach((b) => { b.disabled = disabled; });
     }
 
     function cancelWatch() {
@@ -4712,7 +4821,7 @@
       history.replaceState(null, '', location.pathname + location.search);
     }
 
-    async function startWatch() {
+    async function startWatch(opts = {}) {
       if (watchActive) return;
       if (stats && stats.watches_remaining_today === 0) {
         showError('Tageslimit erreicht (30 Videos). Morgen wieder!');
@@ -4723,15 +4832,16 @@
         await loadAdConfig();
       }
 
-      const btn = document.getElementById('watch-btn');
+      const offer = opts.offer || null;
+      selectedOffer = offer;
       const overlay = document.getElementById('ad-overlay');
       const timerEl = document.getElementById('ad-timer');
       const statusEl = document.getElementById('ad-status');
       const placeholder = document.getElementById('ad-placeholder');
       const providerName = AdPlayer.getProviderName();
-      const durationSecs = watchDurationSecs();
+      const durationSecs = opts.durationSecs || (offer && offer.duration_secs) || watchDurationSecs();
 
-      console.log('[VE] WATCH START', { provider: providerName, durationSecs });
+      console.log('[VE] WATCH START', { provider: providerName, durationSecs, offer: offer?.tier });
 
       watchActive = true;
       setWatchButtonsDisabled(true);
@@ -4808,6 +4918,9 @@
           watch_duration_secs: adResult.elapsedSecs || durationSecs,
           ad_provider: adResult.provider || providerName,
         };
+        if (selectedOffer?.tier) {
+          body.offer_tier = selectedOffer.tier;
+        }
         if (adResult.ad_session_id) {
           body.ad_session_id = adResult.ad_session_id;
         }
@@ -4841,6 +4954,7 @@
         }
       } finally {
         watchActive = false;
+        selectedOffer = null;
         setWatchButtonsDisabled(false);
         hideAdOverlay();
         timerEl.classList.remove('hidden');

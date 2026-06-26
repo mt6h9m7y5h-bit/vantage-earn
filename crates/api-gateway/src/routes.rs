@@ -32,6 +32,7 @@ use crate::health;
 use crate::pwa;
 use crate::rate_limit::{self, RateLimiter};
 use crate::state::{AppState, UserProfile};
+use crate::video_offers::{self, VideoOffer, VideoOfferTier};
 
 pub fn router() -> Router<AppState> {
     let rate_limiter = RateLimiter::from_env();
@@ -69,6 +70,7 @@ pub fn router() -> Router<AppState> {
         .route("/users/me/referral", get(get_referral))
         .route("/users/me/referrals/dashboard", get(get_referrals_dashboard))
         .route("/users/me/stats", get(get_stats))
+        .route("/users/me/video-offers", get(get_video_offers))
         .route("/users/me/profile-stats", get(get_profile_stats))
         .route("/users/me/missions", get(get_missions))
         .route("/users/me/missions/{id}/claim", post(claim_mission))
@@ -281,9 +283,14 @@ struct UserStatsResponse {
     challenge_target: u32,
     daily_challenge_completed_today: bool,
     bonus_catalog: Vec<BonusCatalogItem>,
+    video_offers: Vec<VideoOffer>,
 }
 
-async fn build_user_stats(state: &AppState, profile: &UserProfile) -> UserStatsResponse {
+async fn build_user_stats(
+    state: &AppState,
+    profile: &UserProfile,
+    user_id: Uuid,
+) -> UserStatsResponse {
     let watches_today = profile.effective_watches_today();
     let remaining = MAX_WATCHES_PER_DAY.saturating_sub(watches_today);
     let min_payout = state.min_payout_usdt().await;
@@ -302,6 +309,8 @@ async fn build_user_stats(state: &AppState, profile: &UserProfile) -> UserStatsR
         challenge_watches_today: watches_today,
         challenge_bonus_claimed_today: daily_challenge_completed_today,
     });
+    let today = Utc::now().date_naive();
+    let video_offers = video_offers::offers_for_user(user_id, profile.streak_days, today).await;
 
     UserStatsResponse {
         streak_days: profile.streak_days,
@@ -325,6 +334,7 @@ async fn build_user_stats(state: &AppState, profile: &UserProfile) -> UserStatsR
         challenge_target: DAILY_CHALLENGE_TARGET,
         daily_challenge_completed_today,
         bonus_catalog,
+        video_offers,
     }
 }
 
@@ -333,7 +343,22 @@ async fn get_stats(
     AuthUser(user_id): AuthUser,
 ) -> Result<Json<UserStatsResponse>, ApiError> {
     let profile = state.profile(user_id).await;
-    Ok(Json(build_user_stats(&state, &profile).await))
+    Ok(Json(build_user_stats(&state, &profile, user_id).await))
+}
+
+#[derive(Serialize)]
+struct VideoOffersResponse {
+    offers: Vec<VideoOffer>,
+}
+
+async fn get_video_offers(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<VideoOffersResponse>, ApiError> {
+    let profile = state.profile(user_id).await;
+    let today = Utc::now().date_naive();
+    let offers = video_offers::offers_for_user(user_id, profile.streak_days, today).await;
+    Ok(Json(VideoOffersResponse { offers }))
 }
 
 async fn get_ledger(
@@ -483,6 +508,9 @@ struct WatchCompleteRequest {
     /// AppLixir transaction / session id from ad completion callback (future SSV stub).
     #[serde(default)]
     ad_session_id: Option<String>,
+    /// Selected video-offer tier (`quick` | `standard` | `premium` | `mega`).
+    #[serde(default)]
+    offer_tier: Option<VideoOfferTier>,
 }
 
 #[derive(Serialize)]
@@ -524,8 +552,14 @@ async fn watch_complete(
     let today = Utc::now().date_naive();
     let watch_index = profile.total_watches + 1;
 
-    let base_reward =
+    let mut base_reward =
         RewardEngine::calculate_watch_reward(body.watch_duration_secs, profile.streak_days);
+    if body.offer_tier == Some(VideoOfferTier::Mega)
+        && video_offers::bonus_slots_remaining(user_id, today).await > 0
+    {
+        base_reward = (base_reward * Decimal::from(video_offers::BONUS_MULTIPLIER)).round_dp(6);
+        video_offers::consume_bonus_slot(user_id, today).await;
+    }
     let fraud_mult = FraudEngine::reward_multiplier(fraud_prob);
     let base_with_fraud = (base_reward * fraud_mult).round_dp(6);
     let (after_surprise, surprise_mult) =
@@ -623,7 +657,7 @@ async fn watch_complete(
         base_reward_usdt: watch_reward,
         bonuses,
         message,
-        stats: build_user_stats(&state, &profile).await,
+        stats: build_user_stats(&state, &profile, user_id).await,
         wallet: {
             let balance = state.balance(user_id).await?;
             let currency = state.local_currency_for_user(user_id).await;

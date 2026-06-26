@@ -528,6 +528,14 @@
       .hero-wallet .last-updated {
         text-align: center;
       }
+      .responsive-wrapper {
+        display: block;
+        width: 100%;
+        overflow: hidden;
+        text-align: center;
+        min-width: 0;
+        max-width: 100%;
+      }
       .kpi-strip {
         grid-template-columns: repeat(2, 1fr);
         gap: 0.5rem;
@@ -695,6 +703,28 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         min-width: 0;
+      }
+      /* Gemini force-fix — override bleed from flex/grid children */
+      .stat-tile,
+      .card {
+        width: 100%;
+        max-width: 100%;
+        position: relative;
+      }
+      .stat-value {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        font-size: clamp(0.7rem, 3.5vw, 0.85rem) !important;
+      }
+      #balance,
+      #wallet-balance,
+      .hero-balance-lg .balance {
+        min-width: 0;
+        max-width: 100%;
+        word-break: normal;
+        overflow-wrap: normal;
+        font-size: clamp(0.9rem, 4vw, 1.25rem) !important;
       }
     }
     @media (max-width: 390px) {
@@ -915,6 +945,12 @@
       background: var(--success-soft);
       color: var(--success);
       border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .responsive-wrapper {
+      display: block;
+      width: 100%;
+      overflow: hidden;
+      text-align: center;
     }
     .balance {
       font-size: clamp(2rem, 8vw, 3rem);
@@ -1807,7 +1843,9 @@
               <span class="balance-label">Verfügbares Guthaben</span>
               <span class="usdt-pill">USDT</span>
             </div>
-            <div class="balance" id="balance">0<span class="currency-suffix">USDT</span></div>
+            <div class="responsive-wrapper">
+              <div class="balance" id="balance">0<span class="currency-suffix">USDT</span></div>
+            </div>
             <div class="local" id="local-balance">≈ 0 EUR</div>
             <div class="hero-sparkline" id="hero-sparkline-wrap">
               <div class="hero-sparkline-label">Verdienst · 7 Tage</div>
@@ -1882,7 +1920,9 @@
               <span class="balance-label">Wallet-Guthaben</span>
               <span class="usdt-pill">USDT</span>
             </div>
-            <div class="balance" id="wallet-balance">0<span class="currency-suffix">USDT</span></div>
+            <div class="responsive-wrapper">
+              <div class="balance" id="wallet-balance">0<span class="currency-suffix">USDT</span></div>
+            </div>
             <div class="local" id="wallet-local">≈ 0 EUR</div>
           </section>
           <script>
@@ -2513,10 +2553,19 @@
       if (v === 'referrals' && token) loadReferralDashboard();
       if (v === 'payouts' && token) loadPayoutTimeline();
       if (v === 'notifications' && token) loadNotifications();
+      requestAnimationFrame(forceLayoutFix);
     }
 
     function isMobileDisplay() {
       return window.matchMedia('(max-width: 767px)').matches;
+    }
+
+    function forceLayoutFix() {
+      if (!isMobileDisplay()) return;
+      document.querySelectorAll('.stat-tile, .card').forEach((tile) => {
+        tile.style.setProperty('overflow', 'hidden', 'important');
+        tile.style.setProperty('min-width', '0', 'important');
+      });
     }
 
     function isTouchDevice() {
@@ -2762,7 +2811,10 @@
         const val = current + (target - current) * eased;
         balEl.innerHTML = balanceHtml(val);
         if (t < 1) requestAnimationFrame(frame);
-        else balEl.innerHTML = balanceHtml(targetStr);
+        else {
+          balEl.innerHTML = balanceHtml(targetStr);
+          forceLayoutFix();
+        }
       }
       requestAnimationFrame(frame);
     }
@@ -2893,6 +2945,7 @@
       document.documentElement.dataset.veWalletApplied = String(w.balance_usdt);
       document.documentElement.dataset.veWalletSrc = opts.fromSnapshot ? 'snapshot' : 'api';
       markWalletReady();
+      requestAnimationFrame(forceLayoutFix);
     }
 
     async function copyReferralCode() {
@@ -4372,6 +4425,7 @@
       } finally {
         if (refreshBtn) refreshBtn.classList.remove('is-loading');
         if (appEl) appEl.classList.remove('is-loading');
+        requestAnimationFrame(forceLayoutFix);
       }
     }
 
@@ -4678,6 +4732,7 @@
         const ref = params.get('ref');
         if (ref) document.getElementById('referral').value = ref;
       }
+      requestAnimationFrame(forceLayoutFix);
     })();
 
     document.addEventListener('keydown', (e) => {

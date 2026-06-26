@@ -1186,7 +1186,7 @@
       text-align: center;
       padding: 2rem 1.25rem;
       position: relative;
-      z-index: 1;
+      z-index: 250;
       overflow: visible;
     }
     .auth-card .brand-mark {
@@ -1237,6 +1237,15 @@
       font-weight: 500;
     }
     .register-terms-hint.hidden { display: none; }
+    .register-terms-hint.terms-hint-flash {
+      color: var(--danger);
+      animation: terms-hint-pulse 0.45s ease 2;
+    }
+    @keyframes terms-hint-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+    .auth-screen-active .toast-stack { top: 1rem; }
     .terms-accept a {
       color: var(--primary);
       text-decoration: none;
@@ -1816,7 +1825,7 @@
       <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
     </label>
     <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkbox oben aktivieren.</p>
-    <button class="primary btn-pending-terms" type="button" id="register-btn" onclick="onRegisterBtnTap(event)">Kostenlos starten</button>
+    <button class="primary btn-pending-terms" type="button" id="register-btn" onclick="window.register && window.register()">Kostenlos starten</button>
   </div>
 
   <div id="app" class="app-shell hidden">
@@ -2933,6 +2942,20 @@
         if (visible) el.classList.remove('hidden');
         else el.classList.add('hidden');
       });
+    }
+
+    function setAuthScreenActive(active) {
+      document.body.classList.toggle('auth-screen-active', active);
+      if (active) ensureAuthOverlaysHidden();
+    }
+
+    function ensureAuthOverlaysHidden() {
+      document.getElementById('update-banner')?.classList.add('hidden');
+      const ob = document.getElementById('onboarding-overlay');
+      if (ob) {
+        ob.classList.add('hidden');
+        ob.setAttribute('aria-hidden', 'true');
+      }
     }
 
     function updateCtaPills(statsData) {
@@ -4277,22 +4300,13 @@
       ]);
     }
 
-    function onRegisterBtnTap(e) {
-      const now = Date.now();
-      if (e?.type === 'click' && now - (window._registerTapAt || 0) < 450) return;
-      window._registerTapAt = now;
-      const terms = document.getElementById('accept-terms');
-      showBetaDebugToast('Tap · AGB ' + (terms?.checked ? '✓' : '✗'));
-      void register();
-    }
-
     function initRegisterBtn() {
       const btn = document.getElementById('register-btn');
       if (!btn || btn.dataset.registerWired === '1') return;
       btn.dataset.registerWired = '1';
       btn.addEventListener('touchend', (ev) => {
         ev.preventDefault();
-        onRegisterBtnTap({ type: 'touchend' });
+        if (typeof window.register === 'function') window.register();
       }, { passive: false });
     }
 
@@ -4309,7 +4323,12 @@
       if (referralInput) referralInput.classList.remove('field-invalid');
       if (!terms?.checked) {
         showError('Bitte AGB und Datenschutzerklärung akzeptieren.');
-        showBetaDebugToast('AGB fehlt — Checkbox aktivieren');
+        const hint = document.getElementById('register-terms-hint');
+        hint?.classList.remove('hidden');
+        hint?.classList.remove('terms-hint-flash');
+        void hint?.offsetWidth;
+        hint?.classList.add('terms-hint-flash');
+        window.setTimeout(() => hint?.classList.remove('terms-hint-flash'), 2400);
         focusTermsAcceptance();
         return;
       }
@@ -4333,6 +4352,7 @@
         localStorage.setItem('ve_token', token);
         document.getElementById('auth-card').classList.add('hidden');
         document.getElementById('app').classList.remove('hidden');
+        setAuthScreenActive(false);
         setAppChromeVisible(true);
         navigateToView('dashboard');
         log('Account erstellt: ' + data.user_id.slice(0, 8) + '…');
@@ -4635,6 +4655,7 @@
       document.getElementById('app').classList.add('hidden');
       document.getElementById('auth-card').classList.remove('hidden');
       setAppChromeVisible(false);
+      setAuthScreenActive(true);
       syncTrustBadge(null);
       syncRegisterButtonState();
       history.replaceState(null, '', location.pathname + location.search);
@@ -4848,6 +4869,7 @@
       const appEl = document.getElementById('app');
 
       if (token) {
+        setAuthScreenActive(false);
         authCard.classList.add('hidden');
         appEl.classList.remove('hidden');
         setAppChromeVisible(true);
@@ -4874,6 +4896,7 @@
         }
       } else {
         await loadAdConfig();
+        setAuthScreenActive(true);
         authCard.classList.remove('hidden');
         appEl.classList.add('hidden');
         setAppChromeVisible(false);
@@ -4891,6 +4914,8 @@
     document.getElementById('accept-terms')?.addEventListener('change', () => syncRegisterButtonState());
     document.getElementById('accept-terms')?.addEventListener('input', () => syncRegisterButtonState());
     initRegisterBtn();
+    window.register = register;
+    syncRegisterButtonState();
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true }));
 
     (function initPullToRefresh() {

@@ -2476,7 +2476,9 @@
     }
 
     function formatUsdt(value) {
-      return formatBalanceAmount(value) + ' USDT';
+      const num = parseFloat(value) || 0;
+      const isTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+      return (isTouch ? num.toFixed(2) : num.toFixed(4)) + ' USDT';
     }
 
     function analyticsDailySeries(summary) {
@@ -2949,6 +2951,12 @@
     window.addEventListener('online', syncOfflineBanner);
     window.addEventListener('offline', syncOfflineBanner);
     syncOfflineBanner();
+
+    window.addEventListener('load', () => {
+      document.querySelectorAll('.stat-tile').forEach((el) => {
+        el.style.width = '100%';
+      });
+    });
 
     const AdPlayer = {
       _cancelFn: null,

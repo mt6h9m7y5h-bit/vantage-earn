@@ -20,6 +20,18 @@ async fn body_json(response: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+fn json_decimal(v: &serde_json::Value) -> Decimal {
+    if let Some(s) = v.as_str() {
+        s.parse().unwrap_or_else(|_| panic!("invalid decimal string: {s}"))
+    } else if let Some(n) = v.as_f64() {
+        Decimal::from_f64_retain(n)
+            .unwrap_or_else(|| panic!("invalid JSON number: {n}"))
+            .round_dp(6)
+    } else {
+        panic!("expected JSON number or decimal string, got {v}")
+    }
+}
+
 async fn register(app: &Router) -> (Uuid, String) {
     let response = app
         .clone()
@@ -459,7 +471,12 @@ async fn watch_complete_credits_wallet() {
     assert_eq!(json["stats"]["watches_today"], 1);
     assert_eq!(json["stats"]["total_watches"], 1);
     assert_eq!(json["stats"]["streak_days"], 1);
-    assert_eq!(json["wallet"]["balance_usdt"], json["reward_usdt"]);
+    assert_eq!(
+        json_decimal(&json["wallet"]["balance_usdt"]),
+        expected_total
+    );
+    assert!(json["wallet"]["balance_usdt"].is_number());
+    assert!(json["wallet"]["localized_balance"].is_number());
     assert!(json["bonuses"].as_array().unwrap().iter().any(|b| {
         b["id"] == "daily_login"
     }));
@@ -471,7 +488,9 @@ async fn watch_complete_credits_wallet() {
         .unwrap();
     assert_eq!(wallet.status(), StatusCode::OK);
     let wallet_json = body_json(wallet).await;
-    assert_eq!(wallet_json["balance_usdt"], json["reward_usdt"]);
+    assert_eq!(json_decimal(&wallet_json["balance_usdt"]), expected_total);
+    assert!(wallet_json["balance_usdt"].is_number());
+    assert!(wallet_json["localized_balance"].is_number());
     assert!(wallet_json["trust_score"].as_i64().unwrap() > 0);
 
     // Simulate full page reload: fresh GET wallet + stats must still reflect credited balance.
@@ -492,9 +511,9 @@ async fn watch_complete_credits_wallet() {
         .unwrap();
     assert_eq!(wallet_reload.status(), StatusCode::OK);
     let reload_json = body_json(wallet_reload).await;
-    assert_eq!(reload_json["balance_usdt"], json["reward_usdt"]);
+    assert_eq!(json_decimal(&reload_json["balance_usdt"]), expected_total);
     assert!(
-        reload_json["balance_usdt"].as_str().unwrap() != "0",
+        reload_json["balance_usdt"].as_f64().unwrap_or(0.0) > 0.0,
         "wallet balance must persist after reload-style GET"
     );
 }

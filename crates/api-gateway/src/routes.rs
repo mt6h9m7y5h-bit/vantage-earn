@@ -197,7 +197,9 @@ async fn login(
 #[derive(Serialize)]
 struct WalletResponse {
     user_id: Uuid,
+    #[serde(with = "rust_decimal::serde::float")]
     balance_usdt: Decimal,
+    #[serde(with = "rust_decimal::serde::float")]
     localized_balance: Decimal,
     currency: String,
     trust_score: i32,

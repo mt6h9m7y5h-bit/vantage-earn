@@ -1159,6 +1159,106 @@
       border-radius: 4px;
       min-height: 0.85em;
     }
+    .top-offers-section {
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .top-offers-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.35rem;
+    }
+    .top-offers-heading .section-title {
+      margin: 0;
+    }
+    .top-offers-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.45rem;
+      border-radius: 6px;
+      background: rgba(139, 92, 246, 0.15);
+      color: #a78bfa;
+      white-space: nowrap;
+    }
+    .top-offers-hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: 0 0 0.65rem;
+    }
+    .top-offers {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.65rem;
+    }
+    @media (min-width: 480px) {
+      .top-offers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (min-width: 720px) {
+      .top-offers { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    .top-offer-card {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.2rem;
+      padding: 0.7rem 0.55rem;
+      border-radius: 12px;
+      border: 1px solid rgba(139, 92, 246, 0.28);
+      background: linear-gradient(135deg, var(--surface-elevated) 0%, rgba(139, 92, 246, 0.06) 100%);
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      min-height: 84px;
+      touch-action: manipulation;
+      transition: border-color var(--transition), transform var(--transition);
+    }
+    .top-offer-card:hover:not(:disabled) {
+      border-color: rgba(139, 92, 246, 0.55);
+    }
+    .top-offer-card:active:not(:disabled) { transform: scale(0.97); }
+    .top-offer-card:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .top-offer-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #a78bfa;
+    }
+    .top-offer-effort {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .top-offer-reward {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--success);
+      font-variant-numeric: tabular-nums;
+      margin-top: auto;
+    }
+    .top-offer-card.is-skeleton {
+      pointer-events: none;
+      cursor: default;
+      border-color: var(--border);
+      background: var(--surface-elevated);
+    }
+    .top-offer-card.is-skeleton .top-offer-label,
+    .top-offer-card.is-skeleton .top-offer-effort,
+    .top-offer-card.is-skeleton .top-offer-reward {
+      color: transparent;
+      background: linear-gradient(90deg, var(--surface-elevated) 25%, var(--surface-hover) 50%, var(--surface-elevated) 75%);
+      background-size: 200% 100%;
+      animation: skeleton 1.2s ease-in-out infinite;
+      border-radius: 4px;
+      min-height: 0.8em;
+    }
     button {
       width: 100%;
       border: none;
@@ -2059,6 +2159,14 @@
         <section class="view hidden" data-view="earn">
           <section class="card cta-card">
             <h2 class="section-title">Verdienen</h2>
+            <section class="top-offers-section" aria-labelledby="top-offers-title">
+              <div class="top-offers-heading">
+                <h3 class="section-title" id="top-offers-title">Top-Angebote</h3>
+                <span class="top-offers-badge">Bald verfügbar</span>
+              </div>
+              <p class="top-offers-hint">Umfragen &amp; App-Tests — höhere Einzelbelohnungen als Kurzvideos.</p>
+              <div class="top-offers" id="top-offers" role="list" aria-label="Top-Angebote"></div>
+            </section>
             <p class="reward-hint" id="reward-hint">Wähle ein Video-Angebot — Provision wird automatisch berechnet.</p>
             <p class="offer-pick-hint">Du wählst selbst, wie lange du schaust.</p>
             <div class="video-offers" id="video-offers" role="list" aria-label="Video-Angebote"></div>
@@ -3054,6 +3162,53 @@
       return secs + ' Sek.';
     }
 
+    function renderTopOfferSkeleton() {
+      const container = document.getElementById('top-offers');
+      if (!container) return;
+      container.innerHTML = Array.from({ length: 5 }, () =>
+        '<div class="top-offer-card is-skeleton" aria-hidden="true">'
+        + '<span class="top-offer-label">&nbsp;</span>'
+        + '<span class="top-offer-effort">&nbsp;</span>'
+        + '<span class="top-offer-reward">&nbsp;</span>'
+        + '</div>'
+      ).join('');
+    }
+
+    function onTopOfferTap(offerId) {
+      void offerId;
+      showSuccessCelebration(
+        'Offerwall kommt bald — Bitlabs/CPX Anbindung in Arbeit',
+        false
+      );
+    }
+
+    function renderTopOffers(statsData, opts = {}) {
+      const container = document.getElementById('top-offers');
+      if (!container) return;
+      if (opts.loading) {
+        renderTopOfferSkeleton();
+        return;
+      }
+      const offers = statsData?.top_offers;
+      if (!offers || !offers.length) {
+        if (opts.offline) {
+          container.innerHTML = '<p class="empty">Top-Angebote laden…</p>';
+          return;
+        }
+        container.innerHTML = '<p class="empty">Keine Top-Angebote verfügbar</p>';
+        return;
+      }
+      container.innerHTML = offers.map((offer) =>
+        '<button type="button" class="top-offer-card" role="listitem"'
+        + ' data-offer-id="' + offer.id + '"'
+        + ' onclick="onTopOfferTap(\'' + offer.id + '\')">'
+        + '<span class="top-offer-label">' + offer.label_de + '</span>'
+        + '<span class="top-offer-effort">' + (offer.effort_hint_de || '') + '</span>'
+        + '<span class="top-offer-reward">' + (offer.reward_eur_display || '') + '</span>'
+        + '</button>'
+      ).join('');
+    }
+
     function renderVideoOfferSkeleton() {
       const container = document.getElementById('video-offers');
       if (!container) return;
@@ -3277,6 +3432,7 @@
         : '';
       hint.textContent =
         'Provision automatisch nach Videolänge — Surprise-Bonus möglich.' + streak;
+      renderTopOffers(statsData);
       renderVideoOffers(statsData);
     }
 
@@ -3740,7 +3896,10 @@
       if (hint && !stats) {
         hint.textContent = 'Wähle ein Video-Angebot — Provision wird automatisch berechnet.';
       }
-      if (stats) renderVideoOffers(stats);
+      if (stats) {
+        renderTopOffers(stats);
+        renderVideoOffers(stats);
+      }
       return adConfig;
     }
 
@@ -4804,6 +4963,9 @@
         if (!stats?.video_offers?.length) {
           renderVideoOffers(stats, { offline: true });
         }
+        if (!stats?.top_offers?.length) {
+          renderTopOffers(stats, { offline: true });
+        }
         requestAnimationFrame(forceLayoutFix);
       }
       void loadPremiumData().catch(() => {});
@@ -4846,6 +5008,7 @@
       if (fab) fab.disabled = disabled;
       document.querySelectorAll('.watch-btn-lg').forEach((b) => { b.disabled = disabled; });
       document.querySelectorAll('.video-offer-card').forEach((b) => { b.disabled = disabled; });
+      document.querySelectorAll('.top-offer-card').forEach((b) => { b.disabled = disabled; });
     }
 
     function cancelWatch() {
@@ -5057,6 +5220,7 @@
     }
 
     primeWalletFromStorage();
+    renderTopOffers(null, { loading: true });
     renderVideoOffers(null, { loading: true });
 
     (async function bootstrapUi() {

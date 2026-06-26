@@ -633,6 +633,38 @@ async fn video_offers_returns_tiered_catalog() {
         .unwrap();
     let stats_json = body_json(stats).await;
     assert_eq!(stats_json["video_offers"].as_array().unwrap().len(), 4);
+    assert_eq!(stats_json["top_offers"].as_array().unwrap().len(), 5);
+}
+
+#[tokio::test]
+async fn top_offers_returns_mock_catalog() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let response = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/top-offers", &token, None))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    let offers = json["offers"].as_array().unwrap();
+    assert_eq!(offers.len(), 5);
+
+    assert_eq!(offers[0]["label_de"], "Umfrage");
+    assert_eq!(offers[0]["reward_eur_cents"], 30);
+    assert!(offers[0]["reward_eur_display"]
+        .as_str()
+        .unwrap()
+        .starts_with('≈'));
+    assert_eq!(offers[0]["status"], "mock");
+
+    let cents: Vec<u32> = offers
+        .iter()
+        .map(|o| o["reward_eur_cents"].as_u64().unwrap() as u32)
+        .collect();
+    assert!(cents.iter().all(|c| (30..=80).contains(c)));
 }
 
 #[tokio::test]

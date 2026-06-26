@@ -32,6 +32,7 @@ use crate::health;
 use crate::pwa;
 use crate::rate_limit::{self, RateLimiter};
 use crate::state::{AppState, UserProfile};
+use crate::top_offers::{self, TopOffer};
 use crate::video_offers::{self, VideoOffer, VideoOfferTier};
 
 pub fn router() -> Router<AppState> {
@@ -71,6 +72,7 @@ pub fn router() -> Router<AppState> {
         .route("/users/me/referrals/dashboard", get(get_referrals_dashboard))
         .route("/users/me/stats", get(get_stats))
         .route("/users/me/video-offers", get(get_video_offers))
+        .route("/users/me/top-offers", get(get_top_offers))
         .route("/users/me/profile-stats", get(get_profile_stats))
         .route("/users/me/missions", get(get_missions))
         .route("/users/me/missions/{id}/claim", post(claim_mission))
@@ -284,6 +286,7 @@ struct UserStatsResponse {
     daily_challenge_completed_today: bool,
     bonus_catalog: Vec<BonusCatalogItem>,
     video_offers: Vec<VideoOffer>,
+    top_offers: Vec<TopOffer>,
 }
 
 async fn build_user_stats(
@@ -311,6 +314,7 @@ async fn build_user_stats(
     });
     let today = Utc::now().date_naive();
     let video_offers = video_offers::offers_for_user(user_id, profile.streak_days, today).await;
+    let top_offers = top_offers::offers_for_user();
 
     UserStatsResponse {
         streak_days: profile.streak_days,
@@ -335,6 +339,7 @@ async fn build_user_stats(
         daily_challenge_completed_today,
         bonus_catalog,
         video_offers,
+        top_offers,
     }
 }
 
@@ -359,6 +364,19 @@ async fn get_video_offers(
     let today = Utc::now().date_naive();
     let offers = video_offers::offers_for_user(user_id, profile.streak_days, today).await;
     Ok(Json(VideoOffersResponse { offers }))
+}
+
+#[derive(Serialize)]
+struct TopOffersResponse {
+    offers: Vec<TopOffer>,
+}
+
+async fn get_top_offers(
+    AuthUser(_user_id): AuthUser,
+) -> Result<Json<TopOffersResponse>, ApiError> {
+    Ok(Json(TopOffersResponse {
+        offers: top_offers::offers_for_user(),
+    }))
 }
 
 async fn get_ledger(

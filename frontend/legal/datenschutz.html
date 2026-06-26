@@ -111,12 +111,6 @@
     li { margin-bottom: 0.35rem; }
     a { color: var(--primary); text-decoration: none; }
     a:hover { color: var(--primary-hover); text-decoration: underline; }
-    .placeholder {
-      background: var(--primary-soft);
-      border-radius: 6px;
-      padding: 0.1rem 0.35rem;
-      font-weight: 500;
-    }
     footer {
       margin-top: 2rem;
       padding-top: 1.25rem;
@@ -127,9 +121,15 @@
     }
     footer a { color: var(--muted); }
     footer a:hover { color: var(--primary); }
+    .testdata-note {
+      margin-top: 0.5rem;
+      font-style: italic;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
+  <!-- Testdaten — vor Launch durch echte Angaben ersetzen -->
   <div class="page">
     <a class="back-link" href="/demo">← Zurück zur App</a>
 
@@ -139,20 +139,22 @@
     </header>
 
     <div class="notice" role="note">
-      <strong>Hinweis für den Betreiber:</strong> Diese Datenschutzerklärung ist eine Vorlage und ersetzt keine individuelle Rechtsberatung. Bitte lassen Sie den Text vor Veröffentlichung von einem auf Datenschutzrecht spezialisierten Anwalt prüfen und passen Sie alle als <span class="placeholder">Platzhalter</span> gekennzeichneten Angaben an.
+      <strong>Hinweis:</strong> Diese Datenschutzerklärung ist eine Vorlage für den Testbetrieb und ersetzt keine individuelle Rechtsberatung. Bitte lassen Sie den Text vor dem produktiven Launch von einem auf Datenschutzrecht spezialisierten Anwalt prüfen.
+      <p class="testdata-note">Testdaten — vor Launch durch echte Angaben ersetzen</p>
     </div>
 
     <section class="card">
       <h2>1. Verantwortlicher</h2>
       <p>Verantwortlich für die Datenverarbeitung im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:</p>
       <p>
-        <span class="placeholder">VANTAGE Earn / [Name des Betreibers]</span><br />
-        <span class="placeholder">[Straße und Hausnummer]</span><br />
-        <span class="placeholder">[PLZ Ort, Land]</span>
+        VANTAGE Earn UG (haftungsbeschränkt) i.Gr.<br />
+        Musterstraße 12<br />
+        10115 Berlin, Deutschland
       </p>
       <p>
-        E-Mail: <a href="mailto:datenschutz@vantage-earn.app"><span class="placeholder">datenschutz@vantage-earn.app</span></a>
-        <span class="placeholder"> (Platzhalter zum Ausfüllen)</span>
+        Vertreten durch: Eren Can (Geschäftsführer)<br />
+        E-Mail: <a href="mailto:datenschutz@vantage-earn.app">datenschutz@vantage-earn.app</a><br />
+        Telefon: +49 30 12345678
       </p>
     </section>
 
@@ -257,8 +259,7 @@
       </ul>
       <p>
         Zur Ausübung Ihrer Rechte wenden Sie sich an:
-        <a href="mailto:datenschutz@vantage-earn.app"><span class="placeholder">datenschutz@vantage-earn.app</span></a>
-        <span class="placeholder"> (Platzhalter)</span>.
+        <a href="mailto:datenschutz@vantage-earn.app">datenschutz@vantage-earn.app</a>.
       </p>
       <p>
         Sie haben zudem das Recht, sich bei einer Datenschutz-Aufsichtsbehörde zu beschweren (Art.&nbsp;77 DSGVO), insbesondere in dem Mitgliedstaat Ihres gewöhnlichen Aufenthaltsorts, Ihres Arbeitsplatzes oder des Orts des mutmaßlichen Verstoßes.
@@ -280,7 +281,8 @@
     </section>
 
     <footer>
-      <p>VANTAGE Earn · <a href="/demo">Zur App</a> · <a href="/health">API-Status</a></p>
+      <p>VANTAGE Earn · <a href="/demo">Zur App</a> · <a href="/legal/agb">AGB</a> · <a href="/legal/impressum">Impressum</a> · <a href="/health">API-Status</a></p>
+      <p class="testdata-note">Testdaten — vor Launch durch echte Angaben ersetzen</p>
     </footer>
   </div>
 </body>

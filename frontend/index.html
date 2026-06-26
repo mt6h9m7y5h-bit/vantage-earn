@@ -19,12 +19,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script>
-    window.forceDeDecimal = function forceDeDecimal(num, fractionDigits) {
-      fractionDigits = fractionDigits == null ? 2 : fractionDigits;
-      var n = parseFloat(num);
-      if (!isFinite(n)) return fractionDigits === 2 ? '0,00' : '0';
-      return n.toFixed(fractionDigits).replace('.', ',');
-    };
+    (function () {
+      window.veForceDeDecimal = function (num, fractionDigits) {
+        fractionDigits = fractionDigits == null ? 2 : fractionDigits;
+        var n = parseFloat(num);
+        if (!isFinite(n)) return fractionDigits === 2 ? '0,00' : '0';
+        return n.toFixed(fractionDigits).replace('.', ',');
+      };
+    })();
   </script>
   <style>
     :root,
@@ -2004,7 +2006,7 @@
                 if (s == null || s.balance_usdt == null) return;
                 var bal = String(s.balance_usdt);
                 function veFmtLoc(v) {
-                  return window.forceDeDecimal(v, 2);
+                  return window.veForceDeDecimal(v, 2);
                 }
                 var loc = '≈ ' + veFmtLoc(s.localized_balance || '0') + ' ' + (s.currency || 'EUR');
                 function veFmtBal(v) {
@@ -2013,7 +2015,7 @@
                   var compact = window.matchMedia('(max-width: 767px)').matches
                     || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                   var digits = compact ? 2 : (n < 0.01 ? 6 : 4);
-                  return window.forceDeDecimal(n, digits);
+                  return window.veForceDeDecimal(n, digits);
                 }
                 var balHtml = veFmtBal(bal) + '<span class="currency-suffix">USDT</span>';
                 var b = document.getElementById('balance');
@@ -2666,13 +2668,13 @@
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
       const digits = isCompactDecimalDisplay() ? 2 : (n < 0.01 ? 6 : 4);
-      return window.forceDeDecimal(n, digits);
+      return window.veForceDeDecimal(n, digits);
     }
 
     function formatLocalizedAmount(val) {
       const num = parseFloat(val);
       if (isNaN(num)) return '0,00';
-      return window.forceDeDecimal(num, 2);
+      return window.veForceDeDecimal(num, 2);
     }
 
     function localBalanceLine(localized, currency) {

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use shared::{AppError, AppResult};
+use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -34,7 +35,11 @@ pub fn normalize_database_url(url: &str) -> String {
 impl PgStore {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
         let url = normalize_database_url(database_url);
-        let pool = PgPool::connect(&url).await?;
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect(&url)
+            .await?;
         sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
     }

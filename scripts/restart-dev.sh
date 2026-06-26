@@ -10,6 +10,9 @@ if [[ -n "${PID}" ]]; then
   sleep 1
 fi
 if [[ -f .env ]]; then
+  if ! grep -qE '^[[:space:]]*DATABASE_URL=' .env; then
+    unset DATABASE_URL
+  fi
   set -a
   # shellcheck disable=SC1091
   source .env

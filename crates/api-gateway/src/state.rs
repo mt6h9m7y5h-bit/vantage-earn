@@ -150,12 +150,15 @@ impl AppState {
     }
 
     pub async fn connect() -> Self {
-        let store = if let Ok(url) = std::env::var("DATABASE_URL") {
-            tracing::info!("connecting to PostgreSQL");
-            connect_store_with_retry(&url).await
-        } else {
-            tracing::warn!("DATABASE_URL not set — using in-memory store");
-            Store::memory()
+        let store = match std::env::var("DATABASE_URL") {
+            Ok(url) if !url.trim().is_empty() => {
+                tracing::info!("connecting to PostgreSQL");
+                connect_store_with_retry(url.trim()).await
+            }
+            _ => {
+                tracing::warn!("DATABASE_URL not set — using in-memory store");
+                Store::memory()
+            }
         };
         Self::with_store(store)
     }
@@ -1057,10 +1060,11 @@ impl AppState {
 }
 
 async fn connect_store_with_retry(database_url: &str) -> Store {
-    const MAX_ATTEMPTS: u32 = 15;
-    const RETRY_SECS: u64 = 3;
+    let dev = std::env::var("RUST_ENV").as_deref() == Ok("development");
+    let max_attempts = if dev { 1 } else { 3 };
+    const RETRY_SECS: u64 = 2;
     let mut last_err = None;
-    for attempt in 1..=MAX_ATTEMPTS {
+    for attempt in 1..=max_attempts {
         match Store::connect(database_url).await {
             Ok(s) => {
                 if attempt > 1 {
@@ -1071,18 +1075,22 @@ async fn connect_store_with_retry(database_url: &str) -> Store {
             Err(e) => {
                 tracing::warn!(
                     attempt,
-                    max = MAX_ATTEMPTS,
+                    max = max_attempts,
                     error = %e,
                     "database connection failed, retrying"
                 );
                 last_err = Some(e);
-                if attempt < MAX_ATTEMPTS {
+                if attempt < max_attempts {
                     tokio::time::sleep(std::time::Duration::from_secs(RETRY_SECS)).await;
                 }
             }
         }
     }
-    tracing::error!(error = ?last_err, "database connection failed after retries");
+    tracing::error!(
+        error = ?last_err,
+        hint = "Local dev: comment DATABASE_URL in .env for in-memory store, or run ./scripts/db-up.sh for Docker Postgres. Do not use Render DATABASE_URL locally.",
+        "database connection failed after retries"
+    );
     std::process::exit(1);
 }
 

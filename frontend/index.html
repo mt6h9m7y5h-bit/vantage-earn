@@ -1943,12 +1943,12 @@
                 function veFmtBal(v) {
                   var n = parseFloat(v);
                   if (!isFinite(n) || n === 0) return '0';
-                  var touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                  if (window.matchMedia('(max-width: 767px)').matches || touch) {
-                    return n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-                  }
-                  if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
-                  return n.toFixed(4).replace(/\.?0+$/, '');
+                  var compact = window.matchMedia('(max-width: 767px)').matches
+                    || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                  var opts = compact
+                    ? { minimumFractionDigits: 0, maximumFractionDigits: 2 }
+                    : { minimumFractionDigits: 2, maximumFractionDigits: n < 0.01 ? 6 : 4 };
+                  return n.toLocaleString('de-DE', opts);
                 }
                 var balHtml = veFmtBal(bal) + '<span class="currency-suffix">USDT</span>';
                 var b = document.getElementById('balance');
@@ -2585,11 +2585,10 @@
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
-      if (isCompactDecimalDisplay()) {
-        return n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-      }
-      if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
-      return n.toFixed(4).replace(/\.?0+$/, '');
+      const opts = isCompactDecimalDisplay()
+        ? { minimumFractionDigits: 0, maximumFractionDigits: 2 }
+        : { minimumFractionDigits: 2, maximumFractionDigits: n < 0.01 ? 6 : 4 };
+      return n.toLocaleString('de-DE', opts);
     }
 
     function formatLocalizedAmount(value) {
@@ -2791,9 +2790,10 @@
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
       });
       const label = e.label_de || (e.kind === 'credit' ? 'Gutschrift' : 'Abbuchung');
-      const balance = e.balance_after != null ? e.balance_after : '—';
+      const amount = formatBalanceAmount(e.amount_usdt);
+      const balance = e.balance_after != null ? formatBalanceAmount(e.balance_after) : '—';
       return `<div class="ledger-item">
-        <div><span class="${cls}">${sign}${e.amount_usdt} USDT</span>
+        <div><span class="${cls}">${sign}${amount} USDT</span>
         <div class="ledger-meta">${label} · ${time}</div></div>
         <span class="ledger-meta">Saldo ${balance}</span>
       </div>`;
@@ -2814,7 +2814,7 @@
     }
 
     function parseUsdt(str) {
-      return parseFloat(String(str).replace(/[^\d.]/g, '')) || 0;
+      return parseFloat(String(str).replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
     }
 
     function animateBalance(targetStr) {
@@ -2868,7 +2868,7 @@
       const secs = watchDurationSecs();
       if (dur) dur.innerHTML = '⏱ <strong>' + secs + 's</strong> Dauer';
       if (rew && statsData) {
-        rew.innerHTML = '≈ <strong>' + statsData.reward_estimate_30s + '</strong> USDT';
+        rew.innerHTML = '≈ <strong>' + formatBalanceAmount(statsData.reward_estimate_30s) + '</strong> USDT';
       }
     }
 
@@ -3004,7 +3004,7 @@
       const hint = document.getElementById('reward-hint');
       if (!hint || !statsData) return;
       hint.textContent =
-        'Schau ' + secs + 's → verdien ~' + statsData.reward_estimate_30s + ' USDT'
+        'Schau ' + secs + 's → verdien ~' + formatBalanceAmount(statsData.reward_estimate_30s) + ' USDT'
         + (statsData.streak_bonus_percent > 0
           ? ' (+' + statsData.streak_bonus_percent + '% Streak!)'
           : '');
@@ -3059,7 +3059,7 @@
           caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
         }
       } else {
-        navigator.serviceWorker.register('/sw.js').then(() => {}).catch(() => {});
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(() => {}).catch(() => {});
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (window._swReloading) return;
         });

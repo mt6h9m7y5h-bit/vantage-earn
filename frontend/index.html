@@ -1825,7 +1825,7 @@
       <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
     </label>
     <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkbox oben aktivieren.</p>
-    <button class="primary btn-pending-terms" type="button" id="register-btn" onclick="onRegisterBtnTap(event)">Kostenlos starten</button>
+    <button class="primary btn-pending-terms" type="button" id="register-btn">Kostenlos starten</button>
   </div>
 
   <div id="app" class="app-shell hidden">
@@ -2661,22 +2661,18 @@
       return isMobileDisplay() || isTouchDevice();
     }
 
-    function forceDeDecimal(num, fractionDigits = 2) {
-      return window.forceDeDecimal(num, fractionDigits);
-    }
-
     function formatBalanceAmount(value) {
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
       const digits = isCompactDecimalDisplay() ? 2 : (n < 0.01 ? 6 : 4);
-      return forceDeDecimal(n, digits);
+      return window.forceDeDecimal(n, digits);
     }
 
     function formatLocalizedAmount(val) {
       const num = parseFloat(val);
       if (isNaN(num)) return '0,00';
-      return forceDeDecimal(num, 2);
+      return window.forceDeDecimal(num, 2);
     }
 
     function localBalanceLine(localized, currency) {
@@ -4302,11 +4298,11 @@
 
     function onRegisterBtnTap(e) {
       const now = Date.now();
-      if (e?.type === 'click' && now - (window._registerTapAt || 0) < 450) return;
+      if (now - (window._registerTapAt || 0) < 450) return;
       window._registerTapAt = now;
       const terms = document.getElementById('accept-terms');
       showBetaDebugToast('Tap · AGB ' + (terms?.checked ? '✓' : '✗'));
-      void register();
+      void doRegisterAccount();
     }
 
     function initRegisterBtn() {
@@ -4317,40 +4313,43 @@
         ev.preventDefault();
         onRegisterBtnTap({ type: 'touchend' });
       }, { passive: false });
+      btn.addEventListener('click', () => {
+        onRegisterBtnTap({ type: 'click' });
+      });
     }
 
-    async function register() {
+    async function doRegisterAccount() {
       if (registerInFlight) {
         showBetaDebugToast('Registrierung läuft…');
         return;
       }
-      const btn = document.getElementById('register-btn');
-      const terms = document.getElementById('accept-terms');
-      const referralInput = document.getElementById('referral');
-      const referralErr = document.getElementById('referral-error');
-      if (referralErr) referralErr.textContent = '';
-      if (referralInput) referralInput.classList.remove('field-invalid');
-      if (!terms?.checked) {
-        showError('Bitte AGB und Datenschutzerklärung akzeptieren.');
-        const hint = document.getElementById('register-terms-hint');
-        hint?.classList.remove('hidden');
-        hint?.classList.remove('terms-hint-flash');
-        void hint?.offsetWidth;
-        hint?.classList.add('terms-hint-flash');
-        window.setTimeout(() => hint?.classList.remove('terms-hint-flash'), 2400);
-        focusTermsAcceptance();
-        return;
-      }
-      const referral_code = referralInput?.value.trim() || undefined;
-      if (referral_code && !/^[A-Za-z0-9_-]{4,32}$/.test(referral_code)) {
-        if (referralErr) referralErr.textContent = 'Ungültiger Code — nur Buchstaben, Zahlen, Binde- und Unterstrich (4–32 Zeichen).';
-        referralInput?.classList.add('field-invalid');
-        return;
-      }
       registerInFlight = true;
+      const btn = document.getElementById('register-btn');
       setButtonLoading(btn, true);
-      showBetaDebugToast('Registriere…');
       try {
+        const terms = document.getElementById('accept-terms');
+        const referralInput = document.getElementById('referral');
+        const referralErr = document.getElementById('referral-error');
+        if (referralErr) referralErr.textContent = '';
+        if (referralInput) referralInput.classList.remove('field-invalid');
+        if (!terms?.checked) {
+          showError('Bitte AGB und Datenschutzerklärung akzeptieren.');
+          const hint = document.getElementById('register-terms-hint');
+          hint?.classList.remove('hidden');
+          hint?.classList.remove('terms-hint-flash');
+          void hint?.offsetWidth;
+          hint?.classList.add('terms-hint-flash');
+          window.setTimeout(() => hint?.classList.remove('terms-hint-flash'), 2400);
+          focusTermsAcceptance();
+          return;
+        }
+        const referral_code = referralInput?.value.trim() || undefined;
+        if (referral_code && !/^[A-Za-z0-9_-]{4,32}$/.test(referral_code)) {
+          if (referralErr) referralErr.textContent = 'Ungültiger Code — nur Buchstaben, Zahlen, Binde- und Unterstrich (4–32 Zeichen).';
+          referralInput?.classList.add('field-invalid');
+          return;
+        }
+        showBetaDebugToast('Registriere…');
         const body = {
           locale: 'de_DE',
           accept_terms: true,
@@ -4377,6 +4376,8 @@
         syncRegisterButtonState();
       }
     }
+
+    window.veRegister = doRegisterAccount;
 
     function focusTermsAcceptance() {
       const label = document.querySelector('.terms-accept');
@@ -4923,7 +4924,6 @@
     document.getElementById('accept-terms')?.addEventListener('change', () => syncRegisterButtonState());
     document.getElementById('accept-terms')?.addEventListener('input', () => syncRegisterButtonState());
     initRegisterBtn();
-    window.register = register;
     syncRegisterButtonState();
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true }));
 

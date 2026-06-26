@@ -58,6 +58,27 @@ fn authed(method: &str, uri: &str, token: &str, body: Option<&str>) -> Request<B
 }
 
 #[tokio::test]
+async fn root_redirects_to_demo_not_health_json() {
+    let app = app(AppState::new());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/")
+                .header("accept", "text/html,application/xhtml+xml")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT);
+    assert_eq!(
+        response.headers().get("location").unwrap().to_str().unwrap(),
+        "/demo"
+    );
+}
+
+#[tokio::test]
 async fn health_returns_ok() {
     let app = app(AppState::new());
     let response = app

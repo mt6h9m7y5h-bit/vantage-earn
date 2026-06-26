@@ -18,6 +18,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    window.forceDeDecimal = function forceDeDecimal(num, fractionDigits) {
+      fractionDigits = fractionDigits == null ? 2 : fractionDigits;
+      var n = parseFloat(num);
+      if (!isFinite(n)) return fractionDigits === 2 ? '0,00' : '0';
+      return n.toFixed(fractionDigits).replace('.', ',');
+    };
+  </script>
   <style>
     :root,
     [data-theme="dark"] {
@@ -1940,9 +1948,7 @@
                 if (s == null || s.balance_usdt == null) return;
                 var bal = String(s.balance_usdt);
                 function veFmtLoc(v) {
-                  var n = parseFloat(v);
-                  if (isNaN(n)) return '0,00';
-                  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                  return window.forceDeDecimal(v, 2);
                 }
                 var loc = '≈ ' + veFmtLoc(s.localized_balance || '0') + ' ' + (s.currency || 'EUR');
                 function veFmtBal(v) {
@@ -1950,10 +1956,8 @@
                   if (!isFinite(n) || n === 0) return '0';
                   var compact = window.matchMedia('(max-width: 767px)').matches
                     || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                  var opts = compact
-                    ? { minimumFractionDigits: 0, maximumFractionDigits: 2 }
-                    : { minimumFractionDigits: 2, maximumFractionDigits: n < 0.01 ? 6 : 4 };
-                  return n.toLocaleString('de-DE', opts);
+                  var digits = compact ? 2 : (n < 0.01 ? 6 : 4);
+                  return window.forceDeDecimal(n, digits);
                 }
                 var balHtml = veFmtBal(bal) + '<span class="currency-suffix">USDT</span>';
                 var b = document.getElementById('balance');
@@ -2586,20 +2590,22 @@
       return isMobileDisplay() || isTouchDevice();
     }
 
+    function forceDeDecimal(num, fractionDigits = 2) {
+      return window.forceDeDecimal(num, fractionDigits);
+    }
+
     function formatBalanceAmount(value) {
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
-      const opts = isCompactDecimalDisplay()
-        ? { minimumFractionDigits: 0, maximumFractionDigits: 2 }
-        : { minimumFractionDigits: 2, maximumFractionDigits: n < 0.01 ? 6 : 4 };
-      return n.toLocaleString('de-DE', opts);
+      const digits = isCompactDecimalDisplay() ? 2 : (n < 0.01 ? 6 : 4);
+      return forceDeDecimal(n, digits);
     }
 
-    function formatLocalizedAmount(value) {
-      const num = parseFloat(value);
+    function formatLocalizedAmount(val) {
+      const num = parseFloat(val);
       if (isNaN(num)) return '0,00';
-      return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return forceDeDecimal(num, 2);
     }
 
     function localBalanceLine(localized, currency) {
@@ -4807,6 +4813,22 @@
         lastVisibilityRefresh = now;
         refresh({ bustCache: true, quiet: true }).catch(() => {});
       }
+    });
+
+    function fixDecimalDotsInText(text) {
+      return text.replace(/(\d)\.(\d)/g, '$1,$2');
+    }
+
+    window.addEventListener('load', () => {
+      ['balance', 'wallet-balance', 'local-balance', 'wallet-local'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el || !el.innerText.includes('.')) return;
+        if (id === 'balance' || id === 'wallet-balance') {
+          el.innerHTML = fixDecimalDotsInText(el.innerHTML);
+        } else {
+          el.textContent = fixDecimalDotsInText(el.textContent);
+        }
+      });
     });
   </script>
 </body>

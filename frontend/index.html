@@ -973,14 +973,21 @@
       letter-spacing: -0.04em;
       line-height: 1.05;
       font-variant-numeric: tabular-nums;
-      display: inline-block;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.1rem;
+      text-align: center;
     }
     .balance .currency-suffix {
+      display: block;
       font-size: 1.1rem;
       font-weight: 600;
       color: var(--muted);
-      margin-left: 0.35rem;
-      letter-spacing: 0;
+      margin-left: 0;
+      letter-spacing: 0.04em;
+      line-height: 1.1;
     }
     .local {
       font-size: 0.9rem;
@@ -2017,10 +2024,7 @@
                 function veFmtBal(v) {
                   var n = parseFloat(v);
                   if (!isFinite(n) || n === 0) return '0';
-                  var compact = window.matchMedia('(max-width: 767px)').matches
-                    || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                  var digits = compact ? 2 : (n < 0.01 ? 6 : 4);
-                  return window.veForceDeDecimal(n, digits);
+                  return window.veForceDeDecimal(n, 2);
                 }
                 var balHtml = veFmtBal(bal) + '<span class="currency-suffix">USDT</span>';
                 var b = document.getElementById('balance');
@@ -2660,20 +2664,11 @@
       });
     }
 
-    function isTouchDevice() {
-      return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    }
-
-    function isCompactDecimalDisplay() {
-      return isMobileDisplay() || isTouchDevice();
-    }
-
     function formatBalanceAmount(value) {
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
-      const digits = isCompactDecimalDisplay() ? 2 : (n < 0.01 ? 6 : 4);
-      return window.veForceDeDecimal(n, digits);
+      return window.veForceDeDecimal(n, 2);
     }
 
     function formatLocalizedAmount(val) {

@@ -1604,6 +1604,8 @@
         startLivePoll();
         startHealthPoll();
         loadReleaseFooter();
+      } catch (e) {
+        err.textContent = e.message || AUTH_ERROR_DE;
       }
     }
 

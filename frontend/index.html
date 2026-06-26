@@ -3078,30 +3078,33 @@
     }
 
     async function api(path, opts = {}) {
+      const silent = !!opts.silent;
       if (!navigator.onLine) {
-        showError('offline');
+        if (!silent) showError('offline');
         throw new Error('offline');
       }
       let res;
       try {
         res = await apiFetch(path, opts);
       } catch (err) {
-        showError(err.message || 'network');
+        if (!silent) showError(err.message || 'network');
         throw err;
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msg = data.error || ('Fehler ' + res.status);
-        if (res.status === 429) {
-          showError('Zu viele Anfragen — bitte 10 Sekunden warten und erneut versuchen.');
-        } else if (res.status === 401) {
+        if (res.status === 401) {
           handleAuthFailure();
-        } else {
-          showError(msg);
+        } else if (!silent) {
+          if (res.status === 429) {
+            showError('Zu viele Anfragen — bitte 10 Sekunden warten und erneut versuchen.');
+          } else {
+            showError(msg);
+          }
         }
         throw new Error(msg);
       }
-      document.getElementById('error-banner').classList.add('hidden');
+      if (!silent) document.getElementById('error-banner').classList.add('hidden');
       return data;
     }
 
@@ -3365,7 +3368,7 @@
       const view = document.getElementById('rewards-view');
       if (view) view.classList.add('is-loading');
       try {
-        missionsData = await api('/users/me/missions');
+        missionsData = await api('/users/me/missions', { silent: true });
         renderMissions(missionsData);
       } catch (e) {
         if (!isAuthError(e)) console.warn('Missionen laden fehlgeschlagen', e);
@@ -3418,7 +3421,7 @@
       const view = document.getElementById('profile-view');
       if (view) view.classList.add('is-loading');
       try {
-        const ps = await api('/users/me/profile-stats');
+        const ps = await api('/users/me/profile-stats', { silent: true });
         renderProfileStats(ps);
       } catch (e) {
         if (!isAuthError(e)) console.warn('Profil-Stats fehlgeschlagen', e);
@@ -3433,7 +3436,7 @@
       try {
         const filter = document.getElementById('wallet-filter')?.value || '';
         const q = filter ? '?filter=' + encodeURIComponent(filter) : '';
-        walletHistory = await api('/users/me/wallet/history' + q);
+        walletHistory = await api('/users/me/wallet/history' + q, { silent: true });
         renderLedger(walletHistory);
       } catch (e) {
         if (!isAuthError(e)) console.warn('Wallet-Historie fehlgeschlagen', e);
@@ -3465,7 +3468,7 @@
       const view = document.getElementById('referrals-view');
       if (view) view.classList.add('is-loading');
       try {
-        const d = await api('/users/me/referrals/dashboard');
+        const d = await api('/users/me/referrals/dashboard', { silent: true });
         setText('ref-earnings', formatUsdt(d.total_earnings_usdt));
         setText('ref-active', String(d.active_referrals));
         setText('ref-inactive', String(d.inactive_referrals));
@@ -3503,7 +3506,7 @@
       const view = document.getElementById('payouts-view');
       if (view) view.classList.add('is-loading');
       try {
-        const rows = await api('/users/me/payouts');
+        const rows = await api('/users/me/payouts', { silent: true });
         renderPayoutTimeline(rows);
       } catch (e) {
         if (!isAuthError(e)) console.warn('Auszahlungen laden fehlgeschlagen', e);
@@ -3547,7 +3550,7 @@
       const view = document.getElementById('notifications-view');
       if (view) view.classList.add('is-loading');
       try {
-        const data = await api('/users/me/notifications');
+        const data = await api('/users/me/notifications', { silent: true });
         renderNotifications(data);
       } catch (e) {
         if (!isAuthError(e)) console.warn('Benachrichtigungen fehlgeschlagen', e);

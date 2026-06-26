@@ -9,5 +9,12 @@ if [[ -n "${PID}" ]]; then
   kill "${PID}"
   sleep 1
 fi
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+  echo "Umgebung aus .env geladen."
+fi
 echo "Starte vantage-earn auf Port ${PORT}…"
 exec cargo run -p api-gateway

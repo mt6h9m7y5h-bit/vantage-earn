@@ -14,7 +14,7 @@ pub async fn enrich_json_errors(req: Request<Body>, next: Next) -> Response<Body
         .get::<RequestId>()
         .map(|r| r.0.clone())
         .unwrap_or_else(|| "unknown".into());
-    let mut res = next.run(req).await;
+    let res = next.run(req).await;
     let status = res.status();
     if !(status.is_client_error() || status.is_server_error()) {
         return res;

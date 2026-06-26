@@ -12,10 +12,7 @@ use crate::gamification::{
 };
 use crate::store::gamification::{
     AchievementRow, MissionRow, NotificationRow, ReferralDashboard, UserStreakRow, UserXpRow,
-    WalletHistoryItem,
 };
-use crate::store::LedgerItem;
-
 fn db_err(err: sqlx::Error) -> AppError {
     AppError::InvalidInput(err.to_string())
 }
@@ -543,11 +540,4 @@ impl GamificationPgStore {
         .map_err(db_err)?;
         Ok(())
     }
-}
-
-pub fn wallet_history_from_ledger(
-    ledger: &[LedgerItem],
-    filter: Option<&str>,
-) -> Vec<WalletHistoryItem> {
-    crate::store::gamification_memory::wallet_history_from_ledger(ledger, filter)
 }

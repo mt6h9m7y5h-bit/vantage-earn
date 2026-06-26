@@ -78,9 +78,3 @@ pub struct ReferralDashboard {
     pub conversion_rate_pct: f64,
 }
 
-#[derive(Clone, Debug)]
-pub struct MissionProgressKey {
-    pub user_id: Uuid,
-    pub mission_id: i32,
-    pub period_start: NaiveDate,
-}

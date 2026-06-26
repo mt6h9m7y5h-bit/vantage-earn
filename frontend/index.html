@@ -1840,7 +1840,8 @@
                 function veFmtBal(v) {
                   var n = parseFloat(v);
                   if (!isFinite(n) || n === 0) return '0';
-                  if (window.matchMedia('(max-width: 767px)').matches) {
+                  var touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                  if (window.matchMedia('(max-width: 767px)').matches || touch) {
                     return n.toFixed(2).replace(/\.?0+$/, '') || '0';
                   }
                   if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
@@ -2460,11 +2461,15 @@
       return window.matchMedia('(max-width: 767px)').matches;
     }
 
+    function isTouchDevice() {
+      return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    }
+
     function formatBalanceAmount(value) {
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
-      if (isMobileDisplay()) {
+      if (isMobileDisplay() || isTouchDevice()) {
         return n.toFixed(2).replace(/\.?0+$/, '') || '0';
       }
       if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
@@ -2476,9 +2481,7 @@
     }
 
     function formatUsdt(value) {
-      const num = parseFloat(value) || 0;
-      const isTouch = ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-      return (isTouch ? num.toFixed(2) : num.toFixed(4)) + ' USDT';
+      return formatBalanceAmount(value) + ' USDT';
     }
 
     function analyticsDailySeries(summary) {
@@ -2951,12 +2954,6 @@
     window.addEventListener('online', syncOfflineBanner);
     window.addEventListener('offline', syncOfflineBanner);
     syncOfflineBanner();
-
-    window.addEventListener('load', () => {
-      document.querySelectorAll('.stat-tile').forEach((el) => {
-        el.style.width = '100%';
-      });
-    });
 
     const AdPlayer = {
       _cancelFn: null,

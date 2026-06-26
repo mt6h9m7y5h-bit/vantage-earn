@@ -744,6 +744,32 @@
       line-height: 1.55;
       font-weight: 500;
     }
+    .terms-accept {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.65rem;
+      text-align: left;
+      margin: 0 0 1.25rem;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: var(--muted);
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .terms-accept input[type="checkbox"] {
+      width: 1.05rem;
+      height: 1.05rem;
+      margin: 0.15rem 0 0;
+      flex-shrink: 0;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+    .terms-accept a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .terms-accept a:hover { text-decoration: underline; }
     .hidden { display: none !important; }
     .toast-stack {
       position: fixed;
@@ -1080,7 +1106,11 @@
     <p class="card-title">Willkommen bei VANTAGE</p>
     <p class="auth-hint">Institutionelles Watch-to-Earn. Starte in Sekunden — kein Passwort, dein Gerät bleibt angemeldet.</p>
     <input id="referral" placeholder="Referral-Code (optional)" autocomplete="off" />
-    <button class="primary" type="button" id="register-btn">Kostenlos starten</button>
+    <label class="terms-accept" for="accept-terms">
+      <input type="checkbox" id="accept-terms" name="accept-terms" required />
+      <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
+    </label>
+    <button class="primary" type="button" id="register-btn" disabled>Kostenlos starten</button>
   </div>
 
   <div id="app" class="app-shell hidden">
@@ -2641,10 +2671,19 @@
 
     async function register() {
       const btn = document.getElementById('register-btn');
+      const terms = document.getElementById('accept-terms');
+      if (!terms?.checked) {
+        showError('Bitte AGB und Datenschutzerklärung akzeptieren.');
+        return;
+      }
       if (btn) btn.disabled = true;
       try {
         const referral_code = document.getElementById('referral').value.trim() || undefined;
-        const body = { locale: 'de_DE', ...(referral_code ? { referral_code } : {}) };
+        const body = {
+          locale: 'de_DE',
+          accept_terms: true,
+          ...(referral_code ? { referral_code } : {}),
+        };
         const data = await api('/auth/register', { method: 'POST', body: JSON.stringify(body) });
         token = data.token;
         localStorage.setItem('ve_token', token);
@@ -3093,6 +3132,10 @@
       if (e.key === 'Escape') cancelWatch();
     });
 
+    document.getElementById('accept-terms')?.addEventListener('change', (e) => {
+      const btn = document.getElementById('register-btn');
+      if (btn) btn.disabled = !e.target.checked;
+    });
     document.getElementById('register-btn')?.addEventListener('click', () => register());
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh());
 

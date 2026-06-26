@@ -111,6 +111,8 @@ struct RegisterRequest {
     locale: Option<String>,
     #[serde(default)]
     referral_code: Option<String>,
+    #[serde(default)]
+    accept_terms: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -128,6 +130,13 @@ async fn register(
     State(state): State<AppState>,
     Json(body): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
+    if body.accept_terms != Some(true) {
+        return Err(shared::AppError::InvalidInput(
+            "accept_terms must be true".into(),
+        )
+        .into());
+    }
+
     let user_id = Uuid::new_v4();
     state.ensure_user(user_id).await;
 

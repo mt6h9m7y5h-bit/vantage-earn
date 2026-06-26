@@ -28,7 +28,7 @@ async fn register(app: &Router) -> (Uuid, String) {
                 .method("POST")
                 .uri("/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from("{}"))
+                .body(Body::from(r#"{"accept_terms":true}"#))
                 .unwrap(),
         )
         .await
@@ -95,6 +95,40 @@ async fn public_config_returns_mock_by_default() {
     assert!(json["applixir_app_id"].is_null());
     assert!(json["adinplay_tag_url"].is_null());
     assert_eq!(json["watch_duration_secs"], 15);
+}
+
+#[tokio::test]
+async fn register_requires_accept_terms() {
+    let app = app(AppState::new());
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"accept_terms":false}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

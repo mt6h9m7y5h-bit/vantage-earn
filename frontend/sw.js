@@ -1,11 +1,11 @@
-const CACHE = 'vantage-earn-v30';
+const CACHE = 'vantage-earn-v31';
 const SHELL = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(SHELL))
   );
-  // Let the page decide when to skipWaiting + reload (update banner).
 });
 
 self.addEventListener('activate', (event) => {

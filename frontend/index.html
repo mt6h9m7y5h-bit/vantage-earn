@@ -2,6 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <meta name="format-detection" content="telephone=no" />
   <title>VANTAGE-EARN</title>
@@ -1936,7 +1937,7 @@
                 var bal = String(s.balance_usdt);
                 function veFmtLoc(v) {
                   var n = parseFloat(v);
-                  if (!isFinite(n)) return '0,00';
+                  if (isNaN(n)) return '0,00';
                   return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 }
                 var loc = '≈ ' + veFmtLoc(s.localized_balance || '0') + ' ' + (s.currency || 'EUR');
@@ -2592,9 +2593,9 @@
     }
 
     function formatLocalizedAmount(value) {
-      const n = parseFloat(value);
-      if (!Number.isFinite(n)) return '0,00';
-      return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const num = parseFloat(value);
+      if (isNaN(num)) return '0,00';
+      return num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function localBalanceLine(localized, currency) {
@@ -3714,12 +3715,12 @@
       if (statsData.daily_challenge_completed_today) {
         hint.textContent = 'Challenge geschafft — Extra-Bonus erhalten! 🎉';
       } else {
-        hint.textContent = target + ' Videos heute = Extra-Bonus 0.002 USDT';
+        hint.textContent = target + ' Videos heute = Extra-Bonus ' + formatBalanceAmount('0.002') + ' USDT';
       }
     }
 
     function renderReferralBanner() {
-      const msg = 'Freund einladen → du +' + REFERRER_BONUS + ' USDT, Freund +' + REFEREE_BONUS + ' USDT';
+      const msg = 'Freund einladen → du +' + formatBalanceAmount(REFERRER_BONUS) + ' USDT, Freund +' + formatBalanceAmount(REFEREE_BONUS) + ' USDT';
       setText('referral-banner-text', msg);
       const count = stats?.referral_count ?? 0;
       setText('referral-dashboard-text',

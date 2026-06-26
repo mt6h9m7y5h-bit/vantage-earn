@@ -10,6 +10,7 @@ const DEMO_HTML: &str = include_str!("../../../frontend/index.html");
 const ADMIN_HTML: &str = include_str!("../../../frontend/admin.html");
 const DATENSCHUTZ_HTML: &str = include_str!("../../../frontend/legal/datenschutz.html");
 const IMPRESSUM_HTML: &str = include_str!("../../../frontend/legal/impressum.html");
+const AGB_HTML: &str = include_str!("../../../frontend/legal/agb.html");
 const MANIFEST_JSON: &str = include_str!("../../../frontend/manifest.webmanifest");
 const SERVICE_WORKER_JS: &str = include_str!("../../../frontend/sw.js");
 
@@ -53,6 +54,13 @@ pub async fn impressum_page() -> impl IntoResponse {
     (
         NO_CACHE,
         Html(load_text("legal/impressum.html", IMPRESSUM_HTML)),
+    )
+}
+
+pub async fn agb_page() -> impl IntoResponse {
+    (
+        NO_CACHE,
+        Html(load_text("legal/agb.html", AGB_HTML)),
     )
 }
 

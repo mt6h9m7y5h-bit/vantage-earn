@@ -1641,6 +1641,36 @@
             <div class="balance" id="wallet-balance">0<span class="currency-suffix">USDT</span></div>
             <div class="local" id="wallet-local">≈ 0 EUR</div>
           </section>
+          <script>
+            (function vePrimeWalletDom() {
+              try {
+                if (!localStorage.getItem('ve_token')) return;
+                var raw = localStorage.getItem('ve_wallet_snapshot') || sessionStorage.getItem('ve_wallet_snapshot');
+                if (!raw) return;
+                var s = JSON.parse(raw);
+                if (s == null || s.balance_usdt == null) return;
+                var bal = String(s.balance_usdt);
+                var loc = '≈ ' + (s.localized_balance || '0') + ' ' + (s.currency || 'EUR');
+                var b = document.getElementById('balance');
+                if (b) b.innerHTML = bal + '<span class="currency-suffix">USDT</span>';
+                var lb = document.getElementById('local-balance');
+                if (lb) lb.textContent = loc;
+                var wb = document.getElementById('wallet-balance');
+                if (wb) wb.innerHTML = bal + '<span class="currency-suffix">USDT</span>';
+                var wl = document.getElementById('wallet-local');
+                if (wl) wl.textContent = loc;
+                if (s.trust_score != null) {
+                  var t = String(s.trust_score);
+                  ['trust', 'security-trust'].forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) el.textContent = t;
+                  });
+                }
+                document.documentElement.dataset.veWalletPrimed = bal;
+                document.documentElement.dataset.veWalletSrc = 'snapshot';
+              } catch (_) { /* private mode */ }
+            })();
+          </script>
           <section class="card">
             <h2 class="section-title">Transaktionsverlauf</h2>
             <div class="wallet-toolbar">
@@ -2026,6 +2056,23 @@
         || /notifications?\s+(empty|not found)/.test(lower);
     }
 
+    function isRateLimitError(err) {
+      const lower = String(err?.message || err || '').toLowerCase();
+      return lower.includes('429')
+        || lower.includes('rate limit')
+        || lower.includes('too many')
+        || lower.includes('zu viele');
+    }
+
+    let _apiFetchSilent = false;
+
+    function veLogState(tag, detail) {
+      const root = document.documentElement;
+      root.dataset.veLastOp = tag;
+      if (detail != null) root.dataset.veLastDetail = String(detail).slice(0, 120);
+      root.dataset.veLastAt = new Date().toISOString();
+    }
+
     function friendlyError(err) {
       const msg = String(err?.message || err || '');
       const lower = msg.toLowerCase();
@@ -2140,7 +2187,7 @@
       const run = async () => {
         let lastErr;
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
-          if (attempt > 0) {
+          if (attempt > 0 && !_apiFetchSilent) {
             showRetryBanner('Verbindung instabil — erneuter Versuch (' + attempt + '/' + maxRetries + ')…');
             await new Promise((r) => setTimeout(r, backoff[attempt - 1]));
           }
@@ -2500,16 +2547,20 @@
 
     function persistWalletSnapshot(w) {
       if (!w || w.balance_usdt == null) return;
+      const existing = readWalletSnapshot();
+      const toStore = existing ? fresherWallet(w, existing) : w;
+      if (!toStore) return;
       try {
         const payload = JSON.stringify({
-          balance_usdt: w.balance_usdt,
-          localized_balance: w.localized_balance,
-          currency: w.currency,
-          trust_score: w.trust_score,
-          payout_tier: w.payout_tier || 'instant',
+          balance_usdt: toStore.balance_usdt,
+          localized_balance: toStore.localized_balance,
+          currency: toStore.currency,
+          trust_score: toStore.trust_score,
+          payout_tier: toStore.payout_tier || 'instant',
         });
         localStorage.setItem(WALLET_SNAPSHOT_KEY, payload);
         sessionStorage.setItem(WALLET_SNAPSHOT_KEY, payload);
+        document.documentElement.dataset.veWalletStored = String(toStore.balance_usdt);
       } catch (_) { /* private mode */ }
     }
 
@@ -2543,7 +2594,11 @@
 
     function applyWallet(w, opts = {}) {
       if (!w || w.balance_usdt == null) return;
-      if (!opts.fromSnapshot) persistWalletSnapshot(w);
+      if (!opts.fromSnapshot) {
+        const snap = readWalletSnapshot();
+        w = snap ? fresherWallet(w, snap) : w;
+        persistWalletSnapshot(w);
+      }
       if (opts.fromSnapshot) {
         setBalanceDisplay(String(w.balance_usdt));
       } else {
@@ -2562,6 +2617,8 @@
       setText('currency', w.currency);
       window._balance = w.balance_usdt;
       window.__ve_debug.lastWallet = w;
+      document.documentElement.dataset.veWalletApplied = String(w.balance_usdt);
+      document.documentElement.dataset.veWalletSrc = opts.fromSnapshot ? 'snapshot' : 'api';
       markWalletReady();
     }
 
@@ -3124,9 +3181,12 @@
       }
     }
 
-    function handleAuthFailure() {
+    function handleAuthFailure(opts = {}) {
+      veLogState('auth_failure', opts.silent ? 'silent' : 'visible');
       logout();
-      showError('Sitzung ungültig — bitte erneut „Kostenlos starten“.');
+      if (!opts.silent) {
+        showError('Sitzung ungültig — bitte erneut „Kostenlos starten“.');
+      }
     }
 
     function isAuthError(err) {
@@ -3216,6 +3276,7 @@
 
     async function api(path, opts = {}) {
       const silent = !!opts.silent;
+      const authCritical = !!opts.authCritical && !silent;
       const method = (opts.method || 'GET').toUpperCase();
       const url = path.startsWith('http') ? path : API + path;
       const cacheKey = method + ':' + url + ':' + (opts.body || '');
@@ -3235,23 +3296,22 @@
 
       const promise = (async () => {
         let res;
+        _apiFetchSilent = silent;
         try {
           res = await apiFetch(path, opts);
         } catch (err) {
           if (!silent) showError(err.message || 'network');
           throw err;
+        } finally {
+          _apiFetchSilent = false;
         }
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           const msg = data.error || ('Fehler ' + res.status);
           if (res.status === 401) {
-            if (token) handleAuthFailure();
-          } else if (!silent && !isBenignEmptyMessage(msg)) {
-            if (res.status === 429) {
-              showError('Zu viele Anfragen — bitte 10 Sekunden warten und erneut versuchen.');
-            } else {
-              showError(msg);
-            }
+            if (token && authCritical) handleAuthFailure();
+          } else if (!silent && !isBenignEmptyMessage(msg) && !isRateLimitError(msg)) {
+            showError(msg);
           }
           throw new Error(msg);
         }
@@ -3545,7 +3605,7 @@
       try {
         const data = await api(`/users/me/missions/${id}/claim`, { method: 'POST', body: '{}' });
         showSuccessCelebration('Mission abgeholt: +' + data.credited_usdt + ' USDT');
-        await Promise.all([loadMissions(), refresh(), loadNotifications()]);
+        await Promise.all([loadMissions(), refresh({ quiet: true, bustCache: true }), loadNotifications()]);
       } catch (e) {
         if (!isAuthError(e)) showError(e.message || 'Abholen fehlgeschlagen');
       } finally {
@@ -3776,7 +3836,7 @@
         localStorage.setItem('ve_onboarding_done', '1');
         document.getElementById('onboarding-overlay')?.classList.add('hidden');
         showSuccess('Startbonus: +' + data.usdt_reward + ' USDT, +' + data.xp_reward + ' XP');
-        await refresh();
+        await refresh({ quiet: true, bustCache: true });
       } catch (e) {
         if (!isAuthError(e)) showError(e.message || 'Onboarding fehlgeschlagen');
       }
@@ -3828,7 +3888,7 @@
         navigateToView('dashboard');
         log('Account erstellt: ' + data.user_id.slice(0, 8) + '…');
         showSuccessCelebration('Willkommen bei VANTAGE!');
-        await refresh();
+        await refresh({ quiet: true, bustCache: true });
       } catch (e) {
         if (!isAuthError(e)) {
           showError(e.message || 'Registrierung fehlgeschlagen');
@@ -3868,8 +3928,9 @@
     }
 
     async function refresh(opts = {}) {
+      const quiet = opts.quiet !== false;
       if (refreshInFlight && !opts.force) return refreshInFlight;
-      refreshInFlight = doRefresh(opts).finally(() => { refreshInFlight = null; });
+      refreshInFlight = doRefresh({ ...opts, quiet }).finally(() => { refreshInFlight = null; });
       return refreshInFlight;
     }
 
@@ -3882,31 +3943,44 @@
     }
 
     async function doRefresh(opts = {}) {
+      const quiet = opts.quiet !== false;
       if (!token) {
-        showError('Nicht angemeldet — bitte „Kostenlos starten“.');
+        if (!quiet) showError('Nicht angemeldet — bitte „Kostenlos starten“.');
         return;
       }
       const refreshBtn = document.getElementById('refresh-btn');
       const appEl = document.getElementById('app');
-      if (!opts.quiet) {
+      if (!quiet) {
         if (refreshBtn) refreshBtn.classList.add('is-loading');
         if (appEl) appEl.classList.add('is-loading');
       }
       const lastEl = document.getElementById('last-updated');
       if (lastEl) lastEl.textContent = 'Lade Daten…';
       const bust = !!(opts.bustCache || opts.force);
-      const getOpts = (extra = {}) => ({ ...(bust ? { bustCache: true } : {}), ...extra });
+      const getOpts = (extra = {}) => ({
+        ...(bust ? { bustCache: true } : {}),
+        silent: true,
+        ...extra,
+      });
+      veLogState('refresh_start', quiet ? 'quiet' : 'visible');
       try {
         const results = await Promise.allSettled([
           api('/users/me/wallet', getOpts()),
           api('/users/me/referral', getOpts()),
           api('/users/me/stats', getOpts()),
           api('/users/me/ledger', getOpts()),
-          api('/users/me/analytics/summary', getOpts({ silent: true })),
+          api('/users/me/analytics/summary', getOpts()),
           fetch(API + '/leaderboard/weekly', { cache: 'no-store' })
             .then((r) => r.json())
             .catch(() => ({ entries: [] })),
         ]);
+
+        const walletAuthFail = results[0].status === 'rejected' && isAuthError(results[0].reason);
+        const statsAuthFail = results[2].status === 'rejected' && isAuthError(results[2].reason);
+        if (walletAuthFail && statsAuthFail) {
+          handleAuthFailure({ silent: quiet });
+          return;
+        }
 
         const walletRaw = results[0].status === 'fulfilled' ? results[0].value : null;
         const wallet = walletRaw?.balance_usdt != null ? walletRaw : null;
@@ -3929,7 +4003,12 @@
 
         if (!wallet && !statsData) {
           const failed = window.__ve_debug.lastRefresh.failures;
-          throw new Error('Daten konnten nicht geladen werden' + (failed.length ? ' (' + failed.join(', ') + ')' : ''));
+          veLogState('refresh_fail', failed.join(','));
+          if (!quiet) {
+            throw new Error('Daten konnten nicht geladen werden' + (failed.length ? ' (' + failed.join(', ') + ')' : ''));
+          }
+          showWalletSnapshot();
+          return;
         }
         if (!wallet) console.warn('Wallet konnte nicht geladen werden');
         if (!statsData) console.warn('Stats konnten nicht geladen werden');
@@ -3982,6 +4061,9 @@
           }
           if (resolvedWallet) applyWallet(resolvedWallet);
         }
+        if (wallet && wallet.balance_usdt != null) {
+          persistWalletSnapshot(resolvedWallet || wallet);
+        }
         if (ref) {
           setText('ref-code', ref.referral_code);
           setText('profile-ref-code', ref.referral_code);
@@ -4006,11 +4088,14 @@
         }
         await loadPremiumData();
         markUpdated();
+        veLogState('refresh_ok', resolvedWallet ? String(resolvedWallet.balance_usdt) : 'no-wallet');
       } catch (e) {
-        if (!isAuthError(e)) {
+        veLogState('refresh_error', e.message || 'unknown');
+        if (!quiet && !isAuthError(e) && !isRateLimitError(e)) {
           showError(e.message || 'Aktualisieren fehlgeschlagen');
         }
-        if (lastEl) lastEl.textContent = 'Aktualisieren fehlgeschlagen';
+        if (lastEl) lastEl.textContent = quiet ? 'Offline — letzte bekannte Daten' : 'Aktualisieren fehlgeschlagen';
+        showWalletSnapshot();
       } finally {
         if (refreshBtn) refreshBtn.classList.remove('is-loading');
         if (appEl) appEl.classList.remove('is-loading');
@@ -4243,7 +4328,7 @@
         const timeHint = data.estimated_time_de ? ` — geschätzt ${data.estimated_time_de}` : '';
         log(`Auszahlung ${data.amount_usdt} USDT via ${methodLabel}${timeHint} — ${data.status} (${data.tier})`);
         showSuccessCelebration('Auszahlung beantragt: ' + data.amount_usdt + ' USDT');
-        await refresh();
+        await refresh({ quiet: true, bustCache: true });
       } catch (e) {
         if (!isAuthError(e) && payoutErr) payoutErr.textContent = friendlyError(e);
       } finally {
@@ -4306,11 +4391,10 @@
           await refresh({ bustCache: true, quiet: true });
         } catch (e) {
           if (isAuthError(e)) {
-            handleAuthFailure();
+            handleAuthFailure({ silent: true });
           } else {
-            refresh({ bustCache: true }).catch((err) => {
-              if (!isAuthError(err)) showError(err.message || 'Laden fehlgeschlagen');
-            });
+            showWalletSnapshot();
+            veLogState('bootstrap_refresh_fail', e.message || 'unknown');
           }
         }
       } else {
@@ -4332,7 +4416,7 @@
       if (btn) btn.disabled = !e.target.checked;
     });
     document.getElementById('register-btn')?.addEventListener('click', () => register());
-    document.getElementById('refresh-btn')?.addEventListener('click', () => refresh());
+    document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true }));
 
     (function initPullToRefresh() {
       let startY = 0;
@@ -4351,14 +4435,18 @@
         const pull = e.changedTouches[0].clientY - startY;
         if (ptr) ptr.classList.remove('active');
         if (pull > 72 && token && window.scrollY <= 0) {
-          refresh().catch(() => {});
+          refresh({ quiet: true, bustCache: true }).catch(() => {});
         }
         startY = 0;
       }, { passive: true });
     })();
 
+    let lastVisibilityRefresh = 0;
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && token) {
+        const now = Date.now();
+        if (now - lastVisibilityRefresh < 8000) return;
+        lastVisibilityRefresh = now;
         refresh({ bustCache: true, quiet: true }).catch(() => {});
       }
     });

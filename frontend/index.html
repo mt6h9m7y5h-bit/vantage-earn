@@ -2467,32 +2467,46 @@
       }
     }
 
-    function persistWalletSnapshot(w) {
-      if (!w || w.balance_usdt == null) return;
-      try {
-        sessionStorage.setItem('ve_wallet_snapshot', JSON.stringify({
-          balance_usdt: w.balance_usdt,
-          localized_balance: w.localized_balance,
-          currency: w.currency,
-          trust_score: w.trust_score,
-        }));
-      } catch (_) { /* private mode */ }
-    }
+    const WALLET_SNAPSHOT_KEY = 've_wallet_snapshot';
 
-    function showWalletSnapshot() {
+    function readWalletSnapshot() {
       try {
-        const raw = sessionStorage.getItem('ve_wallet_snapshot');
-        if (!raw) return;
+        const raw = localStorage.getItem(WALLET_SNAPSHOT_KEY)
+          || sessionStorage.getItem(WALLET_SNAPSHOT_KEY);
+        if (!raw) return null;
         const snap = JSON.parse(raw);
-        if (snap?.balance_usdt == null) return;
-        applyWallet({
+        if (snap?.balance_usdt == null) return null;
+        return {
           balance_usdt: snap.balance_usdt,
           localized_balance: snap.localized_balance || '0',
           currency: snap.currency || 'EUR',
           trust_score: snap.trust_score ?? 50,
-          payout_tier: 'instant',
-        }, { fromSnapshot: true });
-      } catch (_) { /* ignore */ }
+          payout_tier: snap.payout_tier || 'instant',
+        };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function persistWalletSnapshot(w) {
+      if (!w || w.balance_usdt == null) return;
+      try {
+        const payload = JSON.stringify({
+          balance_usdt: w.balance_usdt,
+          localized_balance: w.localized_balance,
+          currency: w.currency,
+          trust_score: w.trust_score,
+          payout_tier: w.payout_tier || 'instant',
+        });
+        localStorage.setItem(WALLET_SNAPSHOT_KEY, payload);
+        sessionStorage.setItem(WALLET_SNAPSHOT_KEY, payload);
+      } catch (_) { /* private mode */ }
+    }
+
+    function showWalletSnapshot() {
+      const snap = readWalletSnapshot();
+      if (!snap) return;
+      applyWallet(snap, { fromSnapshot: true });
     }
 
     function applyWallet(w, opts = {}) {
@@ -2579,36 +2593,16 @@
 
     // Service Worker nur in Production — lokal verhindert er sonst veraltete UI.
     const isLocalDev = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-    const UPDATE_BANNER_DISMISS_KEY = 've_update_banner_dismissed';
-    let updateBannerTimer = null;
+    // Update-Banner deaktiviert — SW bleibt für Streak-Benachrichtigungen registriert.
+    const SHOW_UPDATE_BANNER = false;
     let pendingUpdateWorker = null;
 
-    function hasWaitingServiceWorker(reg) {
-      return !!(reg?.waiting && navigator.serviceWorker.controller);
-    }
-
     function dismissUpdateBanner() {
-      sessionStorage.setItem(UPDATE_BANNER_DISMISS_KEY, '1');
       document.getElementById('update-banner')?.classList.add('hidden');
-      if (updateBannerTimer) {
-        clearTimeout(updateBannerTimer);
-        updateBannerTimer = null;
-      }
     }
 
-    function scheduleUpdateBanner(reg) {
-      if (sessionStorage.getItem(UPDATE_BANNER_DISMISS_KEY)) return;
-      if (!hasWaitingServiceWorker(reg)) return;
-      pendingUpdateWorker = reg.waiting;
-      if (updateBannerTimer) return;
-      updateBannerTimer = setTimeout(() => {
-        updateBannerTimer = null;
-        if (sessionStorage.getItem(UPDATE_BANNER_DISMISS_KEY)) return;
-        navigator.serviceWorker.ready.then((readyReg) => {
-          if (!hasWaitingServiceWorker(readyReg)) return;
-          document.getElementById('update-banner')?.classList.remove('hidden');
-        }).catch(() => {});
-      }, 30000);
+    function scheduleUpdateBanner(_reg) {
+      /* intentionally disabled */
     }
 
     if ('serviceWorker' in navigator) {
@@ -2620,17 +2614,7 @@
           caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
         }
       } else {
-        navigator.serviceWorker.register('/sw.js').then((reg) => {
-          scheduleUpdateBanner(reg);
-          reg.addEventListener('updatefound', () => {
-            const worker = reg.installing;
-            worker?.addEventListener('statechange', () => {
-              if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                scheduleUpdateBanner(reg);
-              }
-            });
-          });
-        }).catch(() => {});
+        navigator.serviceWorker.register('/sw.js').then(() => {}).catch(() => {});
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (window._swReloading) return;
         });
@@ -2638,7 +2622,7 @@
     }
 
     function applyAppUpdate() {
-      sessionStorage.removeItem(UPDATE_BANNER_DISMISS_KEY);
+      if (!SHOW_UPDATE_BANNER) return;
       window._swReloading = true;
       if (navigator.serviceWorker?.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
@@ -3947,13 +3931,19 @@
 
         renderLeaderboard(leaderboard);
 
-        if (resolvedWallet) {
+        {
+          const snap = readWalletSnapshot();
+          if (resolvedWallet && snap) {
+            resolvedWallet = fresherWallet(resolvedWallet, snap);
+          } else if (!resolvedWallet && snap) {
+            resolvedWallet = snap;
+          }
           const watchWallet = window.__ve_debug?.lastWatchResponse?.wallet;
           const watchAt = window.__ve_debug?.lastWatchResponse?._appliedAt;
-          if (watchWallet && watchAt && Date.now() - watchAt < 15000) {
+          if (resolvedWallet && watchWallet && watchAt && Date.now() - watchAt < 15000) {
             resolvedWallet = fresherWallet(resolvedWallet, watchWallet);
           }
-          applyWallet(resolvedWallet);
+          if (resolvedWallet) applyWallet(resolvedWallet);
         }
         if (ref) {
           setText('ref-code', ref.referral_code);
@@ -4039,7 +4029,10 @@
     function logout() {
       token = null;
       localStorage.removeItem('ve_token');
-      try { sessionStorage.removeItem('ve_wallet_snapshot'); } catch (_) {}
+      try {
+        localStorage.removeItem(WALLET_SNAPSHOT_KEY);
+        sessionStorage.removeItem(WALLET_SNAPSHOT_KEY);
+      } catch (_) {}
       watchActive = false;
       AdPlayer.cancel();
       hideAdOverlay();
@@ -4226,8 +4219,9 @@
       }
     }
 
+    if (token) showWalletSnapshot();
+
     (async function bootstrapUi() {
-      await loadAdConfig();
       loadHealthVersion();
 
       const hashView = location.hash.replace('#', '');
@@ -4260,6 +4254,7 @@
         authCard.classList.add('hidden');
         appEl.classList.remove('hidden');
         setAppChromeVisible(true);
+        showWalletSnapshot();
         renderReferralBanner();
         if (Notification.permission === 'granted') {
           const btn = document.getElementById('notify-btn');
@@ -4268,7 +4263,7 @@
             btn.title = 'Benachrichtigungen aktiv';
           }
         }
-        showWalletSnapshot();
+        await loadAdConfig();
         try {
           invalidateUserDataCache();
           await refresh({ bustCache: true, quiet: true });
@@ -4282,6 +4277,7 @@
           }
         }
       } else {
+        await loadAdConfig();
         authCard.classList.remove('hidden');
         appEl.classList.add('hidden');
         setAppChromeVisible(false);
@@ -4325,7 +4321,9 @@
     })();
 
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && token) refresh().catch(() => {});
+      if (!document.hidden && token) {
+        refresh({ bustCache: true, quiet: true }).catch(() => {});
+      }
     });
   </script>
 </body>

@@ -1093,10 +1093,12 @@
 
     function secret() {
       const appVisible = !document.getElementById('app').classList.contains('hidden');
-      const el = appVisible
-        ? document.getElementById('secret-inline')
-        : document.getElementById('secret');
-      return (el?.value || '').trim();
+      if (!appVisible) {
+        return (document.getElementById('secret')?.value || '').trim();
+      }
+      const inline = (document.getElementById('secret-inline')?.value || '').trim();
+      if (inline) return inline;
+      return localStorage.getItem('ve_admin_secret')?.trim() || '';
     }
 
     const AUTH_ERROR_DE =

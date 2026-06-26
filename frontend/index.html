@@ -2300,7 +2300,7 @@
       const view = document.getElementById('analytics-view');
       if (view) view.classList.add('is-loading');
       try {
-        const data = await api('/users/me/analytics/summary');
+        const data = await api('/users/me/analytics/summary', { silent: true });
         analyticsSummary = data;
         renderAnalytics(data);
       } catch (e) {
@@ -3094,7 +3094,7 @@
       if (!res.ok) {
         const msg = data.error || ('Fehler ' + res.status);
         if (res.status === 401) {
-          handleAuthFailure();
+          if (token) handleAuthFailure();
         } else if (!silent) {
           if (res.status === 429) {
             showError('Zu viele Anfragen — bitte 10 Sekunden warten und erneut versuchen.');
@@ -3722,7 +3722,7 @@
           api('/users/me/referral'),
           api('/users/me/stats'),
           api('/users/me/ledger'),
-          api('/users/me/analytics/summary'),
+          api('/users/me/analytics/summary', { silent: true }),
           fetch(API + '/leaderboard/weekly', { cache: 'no-store' })
             .then((r) => r.json())
             .catch(() => ({ entries: [] })),

@@ -1082,6 +1082,10 @@
     }
     button:active:not(:disabled) { transform: scale(0.97); }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.btn-blocked {
+      opacity: 0.55;
+      cursor: pointer;
+    }
     button.btn-loading {
       position: relative;
       color: transparent !important;
@@ -1192,13 +1196,27 @@
       cursor: pointer;
     }
     .terms-accept input[type="checkbox"] {
-      width: 1.05rem;
-      height: 1.05rem;
-      margin: 0.15rem 0 0;
+      width: 1.25rem;
+      height: 1.25rem;
+      margin: 0.1rem 0 0;
       flex-shrink: 0;
       accent-color: var(--primary);
       cursor: pointer;
     }
+    .terms-accept.terms-highlight {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+      border-radius: 8px;
+    }
+    .register-terms-hint {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: -0.35rem 0 0.85rem;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+    .register-terms-hint.hidden { display: none; }
     .terms-accept a {
       color: var(--primary);
       text-decoration: none;
@@ -1769,7 +1787,8 @@
       <input type="checkbox" id="accept-terms" name="accept-terms" required />
       <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
     </label>
-    <button class="primary" type="button" id="register-btn" disabled>Kostenlos starten</button>
+    <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkbox oben aktivieren.</p>
+    <button class="primary btn-blocked" type="button" id="register-btn" aria-disabled="true">Kostenlos starten</button>
   </div>
 
   <div id="app" class="app-shell hidden">
@@ -4225,6 +4244,7 @@
       if (referralInput) referralInput.classList.remove('field-invalid');
       if (!terms?.checked) {
         showError('Bitte AGB und Datenschutzerklärung akzeptieren.');
+        focusTermsAcceptance();
         return;
       }
       const referral_code = referralInput?.value.trim() || undefined;
@@ -4258,7 +4278,31 @@
       } finally {
         submitInFlight = false;
         setButtonLoading(btn, false);
+        syncRegisterButtonState();
       }
+    }
+
+    function focusTermsAcceptance() {
+      const label = document.querySelector('.terms-accept');
+      const terms = document.getElementById('accept-terms');
+      label?.classList.add('terms-highlight');
+      (label || terms)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      terms?.focus({ preventScroll: true });
+      window.setTimeout(() => label?.classList.remove('terms-highlight'), 2400);
+    }
+
+    function syncRegisterButtonState() {
+      const terms = document.getElementById('accept-terms');
+      const btn = document.getElementById('register-btn');
+      const hint = document.getElementById('register-terms-hint');
+      const checked = !!terms?.checked;
+      if (btn && !submitInFlight) {
+        btn.disabled = false;
+        btn.classList.toggle('btn-blocked', !checked);
+        btn.setAttribute('aria-disabled', checked ? 'false' : 'true');
+      }
+      hint?.classList.toggle('hidden', checked);
+      if (checked) document.querySelector('.terms-accept')?.classList.remove('terms-highlight');
     }
 
     function payoutMethodInfoMap(statsData) {
@@ -4525,6 +4569,7 @@
       document.getElementById('auth-card').classList.remove('hidden');
       setAppChromeVisible(false);
       syncTrustBadge(null);
+      syncRegisterButtonState();
       history.replaceState(null, '', location.pathname + location.search);
     }
 
@@ -4767,6 +4812,7 @@
         setAppChromeVisible(false);
         const ref = params.get('ref');
         if (ref) document.getElementById('referral').value = ref;
+        syncRegisterButtonState();
       }
       requestAnimationFrame(forceLayoutFix);
     })();
@@ -4775,10 +4821,7 @@
       if (e.key === 'Escape') cancelWatch();
     });
 
-    document.getElementById('accept-terms')?.addEventListener('change', (e) => {
-      const btn = document.getElementById('register-btn');
-      if (btn) btn.disabled = !e.target.checked;
-    });
+    document.getElementById('accept-terms')?.addEventListener('change', () => syncRegisterButtonState());
     document.getElementById('register-btn')?.addEventListener('click', () => register());
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true }));
 

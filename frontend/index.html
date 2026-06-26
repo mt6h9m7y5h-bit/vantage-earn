@@ -1934,13 +1934,18 @@
                 var s = JSON.parse(raw);
                 if (s == null || s.balance_usdt == null) return;
                 var bal = String(s.balance_usdt);
-                var loc = '≈ ' + (s.localized_balance || '0') + ' ' + (s.currency || 'EUR');
+                function veFmtLoc(v) {
+                  var n = parseFloat(v);
+                  if (!isFinite(n)) return '0,00';
+                  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+                var loc = '≈ ' + veFmtLoc(s.localized_balance || '0') + ' ' + (s.currency || 'EUR');
                 function veFmtBal(v) {
                   var n = parseFloat(v);
                   if (!isFinite(n) || n === 0) return '0';
                   var touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                   if (window.matchMedia('(max-width: 767px)').matches || touch) {
-                    return n.toFixed(2).replace(/\.?0+$/, '') || '0';
+                    return n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
                   }
                   if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
                   return n.toFixed(4).replace(/\.?0+$/, '');
@@ -2572,15 +2577,33 @@
       return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     }
 
+    function isCompactDecimalDisplay() {
+      return isMobileDisplay() || isTouchDevice();
+    }
+
     function formatBalanceAmount(value) {
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
-      if (isMobileDisplay() || isTouchDevice()) {
-        return n.toFixed(2).replace(/\.?0+$/, '') || '0';
+      if (isCompactDecimalDisplay()) {
+        return n.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
       }
       if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
       return n.toFixed(4).replace(/\.?0+$/, '');
+    }
+
+    function formatLocalizedAmount(value) {
+      const n = parseFloat(value);
+      if (!Number.isFinite(n)) return '0,00';
+      return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function localBalanceLine(localized, currency) {
+      return '≈ ' + formatLocalizedAmount(localized) + ' ' + (currency || 'EUR');
+    }
+
+    function parseLocalizedAmount(str) {
+      return parseFloat(String(str).replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
     }
 
     function balanceHtml(value) {
@@ -2929,7 +2952,7 @@
       } else {
         animateBalance(String(w.balance_usdt));
       }
-      const localStr = '≈ ' + w.localized_balance + ' ' + w.currency;
+      const localStr = localBalanceLine(w.localized_balance, w.currency);
       setText('local-balance', localStr);
       const walletBal = document.getElementById('wallet-balance');
       if (walletBal) {
@@ -2971,7 +2994,9 @@
       const fill = document.getElementById('payout-progress-fill');
       const text = document.getElementById('payout-progress-text');
       if (fill) fill.style.width = progressPct + '%';
-      if (text) text.textContent = localized.toFixed(2) + ' / ' + goalEur + ' €';
+      if (text) {
+        text.textContent = formatLocalizedAmount(localized) + ' / ' + formatLocalizedAmount(goalEur) + ' €';
+      }
     }
 
     function updateRewardHint(statsData) {
@@ -3578,7 +3603,7 @@
       if (stats && data.wallet) {
         updatePayoutProgress(data.wallet, stats);
       } else if (stats && data.wallet == null) {
-        const localized = parseFloat(document.getElementById('local-balance')?.textContent.replace(/[^\d.]/g, '')) || 0;
+        const localized = parseLocalizedAmount(document.getElementById('local-balance')?.textContent);
         updatePayoutProgress({ localized_balance: String(localized) }, stats);
       }
       if (stats) {

@@ -215,7 +215,7 @@ async fn get_wallet(
         .currency
         .usdt_to_local(balance, currency)
         .await
-        .unwrap_or(balance);
+        .unwrap_or_else(|| balance.round_dp(2));
     let tier = state.payout_tier_for_usdt(balance).await;
     let trust_score = state.trust_score(user_id).await;
 
@@ -621,7 +621,7 @@ async fn watch_complete(
                 .currency
                 .usdt_to_local(balance, currency)
                 .await
-                .unwrap_or(balance);
+                .unwrap_or_else(|| balance.round_dp(2));
             let tier = state.payout_tier_for_usdt(balance).await;
             let trust_score = state.trust_score(user_id).await;
             WalletResponse {

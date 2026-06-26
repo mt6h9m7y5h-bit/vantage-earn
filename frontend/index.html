@@ -1081,11 +1081,28 @@
       transition: background var(--transition), opacity var(--transition), transform var(--transition);
     }
     button:active:not(:disabled) { transform: scale(0.97); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
-    button.btn-blocked {
-      opacity: 0.55;
-      cursor: pointer;
+    @media (hover: none) and (pointer: coarse) {
+      button:active:not(:disabled) {
+        transform: none;
+        opacity: 0.88;
+      }
     }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    #register-btn {
+      position: relative;
+      z-index: 2;
+      min-height: 52px;
+      -webkit-appearance: none;
+      appearance: none;
+      touch-action: manipulation;
+    }
+    #register-btn:active { transform: none; opacity: 0.9; }
+    #register-btn.btn-loading {
+      pointer-events: auto;
+      color: #fff !important;
+      opacity: 0.75;
+    }
+    #register-btn.btn-pending-terms { opacity: 0.72; }
     button.btn-loading {
       position: relative;
       color: transparent !important;
@@ -1168,6 +1185,9 @@
     .auth-card {
       text-align: center;
       padding: 2rem 1.25rem;
+      position: relative;
+      z-index: 1;
+      overflow: visible;
     }
     .auth-card .brand-mark {
       width: 52px;
@@ -1288,6 +1308,13 @@
       border: 1px solid var(--warning-border);
       color: var(--text);
       font-size: 0.8rem;
+    }
+    #debug-toast {
+      background: rgba(139, 92, 246, 0.95);
+      border: 1px solid rgba(167, 139, 250, 0.6);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
     }
     #confetti-canvas {
       position: fixed;
@@ -1764,6 +1791,7 @@
     <div id="error-banner" class="toast hidden" role="alert"></div>
     <div id="retry-banner" class="toast hidden" role="status" aria-live="polite"></div>
     <div id="success-banner" class="toast hidden" role="status" aria-live="polite"></div>
+    <div id="debug-toast" class="toast hidden" role="status" aria-live="polite"></div>
   </div>
   <div id="offline-banner" class="hidden" role="status" aria-live="polite">
     <span>Du bist offline — einige Funktionen sind eingeschränkt.</span>
@@ -1788,7 +1816,7 @@
       <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
     </label>
     <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkbox oben aktivieren.</p>
-    <button class="primary btn-blocked" type="button" id="register-btn" aria-disabled="true">Kostenlos starten</button>
+    <button class="primary btn-pending-terms" type="button" id="register-btn" onclick="onRegisterBtnTap(event)">Kostenlos starten</button>
   </div>
 
   <div id="app" class="app-shell hidden">
@@ -2354,6 +2382,7 @@
     const MIN_WATCH_SECS = 15;
     let refreshInFlight = null;
     let submitInFlight = false;
+    let registerInFlight = false;
     const _fetchCache = new Map();
     const _fetchInflight = new Map();
 
@@ -2428,8 +2457,22 @@
 
     function setButtonLoading(btn, loading) {
       if (!btn) return;
+      if (btn.id === 'register-btn') {
+        btn.classList.toggle('btn-loading', loading);
+        btn.setAttribute('aria-busy', loading ? 'true' : 'false');
+        return;
+      }
       btn.classList.toggle('btn-loading', loading);
       btn.disabled = loading || btn.dataset.forceDisabled === 'true';
+    }
+
+    function showBetaDebugToast(msg) {
+      const el = document.getElementById('debug-toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(showBetaDebugToast._hideTimer);
+      showBetaDebugToast._hideTimer = setTimeout(() => el.classList.add('hidden'), 2800);
     }
 
     function showRetryBanner(msg) {
@@ -2595,7 +2638,7 @@
 
     function forceLayoutFix() {
       if (!isMobileDisplay()) return;
-      document.querySelectorAll('.stat-tile, .card').forEach((tile) => {
+      document.querySelectorAll('.stat-tile, .card:not(.auth-card)').forEach((tile) => {
         tile.style.setProperty('overflow', 'hidden', 'important');
         tile.style.setProperty('min-width', '0', 'important');
       });
@@ -4234,8 +4277,30 @@
       ]);
     }
 
+    function onRegisterBtnTap(e) {
+      const now = Date.now();
+      if (e?.type === 'click' && now - (window._registerTapAt || 0) < 450) return;
+      window._registerTapAt = now;
+      const terms = document.getElementById('accept-terms');
+      showBetaDebugToast('Tap · AGB ' + (terms?.checked ? '✓' : '✗'));
+      void register();
+    }
+
+    function initRegisterBtn() {
+      const btn = document.getElementById('register-btn');
+      if (!btn || btn.dataset.registerWired === '1') return;
+      btn.dataset.registerWired = '1';
+      btn.addEventListener('touchend', (ev) => {
+        ev.preventDefault();
+        onRegisterBtnTap({ type: 'touchend' });
+      }, { passive: false });
+    }
+
     async function register() {
-      if (submitInFlight) return;
+      if (registerInFlight) {
+        showBetaDebugToast('Registrierung läuft…');
+        return;
+      }
       const btn = document.getElementById('register-btn');
       const terms = document.getElementById('accept-terms');
       const referralInput = document.getElementById('referral');
@@ -4244,6 +4309,7 @@
       if (referralInput) referralInput.classList.remove('field-invalid');
       if (!terms?.checked) {
         showError('Bitte AGB und Datenschutzerklärung akzeptieren.');
+        showBetaDebugToast('AGB fehlt — Checkbox aktivieren');
         focusTermsAcceptance();
         return;
       }
@@ -4253,8 +4319,9 @@
         referralInput?.classList.add('field-invalid');
         return;
       }
-      submitInFlight = true;
+      registerInFlight = true;
       setButtonLoading(btn, true);
+      showBetaDebugToast('Registriere…');
       try {
         const body = {
           locale: 'de_DE',
@@ -4276,7 +4343,7 @@
           showError(e.message || 'Registrierung fehlgeschlagen');
         }
       } finally {
-        submitInFlight = false;
+        registerInFlight = false;
         setButtonLoading(btn, false);
         syncRegisterButtonState();
       }
@@ -4296,10 +4363,10 @@
       const btn = document.getElementById('register-btn');
       const hint = document.getElementById('register-terms-hint');
       const checked = !!terms?.checked;
-      if (btn && !submitInFlight) {
+      if (btn && !registerInFlight) {
         btn.disabled = false;
-        btn.classList.toggle('btn-blocked', !checked);
-        btn.setAttribute('aria-disabled', checked ? 'false' : 'true');
+        btn.removeAttribute('aria-disabled');
+        btn.classList.toggle('btn-pending-terms', !checked);
       }
       hint?.classList.toggle('hidden', checked);
       if (checked) document.querySelector('.terms-accept')?.classList.remove('terms-highlight');
@@ -4822,7 +4889,8 @@
     });
 
     document.getElementById('accept-terms')?.addEventListener('change', () => syncRegisterButtonState());
-    document.getElementById('register-btn')?.addEventListener('click', () => register());
+    document.getElementById('accept-terms')?.addEventListener('input', () => syncRegisterButtonState());
+    initRegisterBtn();
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true }));
 
     (function initPullToRefresh() {

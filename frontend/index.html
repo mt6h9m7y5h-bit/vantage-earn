@@ -1143,6 +1143,22 @@
       color: #eab308;
       margin-top: auto;
     }
+    .video-offer-card.is-skeleton {
+      pointer-events: none;
+      cursor: default;
+      border-color: var(--border);
+      background: var(--surface-elevated);
+    }
+    .video-offer-card.is-skeleton .video-offer-label,
+    .video-offer-card.is-skeleton .video-offer-duration,
+    .video-offer-card.is-skeleton .video-offer-reward {
+      color: transparent;
+      background: linear-gradient(90deg, var(--surface-elevated) 25%, var(--surface-hover) 50%, var(--surface-elevated) 75%);
+      background-size: 200% 100%;
+      animation: skeleton 1.2s ease-in-out infinite;
+      border-radius: 4px;
+      min-height: 0.85em;
+    }
     button {
       width: 100%;
       border: none;
@@ -2045,9 +2061,7 @@
             <h2 class="section-title">Verdienen</h2>
             <p class="reward-hint" id="reward-hint">Wähle ein Video-Angebot — Provision wird automatisch berechnet.</p>
             <p class="offer-pick-hint">Du wählst selbst, wie lange du schaust.</p>
-            <div class="video-offers" id="video-offers" role="list" aria-label="Video-Angebote">
-              <p class="empty">Lade Angebote…</p>
-            </div>
+            <div class="video-offers" id="video-offers" role="list" aria-label="Video-Angebote"></div>
             <div class="progress-wrap" style="margin-top:1.25rem">
               <div class="progress-label">
                 <span>Tagesfortschritt</span>
@@ -2468,6 +2482,12 @@
     const REFEREE_BONUS = '0.001';
     const MIN_WATCH_SECS = 15;
     const USDT_TO_EUR_UI = 0.92;
+    const FALLBACK_OFFER_TIERS = [
+      { tier: 'quick', duration_secs: 30, label_de: 'Schnell' },
+      { tier: 'standard', duration_secs: 60, label_de: 'Standard' },
+      { tier: 'premium', duration_secs: 90, label_de: 'Premium' },
+      { tier: 'mega', duration_secs: 120, label_de: 'Mega' },
+    ];
     let refreshInFlight = null;
     let submitInFlight = false;
     let registerInFlight = false;
@@ -2640,7 +2660,7 @@
 
     async function apiFetch(path, opts = {}) {
       const url = path.startsWith('http') ? path : API + path;
-      const maxRetries = 2;
+      const maxRetries = opts.maxRetries != null ? opts.maxRetries : 2;
       const backoff = [1000, 2000];
 
       const run = async () => {
@@ -3034,12 +3054,38 @@
       return secs + ' Sek.';
     }
 
-    function renderVideoOffers(statsData) {
+    function renderVideoOfferSkeleton() {
       const container = document.getElementById('video-offers');
       if (!container) return;
+      container.innerHTML = FALLBACK_OFFER_TIERS.map(() =>
+        '<div class="video-offer-card is-skeleton" aria-hidden="true">'
+        + '<span class="video-offer-label">&nbsp;</span>'
+        + '<span class="video-offer-duration">&nbsp;</span>'
+        + '<span class="video-offer-reward">&nbsp;</span>'
+        + '</div>'
+      ).join('');
+    }
+
+    function renderVideoOffers(statsData, opts = {}) {
+      const container = document.getElementById('video-offers');
+      if (!container) return;
+      if (opts.loading) {
+        renderVideoOfferSkeleton();
+        return;
+      }
       const offers = statsData?.video_offers;
       const limitReached = statsData?.watches_remaining_today === 0;
       if (!offers || !offers.length) {
+        if (opts.offline) {
+          container.innerHTML = FALLBACK_OFFER_TIERS.map((tier) =>
+            '<button type="button" class="video-offer-card" disabled role="listitem">'
+            + '<span class="video-offer-label">' + tier.label_de + '</span>'
+            + '<span class="video-offer-duration">' + formatOfferDuration(tier.duration_secs) + '</span>'
+            + '<span class="video-offer-reward">Server startet…</span>'
+            + '</button>'
+          ).join('');
+          return;
+        }
         container.innerHTML = '<p class="empty">Keine Angebote verfügbar</p>';
         return;
       }
@@ -3678,7 +3724,7 @@
         if (appId) adConfig.applixir_app_id = appId.content || null;
       }
       try {
-        const res = await fetch(API + '/config', { cache: 'no-store' });
+        const res = await apiFetch('/config', { timeoutMs: 8000, maxRetries: 0 });
         if (res.ok) {
           const cfg = await res.json();
           adConfig = { ...adConfig, ...cfg };
@@ -4510,7 +4556,7 @@
         navigateToView('dashboard');
         log('Account erstellt: ' + data.user_id.slice(0, 8) + '…');
         showSuccessCelebration('Willkommen bei VANTAGE!');
-        await refresh({ quiet: true, bustCache: true });
+        void refresh({ quiet: true, bustCache: true }).catch(() => {});
       } catch (e) {
         if (!isAuthError(e)) {
           showError(e.message || 'Registrierung fehlgeschlagen');
@@ -4607,9 +4653,14 @@
       const lastEl = document.getElementById('last-updated');
       if (lastEl) lastEl.textContent = 'Lade Daten…';
       const bust = !!(opts.bustCache || opts.force);
+      const netOpts = {
+        ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+        ...(opts.maxRetries != null ? { maxRetries: opts.maxRetries } : {}),
+      };
       const getOpts = (extra = {}) => ({
         ...(bust ? { bustCache: true } : {}),
         silent: true,
+        ...netOpts,
         ...extra,
       });
       veLogState('refresh_start', quiet ? 'quiet' : 'visible');
@@ -4750,6 +4801,9 @@
         ensureWalletVisible();
         if (refreshBtn) refreshBtn.classList.remove('is-loading');
         if (appEl) appEl.classList.remove('is-loading');
+        if (!stats?.video_offers?.length) {
+          renderVideoOffers(stats, { offline: true });
+        }
         requestAnimationFrame(forceLayoutFix);
       }
       void loadPremiumData().catch(() => {});
@@ -5003,6 +5057,7 @@
     }
 
     primeWalletFromStorage();
+    renderVideoOffers(null, { loading: true });
 
     (async function bootstrapUi() {
       loadHealthVersion();
@@ -5047,10 +5102,16 @@
             btn.title = 'Benachrichtigungen aktiv';
           }
         }
-        await loadAdConfig();
+        void loadAdConfig();
         try {
           invalidateUserDataCache();
-          await refresh({ bustCache: true, quiet: true, showLoading: true });
+          await refresh({
+            bustCache: true,
+            quiet: true,
+            showLoading: true,
+            timeoutMs: 12000,
+            maxRetries: 1,
+          });
         } catch (e) {
           if (isAuthError(e)) {
             handleAuthFailure({ silent: true });
@@ -5061,7 +5122,6 @@
           }
         }
       } else {
-        await loadAdConfig();
         setAuthScreenActive(true);
         authCard.classList.remove('hidden');
         appEl.classList.add('hidden');
@@ -5069,6 +5129,7 @@
         const ref = params.get('ref');
         if (ref) document.getElementById('referral').value = ref;
         syncRegisterButtonState();
+        void loadAdConfig();
       }
       requestAnimationFrame(forceLayoutFix);
     })();

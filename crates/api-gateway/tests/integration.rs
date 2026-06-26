@@ -638,7 +638,7 @@ async fn video_offers_returns_tiered_catalog() {
 #[tokio::test]
 async fn watch_complete_honors_chosen_duration() {
     let app = app(AppState::new());
-    let (_user_id, token) = register(&app).await;
+    let (user_id, token) = register(&app).await;
 
     let response = app
         .oneshot(authed(
@@ -651,8 +651,10 @@ async fn watch_complete_honors_chosen_duration() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response).await;
-    let expected = RewardEngine::calculate_watch_reward(120, 1);
-    assert_eq!(json_decimal(&json["base_reward_usdt"]), expected);
+    let today = Utc::now().date_naive();
+    let base = RewardEngine::calculate_watch_reward(120, 1);
+    let (after_surprise, _) = BonusEngine::apply_surprise(base, user_id, today, 1);
+    assert_eq!(json_decimal(&json["base_reward_usdt"]), after_surprise);
 }
 
 #[tokio::test]

@@ -1,4 +1,4 @@
-const CACHE = 'vantage-earn-v43';
+const CACHE = 'vantage-earn-v44';
 const SHELL = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {

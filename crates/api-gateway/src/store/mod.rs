@@ -1,6 +1,9 @@
 mod admin_extra;
 mod audit;
 mod flags;
+mod gamification;
+mod gamification_memory;
+mod gamification_postgres;
 mod ledger;
 mod memory;
 mod payout;
@@ -19,6 +22,10 @@ pub use admin_extra::{
     AdminTimelineEvent, AdminUserListRow, AdminUserNote,
 };
 pub use audit::AdminAuditEntry;
+pub use gamification::{
+    AchievementRow, MissionRow, NotificationRow, ReferralDashboard, UserStreakRow, UserXpRow,
+    WalletHistoryItem,
+};
 pub use ledger::LedgerItem;
 pub use memory::MemoryStore;
 pub use payout::{AdminDailyMetric, PayoutListFilter, PayoutRequestRow};
@@ -518,6 +525,190 @@ impl Store {
         match self {
             Self::Memory(s) => s.latest_feature_flags_audit().await,
             Self::Postgres(s) => s.latest_feature_flags_audit().await,
+        }
+    }
+
+    pub async fn gamification_ensure(&self, user_id: Uuid) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.gamification().ensure_user(user_id).await,
+            Self::Postgres(s) => s.gamification().ensure_user(user_id).await,
+        }
+    }
+
+    pub async fn gamification_get_user_xp(&self, user_id: Uuid) -> AppResult<UserXpRow> {
+        match self {
+            Self::Memory(s) => s.gamification().get_user_xp(user_id).await,
+            Self::Postgres(s) => s.gamification().get_user_xp(user_id).await,
+        }
+    }
+
+    pub async fn gamification_add_xp(&self, user_id: Uuid, amount: i32) -> AppResult<UserXpRow> {
+        match self {
+            Self::Memory(s) => s.gamification().add_xp(user_id, amount).await,
+            Self::Postgres(s) => s.gamification().add_xp(user_id, amount).await,
+        }
+    }
+
+    pub async fn gamification_get_login_streak(&self, user_id: Uuid) -> AppResult<UserStreakRow> {
+        match self {
+            Self::Memory(s) => s.gamification().get_login_streak(user_id).await,
+            Self::Postgres(s) => s.gamification().get_login_streak(user_id).await,
+        }
+    }
+
+    pub async fn gamification_on_login(&self, user_id: Uuid) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.gamification().on_login(user_id).await,
+            Self::Postgres(s) => s.gamification().on_login(user_id).await,
+        }
+    }
+
+    pub async fn gamification_on_watch(&self, user_id: Uuid) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.gamification().on_watch(user_id).await,
+            Self::Postgres(s) => s.gamification().on_watch(user_id).await,
+        }
+    }
+
+    pub async fn gamification_on_referral(&self, user_id: Uuid) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.gamification().on_referral(user_id).await,
+            Self::Postgres(s) => s.gamification().on_referral(user_id).await,
+        }
+    }
+
+    pub async fn gamification_on_withdrawal(&self, user_id: Uuid) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.gamification().on_withdrawal(user_id).await,
+            Self::Postgres(s) => s.gamification().on_withdrawal(user_id).await,
+        }
+    }
+
+    pub async fn gamification_list_achievements(&self, user_id: Uuid) -> AppResult<Vec<AchievementRow>> {
+        match self {
+            Self::Memory(s) => s.gamification().list_achievements_for_user(user_id).await,
+            Self::Postgres(s) => s.gamification().list_achievements_for_user(user_id).await,
+        }
+    }
+
+    pub async fn gamification_unlock_achievement(
+        &self,
+        user_id: Uuid,
+        slug: &str,
+    ) -> AppResult<Option<crate::gamification::AchievementDef>> {
+        match self {
+            Self::Memory(s) => s.gamification().unlock_achievement(user_id, slug).await,
+            Self::Postgres(s) => s.gamification().unlock_achievement(user_id, slug).await,
+        }
+    }
+
+    pub async fn gamification_list_missions(&self, user_id: Uuid) -> AppResult<Vec<MissionRow>> {
+        match self {
+            Self::Memory(s) => s.gamification().list_missions_for_user(user_id).await,
+            Self::Postgres(s) => s.gamification().list_missions_for_user(user_id).await,
+        }
+    }
+
+    pub async fn gamification_claim_mission(&self, user_id: Uuid, mission_id: i32) -> AppResult<MissionRow> {
+        match self {
+            Self::Memory(s) => s.gamification().claim_mission(user_id, mission_id).await,
+            Self::Postgres(s) => s.gamification().claim_mission(user_id, mission_id).await,
+        }
+    }
+
+    pub async fn gamification_mission_reward_usdt(&self, mission_id: i32) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.gamification().mission_reward_usdt(mission_id).await,
+            Self::Postgres(s) => s.gamification().mission_reward_usdt(mission_id).await,
+        }
+    }
+
+    pub async fn gamification_push_notification(
+        &self,
+        user_id: Uuid,
+        category: &str,
+        title: &str,
+        body: &str,
+    ) -> AppResult<NotificationRow> {
+        match self {
+            Self::Memory(s) => s.gamification().push_notification(user_id, category, title, body).await,
+            Self::Postgres(s) => s.gamification().push_notification(user_id, category, title, body).await,
+        }
+    }
+
+    pub async fn gamification_list_notifications(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> AppResult<Vec<NotificationRow>> {
+        match self {
+            Self::Memory(s) => s.gamification().list_notifications(user_id, limit).await,
+            Self::Postgres(s) => s.gamification().list_notifications(user_id, limit).await,
+        }
+    }
+
+    pub async fn gamification_unread_count(&self, user_id: Uuid) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.gamification().unread_notification_count(user_id).await,
+            Self::Postgres(s) => s.gamification().unread_notification_count(user_id).await,
+        }
+    }
+
+    pub async fn gamification_mark_read(&self, user_id: Uuid, id: Uuid) -> AppResult<bool> {
+        match self {
+            Self::Memory(s) => s.gamification().mark_notification_read(user_id, id).await,
+            Self::Postgres(s) => s.gamification().mark_notification_read(user_id, id).await,
+        }
+    }
+
+    pub async fn gamification_mark_all_read(&self, user_id: Uuid) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.gamification().mark_all_notifications_read(user_id).await,
+            Self::Postgres(s) => s.gamification().mark_all_notifications_read(user_id).await,
+        }
+    }
+
+    pub async fn gamification_referral_dashboard(&self, user_id: Uuid) -> AppResult<ReferralDashboard> {
+        match self {
+            Self::Memory(s) => s.gamification().referral_dashboard(user_id).await,
+            Self::Postgres(s) => s.gamification().referral_dashboard(user_id).await,
+        }
+    }
+
+    pub async fn gamification_is_early_user(&self, user_id: Uuid) -> AppResult<bool> {
+        match self {
+            Self::Memory(s) => s.gamification().is_early_user(user_id).await,
+            Self::Postgres(s) => s.gamification().is_early_user(user_id).await,
+        }
+    }
+
+    pub async fn gamification_onboarding_claimed(&self, user_id: Uuid) -> AppResult<bool> {
+        match self {
+            Self::Memory(s) => s.gamification().onboarding_claimed(user_id).await,
+            Self::Postgres(s) => s.gamification().onboarding_claimed(user_id).await,
+        }
+    }
+
+    pub async fn gamification_mark_onboarding_claimed(&self, user_id: Uuid) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.gamification().mark_onboarding_claimed(user_id).await,
+            Self::Postgres(s) => s.gamification().mark_onboarding_claimed(user_id).await,
+        }
+    }
+
+    pub async fn wallet_history(
+        &self,
+        user_id: Uuid,
+        filter: Option<&str>,
+    ) -> AppResult<Vec<WalletHistoryItem>> {
+        let ledger = self.ledger(user_id).await?;
+        Ok(gamification_memory::wallet_history_from_ledger(&ledger, filter))
+    }
+
+    pub async fn admin_insights(&self) -> AppResult<crate::admin::AdminInsights> {
+        match self {
+            Self::Memory(s) => s.admin_insights().await,
+            Self::Postgres(s) => s.admin_insights().await,
         }
     }
 }

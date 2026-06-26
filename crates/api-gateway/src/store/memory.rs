@@ -17,11 +17,13 @@ use crate::store::{
     AdminTimelineEvent, AdminUserListRow, AdminUserNote, BulkUserFilter, LedgerItem, PayoutListFilter,
     PayoutRequestRow,
 };
+use crate::store::gamification_memory::GamificationMemStore;
 
 #[derive(Clone)]
 pub struct MemoryStore {
     wallet: Arc<WalletEngine>,
     users: Arc<RwLock<HashMap<Uuid, UserProfile>>>,
+    gamification: GamificationMemStore,
     trust_scores: Arc<RwLock<HashMap<Uuid, i32>>>,
     total_revenue: Arc<RwLock<Decimal>>,
     pending_payouts: Arc<RwLock<Decimal>>,
@@ -48,9 +50,11 @@ struct PayoutRecord {
 
 impl MemoryStore {
     pub fn new() -> Self {
+        let users = Arc::new(RwLock::new(HashMap::new()));
         Self {
             wallet: Arc::new(WalletEngine::new()),
-            users: Arc::new(RwLock::new(HashMap::new())),
+            users: users.clone(),
+            gamification: GamificationMemStore::new(users),
             trust_scores: Arc::new(RwLock::new(HashMap::new())),
             total_revenue: Arc::new(RwLock::new(Decimal::ZERO)),
             pending_payouts: Arc::new(RwLock::new(Decimal::ZERO)),
@@ -881,6 +885,46 @@ impl MemoryStore {
             .rev()
             .find(|e| e.action == "feature_flags_update")
             .map(|e| (e.created_at, e.details.clone())))
+    }
+
+    pub fn gamification(&self) -> &GamificationMemStore {
+        &self.gamification
+    }
+
+    pub async fn admin_insights(&self) -> AppResult<crate::admin::AdminInsights> {
+        let today = Utc::now().date_naive();
+        let revenue_7d = self.revenue_in_period_days(7).await?;
+        let revenue_30d = self.revenue_in_period_days(30).await?;
+        let _user_count = self.user_count().await?;
+        let rewards_today = self.rewards_today_usdt(today).await?;
+        let videos_today = self.videos_today(today).await?;
+        let avg_reward = if videos_today > 0 {
+            rewards_today / Decimal::from(videos_today)
+        } else {
+            Decimal::ZERO
+        };
+        let paid = self.total_paid_out_usdt().await?;
+        let payout_count = self.recent_payout_count(30).await?;
+        let avg_payout = if payout_count > 0 {
+            paid / Decimal::from(payout_count)
+        } else {
+            Decimal::ZERO
+        };
+        let cutoff = today - chrono::Duration::days(7);
+        let active_7d = self
+            .users
+            .read()
+            .await
+            .values()
+            .filter(|p| p.last_active_date >= Some(cutoff))
+            .count() as i64;
+        Ok(crate::admin::AdminInsights {
+            revenue_7d,
+            revenue_30d,
+            avg_reward_usdt: avg_reward,
+            avg_payout_usdt: avg_payout,
+            active_users_7d: active_7d,
+        })
     }
 }
 

@@ -1,8 +1,8 @@
 use axum::{
-    extract::State,
+    extract::{Path, Query, State},
     middleware,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, patch, post},
     Json, Router,
 };
 use std::collections::HashMap;
@@ -60,8 +60,19 @@ pub fn router() -> Router<AppState> {
     let protected = Router::new()
         .route("/users/me/wallet", get(get_wallet))
         .route("/users/me/ledger", get(get_ledger))
+        .route("/users/me/wallet/history", get(get_wallet_history))
         .route("/users/me/referral", get(get_referral))
+        .route("/users/me/referrals/dashboard", get(get_referrals_dashboard))
         .route("/users/me/stats", get(get_stats))
+        .route("/users/me/profile-stats", get(get_profile_stats))
+        .route("/users/me/missions", get(get_missions))
+        .route("/users/me/missions/{id}/claim", post(claim_mission))
+        .route("/users/me/achievements", get(get_achievements))
+        .route("/users/me/notifications", get(get_notifications))
+        .route("/users/me/notifications/read-all", patch(mark_all_notifications_read))
+        .route("/users/me/notifications/{id}", patch(mark_notification_read))
+        .route("/users/me/onboarding/complete", post(complete_onboarding))
+        .route("/users/me/payouts", get(get_user_payouts))
         .route("/users/me/analytics/summary", get(get_analytics_summary))
         .route("/users/me/watch/complete", post(watch_complete))
         .route("/users/me/payout/request", post(payout_request))
@@ -153,6 +164,8 @@ async fn register(
     }
     state.save_profile(user_id, &profile).await?;
 
+    let _ = state.gamification_on_register(user_id).await;
+
     let token = state.jwt.issue(user_id)?;
     Ok(Json(AuthResponse { user_id, token }))
 }
@@ -164,6 +177,8 @@ async fn login(
     if !state.user_exists(body.user_id).await {
         return Err(AppError::UserNotFound(body.user_id).into());
     }
+
+    let _ = state.gamification_on_login(body.user_id).await;
 
     let token = state.jwt.issue(body.user_id)?;
     Ok(Json(AuthResponse {
@@ -524,6 +539,8 @@ async fn watch_complete(
 
     state.save_profile(user_id, &profile).await?;
 
+    state.gamification_on_watch(user_id, &profile).await?;
+
     let flat_total = bonus_result.flat_total();
     let total_reward = watch_reward + flat_total;
 
@@ -700,6 +717,10 @@ async fn payout_request(
     state.save_profile(user_id, &profile).await?;
 
     state
+        .gamification_on_withdrawal(user_id, &profile)
+        .await?;
+
+    state
         .events
         .publish(AppEvent::PayoutRequested(PayoutRequestedPayload {
             user_id,
@@ -762,6 +783,219 @@ async fn ai_chat(
         .map_err(map_ai_error)?;
 
     Ok(Json(AiChatResponse { reply }))
+}
+
+#[derive(Deserialize)]
+struct WalletHistoryQuery {
+    #[serde(default)]
+    filter: Option<String>,
+}
+
+async fn get_wallet_history(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Query(query): Query<WalletHistoryQuery>,
+) -> Result<Json<Vec<crate::store::WalletHistoryItem>>, ApiError> {
+    Ok(Json(
+        state
+            .store
+            .wallet_history(user_id, query.filter.as_deref())
+            .await?,
+    ))
+}
+
+async fn get_profile_stats(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(state.build_profile_stats(user_id).await?))
+}
+
+#[derive(Serialize)]
+struct MissionsResponse {
+    daily: Vec<crate::store::MissionRow>,
+    weekly: Vec<crate::store::MissionRow>,
+    monthly: Vec<crate::store::MissionRow>,
+}
+
+async fn get_missions(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<MissionsResponse>, ApiError> {
+    let all = state.store.gamification_list_missions(user_id).await?;
+    Ok(Json(MissionsResponse {
+        daily: all.iter().filter(|m| m.mission_type == "daily").cloned().collect(),
+        weekly: all.iter().filter(|m| m.mission_type == "weekly").cloned().collect(),
+        monthly: all
+            .iter()
+            .filter(|m| m.mission_type == "monthly")
+            .cloned()
+            .collect(),
+    }))
+}
+
+async fn claim_mission(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<i32>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(state.claim_mission_reward(user_id, id).await?))
+}
+
+async fn get_achievements(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<Vec<crate::store::AchievementRow>>, ApiError> {
+    Ok(Json(
+        state.store.gamification_list_achievements(user_id).await?,
+    ))
+}
+
+#[derive(Serialize)]
+struct NotificationsResponse {
+    unread_count: i64,
+    notifications: Vec<crate::store::NotificationRow>,
+}
+
+#[derive(Deserialize)]
+struct NotificationsQuery {
+    #[serde(default = "default_notifications_limit")]
+    limit: u32,
+}
+
+fn default_notifications_limit() -> u32 {
+    50
+}
+
+async fn get_notifications(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Query(query): Query<NotificationsQuery>,
+) -> Result<Json<NotificationsResponse>, ApiError> {
+    let unread_count = state.store.gamification_unread_count(user_id).await?;
+    let notifications = state
+        .store
+        .gamification_list_notifications(user_id, query.limit)
+        .await?;
+    Ok(Json(NotificationsResponse {
+        unread_count,
+        notifications,
+    }))
+}
+
+async fn mark_notification_read(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let ok = state.store.gamification_mark_read(user_id, id).await?;
+    Ok(Json(serde_json::json!({ "ok": ok })))
+}
+
+async fn mark_all_notifications_read(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let count = state.store.gamification_mark_all_read(user_id).await?;
+    Ok(Json(serde_json::json!({ "marked": count })))
+}
+
+async fn get_referrals_dashboard(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<crate::store::ReferralDashboard>, ApiError> {
+    Ok(Json(
+        state.store.gamification_referral_dashboard(user_id).await?,
+    ))
+}
+
+async fn complete_onboarding(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(state.complete_onboarding(user_id).await?))
+}
+
+#[derive(Serialize)]
+struct PayoutTimelineStep {
+    step: String,
+    label_de: String,
+    active: bool,
+    done: bool,
+}
+
+#[derive(Serialize)]
+struct UserPayoutRow {
+    id: Uuid,
+    amount_usdt: Decimal,
+    payout_method: String,
+    tier: String,
+    status: String,
+    created_at: DateTime<Utc>,
+    timeline: Vec<PayoutTimelineStep>,
+    estimated_time_de: String,
+}
+
+fn payout_timeline(status: &str) -> Vec<PayoutTimelineStep> {
+    let steps = [
+        ("requested", "Angefragt"),
+        ("review", "Prüfung"),
+        ("approved", "Freigegeben"),
+        ("processing", "Bearbeitung"),
+        ("completed", "Abgeschlossen"),
+    ];
+    let idx = match status {
+        "pending_validation" | "pending_fraud_review" => 1,
+        "approved" => 2,
+        "paid_out" => 4,
+        "rejected" => 4,
+        _ => 0,
+    };
+    steps
+        .iter()
+        .enumerate()
+        .map(|(i, (step, label))| {
+            let done = if status == "rejected" {
+                i <= 1
+            } else {
+                i < idx || (status == "paid_out" && i <= 4)
+            };
+            PayoutTimelineStep {
+                step: (*step).into(),
+                label_de: (*label).into(),
+                active: i == idx,
+                done,
+            }
+        })
+        .collect()
+}
+
+async fn get_user_payouts(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<Vec<UserPayoutRow>>, ApiError> {
+    let rows = state.user_payouts(user_id, 20).await?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|p| {
+                let estimated = if p.status == "rejected" {
+                    "Abgelehnt — Guthaben zurückerstattet".into()
+                } else {
+                    "1–3 Werktage Prüfung, danach je nach Zahlungsmethode".into()
+                };
+                UserPayoutRow {
+                    id: p.id,
+                    amount_usdt: p.amount_usdt,
+                    payout_method: p.payout_method,
+                    tier: p.tier,
+                    status: p.status.clone(),
+                    created_at: p.created_at,
+                    timeline: payout_timeline(&p.status),
+                    estimated_time_de: estimated,
+                }
+            })
+            .collect(),
+    ))
 }
 
 #[derive(Serialize)]

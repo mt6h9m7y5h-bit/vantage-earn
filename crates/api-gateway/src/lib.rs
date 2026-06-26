@@ -4,6 +4,8 @@ pub mod feature_flags;
 pub mod auth;
 pub mod error;
 pub mod extractors;
+pub mod gamification;
+pub mod gamification_hooks;
 pub mod pwa;
 pub mod rate_limit;
 pub mod routes;

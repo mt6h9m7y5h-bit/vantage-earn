@@ -1083,6 +1083,117 @@
       padding: 0.25rem 0;
     }
     details.collapsible summary::-webkit-details-marker { display: none; }
+    .mission-grid { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+    .mission-card {
+      padding: 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface-elevated);
+    }
+    .mission-card.completed { border-color: rgba(16, 185, 129, 0.35); }
+    .mission-card.claimed { opacity: 0.7; }
+    .mission-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; }
+    .mission-type-pill {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.2rem 0.45rem;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-weight: 700;
+    }
+    .mission-reset { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
+    .badge-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+    .badge-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.6rem;
+      border-radius: 999px;
+      background: var(--success-soft);
+      color: var(--success);
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .badge-chip.locked { background: var(--surface-elevated); color: var(--muted); border-color: var(--border); }
+    .level-bar-wrap { margin: 0.75rem 0; }
+    .xp-label { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .payout-timeline { display: flex; gap: 0.35rem; margin: 1rem 0; overflow-x: auto; padding-bottom: 0.25rem; }
+    .timeline-step {
+      flex: 1;
+      min-width: 4.5rem;
+      text-align: center;
+      font-size: 0.65rem;
+      color: var(--muted);
+      position: relative;
+    }
+    .timeline-step::before {
+      content: '';
+      display: block;
+      width: 0.75rem;
+      height: 0.75rem;
+      border-radius: 50%;
+      margin: 0 auto 0.35rem;
+      background: var(--border);
+      border: 2px solid var(--surface);
+    }
+    .timeline-step.done { color: var(--success); }
+    .timeline-step.done::before { background: var(--success); }
+    .timeline-step.active { color: var(--primary); font-weight: 700; }
+    .timeline-step.active::before { background: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+    .notification-item {
+      padding: 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .notification-item.unread { background: var(--primary-soft); margin: 0 -0.85rem; padding-left: 0.85rem; padding-right: 0.85rem; border-radius: var(--radius); }
+    .notification-meta { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+    .notify-badge {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      min-width: 1rem;
+      height: 1rem;
+      padding: 0 0.25rem;
+      border-radius: 999px;
+      background: var(--danger);
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      line-height: 1rem;
+      text-align: center;
+    }
+    .icon-btn.has-badge { position: relative; }
+    .wallet-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; align-items: center; }
+    .wallet-toolbar select { flex: 1; min-width: 8rem; }
+    .onboarding-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(0,0,0,0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .onboarding-overlay.hidden { display: none; }
+    .onboarding-card {
+      width: min(420px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    .onboarding-check { display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0; font-size: 0.9rem; }
+    .onboarding-check.done { color: var(--success); }
+    #profile-view.is-loading .stat-value,
+    #rewards-view.is-loading .mission-card,
+    #wallet-view.is-loading #ledger {
+      opacity: 0.45;
+      pointer-events: none;
+    }
     .sr-only {
       position: absolute;
       width: 1px;
@@ -1172,8 +1283,9 @@
         </div>
         <div class="header-actions">
           <span class="trust-badge hidden" id="header-trust" title="Trust Score">—</span>
-          <button class="icon-btn hidden" id="notify-btn" onclick="enableNotifications()" type="button" aria-label="Benachrichtigungen" title="Benachrichtigungen">
+          <button class="icon-btn hidden has-badge" id="notify-btn" onclick="openNotifications()" type="button" aria-label="Benachrichtigungen" title="Benachrichtigungen">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span class="notify-badge hidden" id="notify-badge">0</span>
           </button>
           <button class="icon-btn hidden" id="refresh-btn" type="button" aria-label="Aktualisieren" title="Aktualisieren">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -1265,7 +1377,7 @@
         </section>
 
         <!-- Wallet -->
-        <section class="view hidden" data-view="wallet">
+        <section class="view hidden" data-view="wallet" id="wallet-view">
           <section class="card hero-wallet">
             <div class="hero-top">
               <span class="balance-label">Wallet-Guthaben</span>
@@ -1276,12 +1388,29 @@
           </section>
           <section class="card">
             <h2 class="section-title">Transaktionsverlauf</h2>
+            <div class="wallet-toolbar">
+              <select id="wallet-filter" onchange="loadWalletHistory()">
+                <option value="">Alle</option>
+                <option value="credit">Gutschriften</option>
+                <option value="debit">Abbuchungen</option>
+                <option value="reward">Belohnungen</option>
+                <option value="payout">Auszahlungen</option>
+              </select>
+              <button class="secondary copy-btn" type="button" onclick="exportWalletCsv()">CSV exportieren</button>
+            </div>
             <div id="ledger"><p class="empty">Noch keine Einträge</p></div>
           </section>
         </section>
 
         <!-- Rewards -->
-        <section class="view hidden" data-view="rewards">
+        <section class="view hidden" data-view="rewards" id="rewards-view">
+          <section class="card" id="missions-card">
+            <h2 class="section-title">Reward Center</h2>
+            <p class="payout-hint">Tägliche, wöchentliche und monatliche Missionen — ehrliche Kleinstbeträge in USDT + XP.</p>
+            <div id="missions-daily"><p class="empty">Lade Missionen…</p></div>
+            <div id="missions-weekly" style="margin-top:1rem"></div>
+            <div id="missions-monthly" style="margin-top:1rem"></div>
+          </section>
           <section class="card" id="leaderboard-card">
             <h2 class="section-title">Top dieser Woche</h2>
             <div id="leaderboard-list"><p class="empty">Lade Rangliste…</p></div>
@@ -1307,6 +1436,12 @@
 
         <!-- Referrals -->
         <section class="view hidden" data-view="referrals">
+          <div class="kpi-strip" id="referral-stats">
+            <div class="stat-tile"><span class="stat-label">Verdienst</span><span class="stat-value success" id="ref-earnings">—</span></div>
+            <div class="stat-tile"><span class="stat-label">Aktiv</span><span class="stat-value" id="ref-active">—</span></div>
+            <div class="stat-tile"><span class="stat-label">Inaktiv</span><span class="stat-value" id="ref-inactive">—</span></div>
+            <div class="stat-tile"><span class="stat-label">Conversion</span><span class="stat-value" id="ref-conversion">—</span></div>
+          </div>
           <section class="card referral-card" id="referral-banner">
             <h2 class="section-title">Empfehlungsprogramm</h2>
             <p id="referral-banner-text">Empfehle VANTAGE und verdient beide einen Bonus in USDT.</p>
@@ -1346,6 +1481,11 @@
             </div>
             <p class="payout-hint" id="payout-threshold-hint"></p>
             <button class="primary" id="payout-btn" onclick="requestPayout()">Alles auszahlen</button>
+          </section>
+          <section class="card" id="payout-history-card">
+            <h2 class="section-title">Auszahlungsstatus</h2>
+            <p class="payout-hint">1–3 Werktage Prüfung — danach Bearbeitung je nach Zahlungsmethode.</p>
+            <div id="payout-timeline-list"><p class="empty">Noch keine Auszahlungen</p></div>
           </section>
         </section>
 
@@ -1428,9 +1568,29 @@
         </section>
 
         <!-- Profile (mobile nav) -->
-        <section class="view hidden" data-view="profile">
+        <section class="view hidden" data-view="profile" id="profile-view">
+          <section class="card">
+            <h2 class="section-title">Profil</h2>
+            <div class="kpi-strip">
+              <div class="stat-tile"><span class="stat-label">Profil</span><span class="stat-value" id="profile-completion">—</span></div>
+              <div class="stat-tile"><span class="stat-label">Account-Alter</span><span class="stat-value" id="profile-age">—</span></div>
+              <div class="stat-tile"><span class="stat-label">Level</span><span class="stat-value success" id="profile-level">—</span></div>
+              <div class="stat-tile"><span class="stat-label">Streak</span><span class="stat-value" id="profile-streak">—</span></div>
+            </div>
+            <div class="level-bar-wrap">
+              <div class="xp-label"><span>XP-Fortschritt</span><span id="profile-xp-text">—</span></div>
+              <div class="progress-bar"><div class="progress-fill" id="profile-xp-fill" style="width:0%"></div></div>
+            </div>
+            <div class="kpi-strip" style="margin-top:0.75rem">
+              <div class="stat-tile"><span class="stat-label">Lifetime</span><span class="stat-value" id="profile-lifetime">—</span></div>
+              <div class="stat-tile"><span class="stat-label">Videos</span><span class="stat-value" id="profile-watches">—</span></div>
+              <div class="stat-tile"><span class="stat-label">Referral</span><span class="stat-value" id="profile-ref-earn">—</span></div>
+            </div>
+            <h3 class="section-title" style="font-size:0.95rem;margin-top:1rem">Badges &amp; Erfolge</h3>
+            <div class="badge-grid" id="profile-badges"><p class="empty">Lade Erfolge…</p></div>
+          </section>
           <section class="card referral-card">
-            <h2 class="section-title">Profil &amp; Empfehlungen</h2>
+            <h2 class="section-title">Empfehlungen</h2>
             <p id="profile-referral-text">Freund einladen und beide verdienen USDT.</p>
             <div class="referral-code-box">
               <code id="profile-ref-code">—</code>
@@ -1462,6 +1622,27 @@
             </p>
           </div>
         </section>
+
+        <section class="view hidden" data-view="notifications" id="notifications-view">
+          <section class="card">
+            <div class="hero-top" style="margin-bottom:0.75rem">
+              <h2 class="section-title" style="margin:0">Benachrichtigungen</h2>
+              <button class="secondary copy-btn" type="button" onclick="markAllNotificationsRead()">Alle gelesen</button>
+            </div>
+            <div id="notifications-list"><p class="empty">Keine Benachrichtigungen</p></div>
+          </section>
+        </section>
+
+        <section class="view hidden" data-view="notifications" id="notifications-view">
+          <section class="card">
+            <div class="hero-top" style="margin-bottom:0.75rem">
+              <h2 class="section-title" style="margin:0">Benachrichtigungen</h2>
+              <button class="secondary copy-btn" type="button" onclick="markAllNotificationsRead()">Alle gelesen</button>
+            </div>
+            <div id="notifications-list"><p class="empty">Keine Benachrichtigungen</p></div>
+          </section>
+        </section>
+
         <footer class="site-footer" aria-label="Rechtliches">
           <a href="/legal/impressum">Impressum</a> · <a href="/legal/datenschutz">Datenschutz</a> · <a href="/legal/agb">AGB</a>
         </footer>
@@ -1493,6 +1674,19 @@
 
     <button class="primary success-btn fab-watch" id="fab-watch" type="button" onclick="startWatch()">Video ansehen</button>
     <div id="log" aria-hidden="true"></div>
+  </div>
+
+  <div id="onboarding-overlay" class="onboarding-overlay hidden" aria-hidden="true">
+    <div class="onboarding-card">
+      <h2 class="section-title">Willkommen bei VANTAGE</h2>
+      <p class="payout-hint">Kurze Checkliste — optional, kleine Startbelohnung am Ende.</p>
+      <div class="onboarding-check" id="ob-watch">○ Erstes Video schauen</div>
+      <div class="onboarding-check" id="ob-earn">○ Erste Belohnung erhalten</div>
+      <div class="onboarding-check" id="ob-invite">○ Freund einladen (optional)</div>
+      <div class="onboarding-check" id="ob-payout">○ Auszahlung ansehen (optional)</div>
+      <button class="primary" type="button" id="onboarding-complete-btn" onclick="completeOnboarding()" disabled>Belohnung abholen</button>
+      <button class="secondary copy-btn" type="button" style="margin-top:0.5rem;width:100%" onclick="dismissOnboarding()">Später</button>
+    </div>
   </div>
 
   <div id="ad-overlay" class="ad-overlay" hidden aria-hidden="true">
@@ -1541,6 +1735,10 @@
     let stats = null;
     let analyticsSummary = null;
     let analyticsPeriod = 7;
+    let profileStats = null;
+    let missionsData = null;
+    let walletHistory = [];
+    let notificationsData = null;
     let streakReminderTimer = null;
     const REFERRER_BONUS = '0.001';
     const REFEREE_BONUS = '0.001';
@@ -1556,6 +1754,7 @@
       analytics: ['Analytics', 'Kennzahlen & Trends'],
       security: ['Sicherheit', 'Trust & Nutzungsverhalten'],
       profile: ['Profil', 'Einstellungen & Empfehlungen'],
+      notifications: ['Benachrichtigungen', 'Updates & Erfolge'],
     };
 
     function navigateToView(view) {
@@ -1575,6 +1774,12 @@
       if (v === 'analytics' && token && analyticsSummary) {
         renderAnalytics(analyticsSummary);
       }
+      if (v === 'profile' && token) loadProfileStats();
+      if (v === 'rewards' && token) loadMissions();
+      if (v === 'wallet' && token) loadWalletHistory();
+      if (v === 'referrals' && token) loadReferralDashboard();
+      if (v === 'payouts' && token) loadPayoutTimeline();
+      if (v === 'notifications' && token) loadNotifications();
     }
 
     function formatUsdt(value) {
@@ -1753,10 +1958,12 @@
       const time = new Date(e.created_at).toLocaleString('de-DE', {
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
       });
+      const label = e.label_de || (e.kind === 'credit' ? 'Gutschrift' : 'Abbuchung');
+      const balance = e.balance_after != null ? e.balance_after : '—';
       return `<div class="ledger-item">
         <div><span class="${cls}">${sign}${e.amount_usdt} USDT</span>
-        <div class="ledger-meta">${time}</div></div>
-        <span class="ledger-meta">${e.balance_after}</span>
+        <div class="ledger-meta">${label} · ${time}</div></div>
+        <span class="ledger-meta">Saldo ${balance}</span>
       </div>`;
     }
 
@@ -2416,6 +2623,9 @@
         applyWallet(data.wallet);
       }
       refreshAnalytics();
+      loadNotifications().catch(() => {});
+      loadMissions().catch(() => {});
+      loadProfileStats().catch(() => {});
       if (stats && data.wallet) {
         updatePayoutProgress(data.wallet, stats);
       } else if (stats && data.wallet == null) {
@@ -2669,6 +2879,314 @@
       }
     }
 
+    function animateStatValue(id, target, suffix = '') {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const num = parseFloat(String(target).replace(/[^\d.]/g, ''));
+      if (!Number.isFinite(num)) {
+        el.textContent = target + suffix;
+        return;
+      }
+      const start = performance.now();
+      const from = parseFloat(el.textContent) || 0;
+      const duration = 400;
+      function frame(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const val = from + (num - from) * (1 - Math.pow(1 - t, 3));
+        el.textContent = (Number.isInteger(num) ? Math.round(val) : val.toFixed(4).replace(/\.?0+$/, '')) + suffix;
+        if (t < 1) requestAnimationFrame(frame);
+        else el.textContent = target + suffix;
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function missionCountdown(resetsAt) {
+      const end = new Date(resetsAt).getTime();
+      const diff = Math.max(0, end - Date.now());
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      return `Reset in ${h}h ${m}m (UTC)`;
+    }
+
+    function renderMissionGroup(containerId, title, missions) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      if (!missions || !missions.length) {
+        el.innerHTML = '';
+        return;
+      }
+      el.innerHTML = `<h3 class="section-title" style="font-size:0.9rem;margin:0 0 0.5rem">${title}</h3>
+        <div class="mission-grid">${missions.map((m) => {
+          const pct = Math.min(100, (m.progress / m.target_count) * 100);
+          const cls = m.claimed ? 'claimed' : (m.completed ? 'completed' : '');
+          const btn = m.completed && !m.claimed
+            ? `<button class="primary" type="button" onclick="claimMission(${m.id})">Abholen (+${m.reward_usdt} USDT)</button>`
+            : (m.claimed ? '<span class="payout-hint">Abgeholt ✓</span>' : '');
+          return `<div class="mission-card ${cls}">
+            <div class="mission-head">
+              <strong>${m.title_de}</strong>
+              <span class="mission-type-pill">${m.type}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div class="progress-label"><span>${m.progress} / ${m.target_count}</span><span>+${m.xp_reward} XP</span></div>
+            <div class="mission-reset">${missionCountdown(m.resets_at)}</div>
+            ${btn}
+          </div>`;
+        }).join('')}</div>`;
+    }
+
+    function renderMissions(data) {
+      if (!data) return;
+      renderMissionGroup('missions-daily', 'Täglich', data.daily);
+      renderMissionGroup('missions-weekly', 'Wöchentlich', data.weekly);
+      renderMissionGroup('missions-monthly', 'Monatlich', data.monthly);
+    }
+
+    async function loadMissions() {
+      const view = document.getElementById('rewards-view');
+      if (view) view.classList.add('is-loading');
+      try {
+        missionsData = await api('/users/me/missions');
+        renderMissions(missionsData);
+      } catch (e) {
+        if (!isAuthError(e)) console.warn('Missionen laden fehlgeschlagen', e);
+      } finally {
+        if (view) view.classList.remove('is-loading');
+      }
+    }
+
+    async function claimMission(id) {
+      try {
+        const data = await api(`/users/me/missions/${id}/claim`, { method: 'POST', body: '{}' });
+        showSuccess('Mission abgeholt: +' + data.credited_usdt + ' USDT');
+        await Promise.all([loadMissions(), refresh(), loadNotifications()]);
+      } catch (e) {
+        if (!isAuthError(e)) showError(e.message || 'Abholen fehlgeschlagen');
+      }
+    }
+
+    function renderProfileStats(ps) {
+      if (!ps) return;
+      profileStats = ps;
+      animateStatValue('profile-completion', ps.profile_completion_pct, '%');
+      setText('profile-age', ps.account_age_days + ' Tage');
+      animateStatValue('profile-level', ps.level);
+      setText('profile-streak', (ps.streak_days || 0) + ' Tage');
+      const xpPct = ps.xp_to_next_level > 0
+        ? Math.min(100, (ps.xp_in_current_level / ps.xp_to_next_level) * 100)
+        : 100;
+      setText('profile-xp-text', ps.xp_in_current_level + ' / ' + ps.xp_to_next_level + ' XP (Lvl ' + ps.level + ')');
+      const fill = document.getElementById('profile-xp-fill');
+      if (fill) fill.style.width = xpPct + '%';
+      setText('profile-lifetime', formatUsdt(ps.lifetime_earnings_usdt));
+      animateStatValue('profile-watches', ps.ads_watched || 0);
+      setText('profile-ref-earn', formatUsdt(ps.referral_earnings_usdt));
+      const badges = document.getElementById('profile-badges');
+      if (badges && ps.achievements) {
+        badges.innerHTML = ps.achievements.map((a) => {
+          const unlocked = !!a.unlocked_at;
+          return `<span class="badge-chip ${unlocked ? '' : 'locked'}" title="${a.description_de}">${unlocked ? '★' : '○'} ${a.title_de}</span>`;
+        }).join('');
+      }
+      updateOnboardingFromStats(ps);
+    }
+
+    async function loadProfileStats() {
+      const view = document.getElementById('profile-view');
+      if (view) view.classList.add('is-loading');
+      try {
+        const ps = await api('/users/me/profile-stats');
+        renderProfileStats(ps);
+      } catch (e) {
+        if (!isAuthError(e)) console.warn('Profil-Stats fehlgeschlagen', e);
+      } finally {
+        if (view) view.classList.remove('is-loading');
+      }
+    }
+
+    async function loadWalletHistory() {
+      const view = document.getElementById('wallet-view');
+      if (view) view.classList.add('is-loading');
+      try {
+        const filter = document.getElementById('wallet-filter')?.value || '';
+        const q = filter ? '?filter=' + encodeURIComponent(filter) : '';
+        walletHistory = await api('/users/me/wallet/history' + q);
+        renderLedger(walletHistory);
+      } catch (e) {
+        if (!isAuthError(e)) console.warn('Wallet-Historie fehlgeschlagen', e);
+      } finally {
+        if (view) view.classList.remove('is-loading');
+      }
+    }
+
+    function exportWalletCsv() {
+      const rows = walletHistory.length ? walletHistory : [];
+      if (!rows.length) {
+        showError('Keine Daten zum Exportieren.');
+        return;
+      }
+      const header = 'Datum;Typ;Betrag USDT;Saldo;Label\n';
+      const body = rows.map((e) => {
+        const d = new Date(e.created_at).toISOString();
+        return `${d};${e.kind};${e.amount_usdt};${e.balance_after};${e.label_de || ''}`;
+      }).join('\n');
+      const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'vantage-wallet.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    async function loadReferralDashboard() {
+      try {
+        const d = await api('/users/me/referrals/dashboard');
+        setText('ref-earnings', formatUsdt(d.total_earnings_usdt));
+        setText('ref-active', String(d.active_referrals));
+        setText('ref-inactive', String(d.inactive_referrals));
+        setText('ref-conversion', (d.conversion_rate_pct || 0).toFixed(1) + '%');
+        if (d.pending_bonuses > 0) {
+          setText('referral-banner-text', d.pending_bonuses + ' eingeladene Nutzer warten noch auf den ersten Bonus.');
+        }
+      } catch (e) {
+        if (!isAuthError(e)) console.warn('Referral-Dashboard fehlgeschlagen', e);
+      }
+    }
+
+    function renderPayoutTimeline(rows) {
+      const el = document.getElementById('payout-timeline-list');
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = '<p class="empty">Noch keine Auszahlungen</p>';
+        return;
+      }
+      el.innerHTML = rows.map((p) => {
+        const steps = (p.timeline || []).map((s) =>
+          `<div class="timeline-step ${s.done ? 'done' : ''} ${s.active ? 'active' : ''}">${s.label_de}</div>`
+        ).join('');
+        return `<div class="card" style="margin-bottom:0.75rem;padding:1rem">
+          <div class="row"><span>${p.amount_usdt} USDT</span><span class="payout-hint">${p.status}</span></div>
+          <div class="payout-timeline">${steps}</div>
+          <p class="payout-hint">${p.estimated_time_de}</p>
+        </div>`;
+      }).join('');
+    }
+
+    async function loadPayoutTimeline() {
+      try {
+        const rows = await api('/users/me/payouts');
+        renderPayoutTimeline(rows);
+      } catch (e) {
+        if (!isAuthError(e)) console.warn('Auszahlungen laden fehlgeschlagen', e);
+      }
+    }
+
+    function updateNotifyBadge(count) {
+      const badge = document.getElementById('notify-badge');
+      if (!badge) return;
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function renderNotifications(data) {
+      notificationsData = data;
+      updateNotifyBadge(data?.unread_count || 0);
+      const el = document.getElementById('notifications-list');
+      if (!el) return;
+      const list = data?.notifications || [];
+      if (!list.length) {
+        el.innerHTML = '<p class="empty">Keine Benachrichtigungen</p>';
+        return;
+      }
+      el.innerHTML = list.map((n) => {
+        const time = new Date(n.created_at).toLocaleString('de-DE');
+        return `<div class="notification-item ${n.read ? '' : 'unread'}">
+          <strong>${n.title}</strong>
+          <div>${n.body}</div>
+          <div class="notification-meta">${n.category} · ${time}</div>
+        </div>`;
+      }).join('');
+    }
+
+    async function loadNotifications() {
+      try {
+        const data = await api('/users/me/notifications');
+        renderNotifications(data);
+      } catch (e) {
+        if (!isAuthError(e)) console.warn('Benachrichtigungen fehlgeschlagen', e);
+      }
+    }
+
+    function openNotifications() {
+      navigateToView('notifications');
+      loadNotifications();
+    }
+
+    async function markAllNotificationsRead() {
+      try {
+        await api('/users/me/notifications/read-all', { method: 'PATCH', body: '{}' });
+        await loadNotifications();
+      } catch (e) {
+        if (!isAuthError(e)) showError(e.message || 'Fehler');
+      }
+    }
+
+    function updateOnboardingFromStats(ps) {
+      if (localStorage.getItem('ve_onboarding_done')) return;
+      const ob = document.getElementById('onboarding-overlay');
+      if (!ob) return;
+      const watchDone = (ps.ads_watched || 0) >= 1;
+      const earnDone = parseFloat(ps.lifetime_earnings_usdt) > 0;
+      const items = [
+        ['ob-watch', 'Erstes Video schauen', watchDone, false],
+        ['ob-earn', 'Erste Belohnung erhalten', earnDone, false],
+        ['ob-invite', 'Freund einladen (optional)', false, true],
+        ['ob-payout', 'Auszahlung ansehen (optional)', false, true],
+      ];
+      items.forEach(([id, label, done]) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle('done', done);
+        el.textContent = (done ? '✓ ' : '○ ') + label;
+      });
+      const btn = document.getElementById('onboarding-complete-btn');
+      if (btn) btn.disabled = !(watchDone && earnDone);
+      ob.classList.remove('hidden');
+      ob.setAttribute('aria-hidden', 'false');
+    }
+
+    function dismissOnboarding() {
+      localStorage.setItem('ve_onboarding_done', '1');
+      document.getElementById('onboarding-overlay')?.classList.add('hidden');
+    }
+
+    async function completeOnboarding() {
+      try {
+        const data = await api('/users/me/onboarding/complete', { method: 'POST', body: '{}' });
+        localStorage.setItem('ve_onboarding_done', '1');
+        document.getElementById('onboarding-overlay')?.classList.add('hidden');
+        showSuccess('Startbonus: +' + data.usdt_reward + ' USDT, +' + data.xp_reward + ' XP');
+        await refresh();
+      } catch (e) {
+        if (!isAuthError(e)) showError(e.message || 'Onboarding fehlgeschlagen');
+      }
+    }
+
+    async function loadPremiumData() {
+      await Promise.allSettled([
+        loadNotifications(),
+        loadMissions(),
+        loadProfileStats(),
+        loadWalletHistory(),
+        loadReferralDashboard(),
+        loadPayoutTimeline(),
+      ]);
+    }
+
     async function register() {
       const btn = document.getElementById('register-btn');
       const terms = document.getElementById('accept-terms');
@@ -2836,6 +3354,7 @@
           analyticsSummary = analyticsData;
           renderAnalytics(analyticsData);
         }
+        await loadPremiumData();
         markUpdated();
       } catch (e) {
         if (!isAuthError(e)) {

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use referral_engine::ReferralEngine;
 use crate::state::UserProfile;
+use crate::store::gamification_postgres::GamificationPgStore;
 use crate::store::week_start_utc;
 use crate::store::{
     AdminAuditEntry, AdminDailyMetric, AdminExportUserRow, AdminLiveSnapshot, AdminSearchAuditHit,
@@ -74,6 +75,19 @@ impl PgStore {
             INSERT INTO trust_scores (user_id, score) VALUES ($1, 50)
             ON CONFLICT (user_id) DO NOTHING
             "#,
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        sqlx::query("INSERT INTO user_xp (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+        sqlx::query(
+            "INSERT INTO user_streaks (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
         )
         .bind(user_id)
         .execute(&self.pool)
@@ -1552,6 +1566,47 @@ impl From<PayoutRow> for PayoutRequestRow {
             payout_method: row.payout_method,
             created_at: row.created_at,
         }
+    }
+}
+
+impl PgStore {
+    pub fn gamification(&self) -> GamificationPgStore {
+        GamificationPgStore::new(self.pool.clone())
+    }
+
+    pub async fn admin_insights(&self) -> AppResult<crate::admin::AdminInsights> {
+        let today = Utc::now().date_naive();
+        let revenue_7d = self.revenue_in_period_days(7).await?;
+        let revenue_30d = self.revenue_in_period_days(30).await?;
+        let rewards_today = self.rewards_today_usdt(today).await?;
+        let videos_today = self.videos_today(today).await?;
+        let avg_reward = if videos_today > 0 {
+            rewards_today / Decimal::from(videos_today)
+        } else {
+            Decimal::ZERO
+        };
+        let paid = self.total_paid_out_usdt().await?;
+        let payout_count = self.recent_payout_count(30).await?;
+        let avg_payout = if payout_count > 0 {
+            paid / Decimal::from(payout_count)
+        } else {
+            Decimal::ZERO
+        };
+        let cutoff = today - chrono::Duration::days(7);
+        let active_7d: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE last_active_date >= $1::date",
+        )
+        .bind(cutoff)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(crate::admin::AdminInsights {
+            revenue_7d,
+            revenue_30d,
+            avg_reward_usdt: avg_reward,
+            avg_payout_usdt: avg_payout,
+            active_users_7d: active_7d.0,
+        })
     }
 }
 

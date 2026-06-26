@@ -124,7 +124,7 @@ impl UserProfile {
 
 #[derive(Clone)]
 pub struct AppState {
-    store: Arc<Store>,
+    pub(crate) store: Arc<Store>,
     pub currency: Arc<CurrencyEngine>,
     pub events: Arc<EventBus>,
     pub copilot: AiCopilot,
@@ -422,6 +422,9 @@ impl AppState {
         let mut referrer_profile = self.profile(referrer_id).await;
         referrer_profile.referral_count += 1;
         self.save_profile(referrer_id, &referrer_profile).await?;
+        let _ = self
+            .gamification_on_referral(referrer_id, &referrer_profile)
+            .await;
 
         profile.referral_bonus_paid = true;
         Ok(())

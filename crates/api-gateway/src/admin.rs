@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/live", get(admin_live))
         .route("/admin/search", get(admin_search))
         .route("/admin/analytics/summary", get(admin_analytics_summary))
+        .route("/admin/insights", get(admin_insights))
         .route("/admin/payouts", get(admin_list_payouts))
         .route("/admin/payouts/{id}/approve", post(admin_approve_payout))
         .route("/admin/payouts/{id}/reject", post(admin_reject_payout))
@@ -192,6 +193,23 @@ async fn admin_analytics_summary(
     verify_admin(&headers)?;
     let days = if query.days == 30 { 30 } else { 7 };
     Ok(Json(state.admin_analytics_summary(days).await?))
+}
+
+#[derive(Serialize)]
+pub struct AdminInsights {
+    pub revenue_7d: Decimal,
+    pub revenue_30d: Decimal,
+    pub avg_reward_usdt: Decimal,
+    pub avg_payout_usdt: Decimal,
+    pub active_users_7d: i64,
+}
+
+async fn admin_insights(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<AdminInsights>, ApiError> {
+    verify_admin(&headers)?;
+    Ok(Json(state.store.admin_insights().await?))
 }
 
 #[derive(Deserialize)]

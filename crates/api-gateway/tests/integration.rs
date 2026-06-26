@@ -1196,3 +1196,174 @@ async fn admin_stats_includes_premium_kpis() {
     assert!(json["approved_payouts_today"].is_number());
     assert!(json["pending_sparkline"].is_array());
 }
+
+#[tokio::test]
+async fn profile_stats_after_watch() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+
+    let response = app
+        .oneshot(authed("GET", "/users/me/profile-stats", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["ads_watched"], 1);
+    assert_eq!(json["level"], 1);
+    assert!(json["total_xp"].as_i64().unwrap() >= 5);
+    assert!(json["achievements"].as_array().unwrap().len() >= 9);
+    let unlocked: Vec<_> = json["achievements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|a| !a["unlocked_at"].is_null())
+        .collect();
+    assert!(!unlocked.is_empty());
+}
+
+#[tokio::test]
+async fn missions_progress_and_claim() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    let login_missions = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/missions", &token, None))
+        .await
+        .unwrap();
+    let missions_json = body_json(login_missions).await;
+    let daily_login = missions_json["daily"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["slug"] == "daily_login")
+        .expect("daily_login mission");
+    assert_eq!(daily_login["progress"], 1);
+    assert_eq!(daily_login["completed"], true);
+
+    for _ in 0..5 {
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/users/me/watch/complete",
+                &token,
+                Some(r#"{"watch_duration_secs": 60}"#),
+            ))
+            .await
+            .unwrap();
+    }
+
+    let missions = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/missions", &token, None))
+        .await
+        .unwrap();
+    let missions_json = body_json(missions).await;
+    let watch5 = missions_json["daily"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["slug"] == "daily_watch_5")
+        .unwrap();
+    assert_eq!(watch5["progress"], 5);
+    assert_eq!(watch5["completed"], true);
+
+    let claim = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/users/me/missions/{}/claim", watch5["id"].as_i64().unwrap()),
+            &token,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(claim.status(), StatusCode::OK);
+    let claim_json = body_json(claim).await;
+    assert_eq!(claim_json["credited_usdt"], "0.001");
+}
+
+#[tokio::test]
+async fn achievements_list_and_notifications() {
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+
+    let achievements = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/achievements", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(achievements.status(), StatusCode::OK);
+    let ach_json = body_json(achievements).await;
+    assert!(ach_json
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["slug"] == "first_ad" && !a["unlocked_at"].is_null()));
+
+    let notes = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/notifications", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(notes.status(), StatusCode::OK);
+    let notes_json = body_json(notes).await;
+    assert!(notes_json["unread_count"].as_i64().unwrap() >= 1);
+
+    let mark_all = app
+        .oneshot(authed(
+            "PATCH",
+            "/users/me/notifications/read-all",
+            &token,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(mark_all.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn admin_insights_endpoint() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (_user_id, token) = register(&app).await;
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/watch/complete",
+            &token,
+            Some(r#"{"watch_duration_secs": 60}"#),
+        ))
+        .await
+        .unwrap();
+
+    let response = app
+        .oneshot(admin_req("GET", "/admin/insights", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert!(json["revenue_7d"].is_string());
+    assert!(json["avg_reward_usdt"].is_string());
+    assert!(json["active_users_7d"].as_i64().unwrap() >= 1);
+}

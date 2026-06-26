@@ -197,6 +197,13 @@
       max-width: 960px;
     }
     .view { animation: view-in 0.2s ease; }
+    .main-area,
+    .main-content,
+    .view-container,
+    .view {
+      overflow-x: hidden;
+      max-width: 100%;
+    }
     @keyframes view-in {
       from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
@@ -322,8 +329,10 @@
     @media (max-width: 900px) {
       .kpi-strip { grid-template-columns: repeat(2, 1fr); }
     }
-    .hero-balance-lg .balance {
-      font-size: clamp(2rem, 6vw, 3.5rem);
+    @media (min-width: 768px) {
+      .hero-balance-lg .balance {
+        font-size: clamp(2rem, 6vw, 3.5rem);
+      }
     }
     @media (min-width: 1024px) {
       .hero-balance-lg .balance { font-size: clamp(2.5rem, 4vw, 3.5rem); }
@@ -500,6 +509,16 @@
         padding: 1rem 0.85rem;
         overflow: hidden;
         min-width: 0;
+        text-align: center;
+      }
+      .hero-wallet .hero-top {
+        justify-content: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+      .hero-wallet .local,
+      .hero-wallet .last-updated {
+        text-align: center;
       }
       .kpi-strip { gap: 0.5rem; }
       .kpi-strip > * { min-width: 0; }
@@ -512,25 +531,34 @@
       #balance,
       #wallet-balance {
         display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: 0.05rem 0.2rem;
-        font-size: clamp(1rem, 4vw, 1.75rem);
-        line-height: 1.1;
-        letter-spacing: -0.05em;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.15rem;
+        font-size: clamp(1rem, 4.5vw, 1.35rem);
+        line-height: 1.15;
+        letter-spacing: -0.02em;
         max-width: 100%;
+        width: 100%;
         overflow: hidden;
         min-width: 0;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+        word-break: break-all;
       }
-      .hero-balance-lg .balance {
-        font-size: clamp(1.1rem, 4.2vw, 1.85rem);
-        letter-spacing: -0.055em;
+      .hero-balance-lg .balance,
+      .hero-balance-lg #balance {
+        font-size: clamp(1.05rem, 4.8vw, 1.35rem);
       }
       .balance .currency-suffix {
-        font-size: 0.65rem;
-        margin-left: 0.15rem;
-        letter-spacing: -0.02em;
+        display: block;
+        font-size: 0.7rem;
+        margin-left: 0;
+        letter-spacing: 0.04em;
         flex-shrink: 0;
+        line-height: 1.2;
+        opacity: 0.9;
       }
       .local,
       #local-balance,
@@ -629,22 +657,16 @@
       .kpi-strip { gap: 0.4rem; }
       .balance,
       #balance,
-      #wallet-balance {
-        font-size: clamp(0.9rem, 3.6vw, 1.45rem);
-        letter-spacing: -0.06em;
-      }
-      .hero-balance-lg .balance {
-        font-size: clamp(0.95rem, 3.8vw, 1.55rem);
-        transform: scale(0.94);
-        transform-origin: left center;
-        max-width: calc(100% / 0.94);
+      #wallet-balance,
+      .hero-balance-lg .balance,
+      .hero-balance-lg #balance {
+        font-size: 1.25rem;
+        letter-spacing: -0.02em;
+        max-width: 100%;
       }
       .balance .currency-suffix {
-        flex-basis: 100%;
-        margin-left: 0;
-        font-size: 0.58rem;
-        line-height: 1;
-        opacity: 0.85;
+        font-size: 0.65rem;
+        line-height: 1.15;
       }
       .stat-value {
         font-size: clamp(0.68rem, 2.8vw + 0.1rem, 0.82rem);
@@ -1818,9 +1840,11 @@
                 function veFmtBal(v) {
                   var n = parseFloat(v);
                   if (!isFinite(n) || n === 0) return '0';
-                  var mob = window.matchMedia('(max-width: 767px)').matches;
-                  if (n < 0.01) return n.toFixed(mob ? 4 : 6).replace(/\.?0+$/, '');
-                  return n.toFixed(mob ? 2 : 4).replace(/\.?0+$/, '');
+                  if (window.matchMedia('(max-width: 767px)').matches) {
+                    return n.toFixed(2).replace(/\.?0+$/, '') || '0';
+                  }
+                  if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
+                  return n.toFixed(4).replace(/\.?0+$/, '');
                 }
                 var balHtml = veFmtBal(bal) + '<span class="currency-suffix">USDT</span>';
                 var b = document.getElementById('balance');
@@ -2440,9 +2464,11 @@
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
-      const mobile = isMobileDisplay();
-      if (n < 0.01) return n.toFixed(mobile ? 4 : 6).replace(/\.?0+$/, '');
-      return n.toFixed(mobile ? 2 : 4).replace(/\.?0+$/, '');
+      if (isMobileDisplay()) {
+        return n.toFixed(2).replace(/\.?0+$/, '') || '0';
+      }
+      if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '');
+      return n.toFixed(4).replace(/\.?0+$/, '');
     }
 
     function balanceHtml(value) {

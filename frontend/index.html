@@ -1826,7 +1826,11 @@
       <input type="checkbox" id="accept-terms" name="accept-terms" required />
       <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
     </label>
-    <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkbox oben aktivieren.</p>
+    <label class="terms-accept" for="accept-age">
+      <input type="checkbox" id="accept-age" name="accept-age" required />
+      <span>Ich bin mindestens 18 Jahre alt.</span>
+    </label>
+    <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkboxen oben aktivieren.</p>
     <button class="primary btn-pending-terms" type="button" id="register-btn">Kostenlos starten</button>
   </div>
 
@@ -4303,7 +4307,8 @@
       if (now - (window._registerTapAt || 0) < 450) return;
       window._registerTapAt = now;
       const terms = document.getElementById('accept-terms');
-      showBetaDebugToast('Tap · AGB ' + (terms?.checked ? '✓' : '✗'));
+      const age = document.getElementById('accept-age');
+      showBetaDebugToast('Tap · AGB ' + (terms?.checked ? '✓' : '✗') + ' · 18+ ' + (age?.checked ? '✓' : '✗'));
       void doRegisterAccount();
     }
 
@@ -4330,6 +4335,7 @@
       setButtonLoading(btn, true);
       try {
         const terms = document.getElementById('accept-terms');
+        const age = document.getElementById('accept-age');
         const referralInput = document.getElementById('referral');
         const referralErr = document.getElementById('referral-error');
         if (referralErr) referralErr.textContent = '';
@@ -4345,6 +4351,17 @@
           focusTermsAcceptance();
           return;
         }
+        if (!age?.checked) {
+          showError('Bitte bestätigen, dass du mindestens 18 Jahre alt bist.');
+          const hint = document.getElementById('register-terms-hint');
+          hint?.classList.remove('hidden');
+          hint?.classList.remove('terms-hint-flash');
+          void hint?.offsetWidth;
+          hint?.classList.add('terms-hint-flash');
+          window.setTimeout(() => hint?.classList.remove('terms-hint-flash'), 2400);
+          age?.focus({ preventScroll: true });
+          return;
+        }
         const referral_code = referralInput?.value.trim() || undefined;
         if (referral_code && !/^[A-Za-z0-9_-]{4,32}$/.test(referral_code)) {
           if (referralErr) referralErr.textContent = 'Ungültiger Code — nur Buchstaben, Zahlen, Binde- und Unterstrich (4–32 Zeichen).';
@@ -4355,6 +4372,7 @@
         const body = {
           locale: 'de_DE',
           accept_terms: true,
+          accept_age_minimum: true,
           ...(referral_code ? { referral_code } : {}),
         };
         const data = await api('/auth/register', { method: 'POST', body: JSON.stringify(body) });
@@ -4392,16 +4410,17 @@
 
     function syncRegisterButtonState() {
       const terms = document.getElementById('accept-terms');
+      const age = document.getElementById('accept-age');
       const btn = document.getElementById('register-btn');
       const hint = document.getElementById('register-terms-hint');
-      const checked = !!terms?.checked;
+      const checked = !!terms?.checked && !!age?.checked;
       if (btn && !registerInFlight) {
         btn.disabled = false;
         btn.removeAttribute('aria-disabled');
         btn.classList.toggle('btn-pending-terms', !checked);
       }
       hint?.classList.toggle('hidden', checked);
-      if (checked) document.querySelector('.terms-accept')?.classList.remove('terms-highlight');
+      if (checked) document.querySelectorAll('.terms-accept').forEach((el) => el.classList.remove('terms-highlight'));
     }
 
     function payoutMethodInfoMap(statsData) {
@@ -4925,6 +4944,8 @@
 
     document.getElementById('accept-terms')?.addEventListener('change', () => syncRegisterButtonState());
     document.getElementById('accept-terms')?.addEventListener('input', () => syncRegisterButtonState());
+    document.getElementById('accept-age')?.addEventListener('change', () => syncRegisterButtonState());
+    document.getElementById('accept-age')?.addEventListener('input', () => syncRegisterButtonState());
     initRegisterBtn();
     syncRegisterButtonState();
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true }));

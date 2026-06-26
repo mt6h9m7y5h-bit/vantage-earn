@@ -131,6 +131,8 @@ struct RegisterRequest {
     referral_code: Option<String>,
     #[serde(default)]
     accept_terms: Option<bool>,
+    #[serde(default)]
+    accept_age_minimum: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -151,6 +153,12 @@ async fn register(
     if body.accept_terms != Some(true) {
         return Err(shared::AppError::InvalidInput(
             "accept_terms must be true".into(),
+        )
+        .into());
+    }
+    if body.accept_age_minimum != Some(true) {
+        return Err(shared::AppError::InvalidInput(
+            "accept_age_minimum must be true".into(),
         )
         .into());
     }

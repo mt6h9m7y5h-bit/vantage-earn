@@ -28,7 +28,7 @@ ok "icons"
 
 AUTH=$(curl -sf -m 5 -X POST "$BASE/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"locale":"de_DE","accept_terms":true}') || fail "register"
+  -d '{"locale":"de_DE","accept_terms":true,"accept_age_minimum":true}') || fail "register"
 TOKEN=$(echo "$AUTH" | jq -r .token)
 [ "$TOKEN" != "null" ] && [ -n "$TOKEN" ] || fail "token missing"
 ok "register"

@@ -40,7 +40,7 @@ async fn register(app: &Router) -> (Uuid, String) {
                 .method("POST")
                 .uri("/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"accept_terms":true}"#))
+                .body(Body::from(r#"{"accept_terms":true,"accept_age_minimum":true}"#))
                 .unwrap(),
         )
         .await
@@ -300,36 +300,35 @@ async fn public_config_returns_mock_by_default() {
 
 #[tokio::test]
 async fn register_requires_accept_terms() {
-    let app = app(AppState::new());
+    async fn register_status(body: &str) -> StatusCode {
+        let app = app(AppState::new());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/register")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        response.status()
+    }
 
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/auth/register")
-                .header("content-type", "application/json")
-                .body(Body::from("{}"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/auth/register")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"accept_terms":false}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(register_status("{}").await, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        register_status(r#"{"accept_terms":false}"#).await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        register_status(r#"{"accept_terms":true,"accept_age_minimum":false}"#).await,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        register_status(r#"{"accept_terms":true}"#).await,
+        StatusCode::BAD_REQUEST
+    );
 }
 
 #[tokio::test]

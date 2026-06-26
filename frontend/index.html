@@ -92,7 +92,7 @@
       --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html { touch-action: manipulation; scroll-behavior: smooth; }
+    html { touch-action: manipulation; scroll-behavior: smooth; overflow-x: hidden; max-width: 100%; }
     body {
       margin: 0;
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -104,6 +104,8 @@
       -webkit-font-smoothing: antialiased;
       padding: 0;
       padding-bottom: env(safe-area-inset-bottom);
+      overflow-x: hidden;
+      max-width: 100vw;
     }
     .auth-screen {
       min-height: 100vh;
@@ -119,6 +121,8 @@
       display: flex;
       min-height: 100vh;
       width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
     }
     .sidebar {
       position: fixed;
@@ -504,13 +508,17 @@
         padding: var(--space-md) var(--space-lg);
         overflow: hidden;
         min-width: 0;
+        max-width: 100%;
       }
       .hero-wallet {
-        padding: 1rem 0.85rem;
+        padding: 0.85rem 0.75rem;
         overflow: hidden;
         min-width: 0;
+        max-width: 100%;
         text-align: center;
+        container-type: inline-size;
       }
+      .hero-wallet .usdt-pill { display: none; }
       .hero-wallet .hero-top {
         justify-content: center;
         gap: 0.5rem;
@@ -520,24 +528,30 @@
       .hero-wallet .last-updated {
         text-align: center;
       }
-      .kpi-strip { gap: 0.5rem; }
+      .kpi-strip {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+      }
       .kpi-strip > * { min-width: 0; }
       .stat-tile {
-        padding: 0.7rem 0.6rem;
+        padding: 0.65rem 0.5rem;
         overflow: hidden;
         min-width: 0;
+        max-width: 100%;
       }
       .balance,
       #balance,
-      #wallet-balance {
+      #wallet-balance,
+      .hero-balance-lg .balance,
+      .hero-balance-lg #balance {
         display: flex;
         flex-direction: column;
         flex-wrap: nowrap;
         align-items: center;
         justify-content: center;
-        gap: 0.15rem;
-        font-size: clamp(1rem, 4.5vw, 1.35rem);
-        line-height: 1.15;
+        gap: 0.1rem;
+        font-size: min(1.1rem, 4.5vw);
+        line-height: 1.1;
         letter-spacing: -0.02em;
         max-width: 100%;
         width: 100%;
@@ -546,42 +560,48 @@
         font-variant-numeric: tabular-nums;
         text-align: center;
         word-break: break-all;
-      }
-      .hero-balance-lg .balance,
-      .hero-balance-lg #balance {
-        font-size: clamp(1.05rem, 4.8vw, 1.35rem);
+        overflow-wrap: anywhere;
       }
       .balance .currency-suffix {
         display: block;
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         margin-left: 0;
         letter-spacing: 0.04em;
         flex-shrink: 0;
-        line-height: 1.2;
+        line-height: 1.1;
         opacity: 0.9;
       }
       .local,
       #local-balance,
       #wallet-local {
-        font-size: 0.78rem;
+        font-size: 0.75rem;
+        line-height: 1.2;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         max-width: 100%;
       }
       .stat-value {
-        font-size: clamp(0.72rem, 3vw + 0.15rem, 0.88rem);
+        display: block;
+        font-size: 0.75rem;
+        max-width: 100%;
         line-height: 1.15;
         letter-spacing: -0.02em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .stat-label {
-        font-size: 0.6rem;
+        font-size: 0.58rem;
         letter-spacing: 0.04em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .security-metric { gap: 0.65rem; }
       .security-metric > div:first-child { min-width: 0; flex: 1; }
       .security-metric-value {
-        font-size: clamp(0.9rem, 3.8vw + 0.2rem, 1.1rem);
+        font-size: 0.85rem;
         flex-shrink: 0;
         max-width: 42%;
         overflow: hidden;
@@ -597,7 +617,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
       }
       .ledger-item > .ledger-meta:last-child {
         flex-shrink: 0;
@@ -607,15 +627,34 @@
         white-space: nowrap;
         text-align: right;
       }
-      .row { gap: 0.5rem; min-width: 0; }
+      .row { gap: 0.5rem; min-width: 0; flex-wrap: wrap; }
       .row span { min-width: 0; }
       .row span:last-child {
-        flex-shrink: 0;
-        max-width: 52%;
+        flex-shrink: 1;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         text-align: right;
+        word-break: break-all;
+      }
+      #payout-section .row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.2rem;
+      }
+      #payout-section .row span:last-child {
+        max-width: 100%;
+        text-align: left;
+        white-space: normal;
+        word-break: break-all;
+        overflow-wrap: anywhere;
+      }
+      #min-payout,
+      #payout-threshold-hint {
+        word-break: break-all;
+        overflow-wrap: anywhere;
+        max-width: 100%;
       }
       .progress-label { gap: 0.35rem; min-width: 0; }
       .progress-label span,
@@ -627,7 +666,7 @@
       }
       .progress-label strong { flex-shrink: 0; max-width: 55%; text-align: right; }
       .streak-bonus-highlight {
-        font-size: clamp(1rem, 4.5vw + 0.25rem, 1.2rem);
+        font-size: 1rem;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -638,8 +677,17 @@
         white-space: nowrap;
         max-width: 55%;
         text-align: right;
+        font-size: 0.75rem;
       }
       .bonus-meta { gap: 0.5rem; min-width: 0; }
+      .leaderboard-earn {
+        font-size: 0.75rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 45%;
+        flex-shrink: 0;
+      }
       .cta-pill { font-size: 0.7rem; padding: 0.3rem 0.5rem; }
       .referral-code-box code {
         font-size: clamp(0.85rem, 3.5vw + 0.2rem, 1rem);
@@ -650,31 +698,38 @@
       }
     }
     @media (max-width: 390px) {
-      .view-container { padding: 0 0.75rem 1rem; }
-      .card { padding: 0.65rem 0.75rem; }
-      .hero-wallet { padding: 0.85rem 0.7rem; }
-      .stat-tile { padding: 0.55rem 0.5rem; }
-      .kpi-strip { gap: 0.4rem; }
+      .view-container { padding: 0 0.65rem 1rem; }
+      .card { padding: 0.6rem 0.65rem; }
+      .hero-wallet { padding: 0.7rem 0.6rem; }
+      .stat-tile { padding: 0.5rem 0.4rem; }
+      .kpi-strip {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.35rem;
+      }
       .balance,
       #balance,
       #wallet-balance,
       .hero-balance-lg .balance,
       .hero-balance-lg #balance {
-        font-size: 1.25rem;
+        font-size: 1.05rem;
+        line-height: 1.1;
         letter-spacing: -0.02em;
         max-width: 100%;
       }
       .balance .currency-suffix {
-        font-size: 0.65rem;
-        line-height: 1.15;
+        font-size: 0.6rem;
+        line-height: 1.1;
       }
       .stat-value {
-        font-size: clamp(0.68rem, 2.8vw + 0.1rem, 0.82rem);
+        font-size: 0.7rem;
         letter-spacing: -0.03em;
       }
-      .stat-label { font-size: 0.55rem; }
+      .stat-label { font-size: 0.52rem; }
+      .local,
+      #local-balance,
+      #wallet-local { font-size: 0.7rem; }
       .security-metric-value {
-        font-size: clamp(0.82rem, 3.2vw + 0.15rem, 0.95rem);
+        font-size: 0.8rem;
         max-width: 40%;
       }
     }
@@ -806,6 +861,9 @@
       margin-bottom: var(--space-md);
       box-shadow: var(--shadow-sm);
       transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+      box-sizing: border-box;
+      max-width: 100%;
+      min-width: 0;
     }
     .card:hover {
       border-color: var(--border-strong);
@@ -4237,7 +4295,7 @@
           if (Notification.permission === 'granted') scheduleStreakReminder();
           setText('referrals', String(stats.referral_count));
           setText('min-payout',
-            stats.min_payout_usdt + ' USDT (≈ ' + stats.min_payout_eur + ' €)');
+            formatUsdt(stats.min_payout_usdt) + ' (≈ ' + stats.min_payout_eur + ' €)');
           updateRewardHint(stats);
           renderBonuses(stats);
 
@@ -4292,7 +4350,7 @@
           if (payoutBtn) payoutBtn.disabled = !canPayout;
           setText('payout-threshold-hint', canPayout
             ? 'Mindestbetrag erreicht — Auszahlung möglich.'
-            : 'Noch ' + stats.min_payout_usdt + ' USDT nötig (≈ ' + stats.min_payout_eur + ' €).');
+            : 'Noch ' + formatUsdt(stats.min_payout_usdt) + ' nötig (≈ ' + stats.min_payout_eur + ' €).');
         }
 
         if (ref) window._refCode = ref.referral_code;

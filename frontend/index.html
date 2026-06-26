@@ -491,38 +491,64 @@
       .fab-watch { display: block; }
       .view-container { padding: 0 1rem 1rem; }
       .app-header { margin: 0 -1rem 0.75rem; }
-      .card { padding: var(--space-md) var(--space-lg); }
-      .hero-wallet { padding: 1.1rem 0.95rem; }
+      .card {
+        padding: var(--space-md) var(--space-lg);
+        overflow: hidden;
+        min-width: 0;
+      }
+      .hero-wallet {
+        padding: 1rem 0.85rem;
+        overflow: hidden;
+        min-width: 0;
+      }
       .kpi-strip { gap: 0.5rem; }
       .kpi-strip > * { min-width: 0; }
-      .stat-tile { padding: 0.7rem 0.65rem; }
+      .stat-tile {
+        padding: 0.7rem 0.6rem;
+        overflow: hidden;
+        min-width: 0;
+      }
       .balance,
       #balance,
       #wallet-balance {
-        font-size: clamp(1.2rem, 4.8vw + 0.35rem, 1.85rem);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.05rem 0.2rem;
+        font-size: clamp(1rem, 4vw, 1.75rem);
+        line-height: 1.1;
+        letter-spacing: -0.05em;
         max-width: 100%;
         overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        word-break: break-all;
+        min-width: 0;
       }
       .hero-balance-lg .balance {
-        font-size: clamp(1.35rem, 5vw + 0.4rem, 2rem);
+        font-size: clamp(1.1rem, 4.2vw, 1.85rem);
+        letter-spacing: -0.055em;
       }
       .balance .currency-suffix {
-        font-size: 0.7rem;
-        margin-left: 0.25rem;
+        font-size: 0.65rem;
+        margin-left: 0.15rem;
+        letter-spacing: -0.02em;
+        flex-shrink: 0;
       }
       .local,
       #local-balance,
       #wallet-local {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        max-width: 100%;
       }
       .stat-value {
-        font-size: clamp(0.78rem, 3.2vw + 0.2rem, 0.92rem);
+        font-size: clamp(0.72rem, 3vw + 0.15rem, 0.88rem);
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+      }
+      .stat-label {
+        font-size: 0.6rem;
+        letter-spacing: 0.04em;
       }
       .security-metric { gap: 0.65rem; }
       .security-metric > div:first-child { min-width: 0; flex: 1; }
@@ -593,6 +619,41 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         min-width: 0;
+      }
+    }
+    @media (max-width: 390px) {
+      .view-container { padding: 0 0.75rem 1rem; }
+      .card { padding: 0.65rem 0.75rem; }
+      .hero-wallet { padding: 0.85rem 0.7rem; }
+      .stat-tile { padding: 0.55rem 0.5rem; }
+      .kpi-strip { gap: 0.4rem; }
+      .balance,
+      #balance,
+      #wallet-balance {
+        font-size: clamp(0.9rem, 3.6vw, 1.45rem);
+        letter-spacing: -0.06em;
+      }
+      .hero-balance-lg .balance {
+        font-size: clamp(0.95rem, 3.8vw, 1.55rem);
+        transform: scale(0.94);
+        transform-origin: left center;
+        max-width: calc(100% / 0.94);
+      }
+      .balance .currency-suffix {
+        flex-basis: 100%;
+        margin-left: 0;
+        font-size: 0.58rem;
+        line-height: 1;
+        opacity: 0.85;
+      }
+      .stat-value {
+        font-size: clamp(0.68rem, 2.8vw + 0.1rem, 0.82rem);
+        letter-spacing: -0.03em;
+      }
+      .stat-label { font-size: 0.55rem; }
+      .security-metric-value {
+        font-size: clamp(0.82rem, 3.2vw + 0.15rem, 0.95rem);
+        max-width: 40%;
       }
     }
     .wrap { display: contents; }
@@ -1754,12 +1815,20 @@
                 if (s == null || s.balance_usdt == null) return;
                 var bal = String(s.balance_usdt);
                 var loc = '≈ ' + (s.localized_balance || '0') + ' ' + (s.currency || 'EUR');
+                function veFmtBal(v) {
+                  var n = parseFloat(v);
+                  if (!isFinite(n) || n === 0) return '0';
+                  var mob = window.matchMedia('(max-width: 767px)').matches;
+                  if (n < 0.01) return n.toFixed(mob ? 4 : 6).replace(/\.?0+$/, '');
+                  return n.toFixed(mob ? 2 : 4).replace(/\.?0+$/, '');
+                }
+                var balHtml = veFmtBal(bal) + '<span class="currency-suffix">USDT</span>';
                 var b = document.getElementById('balance');
-                if (b) b.innerHTML = bal + '<span class="currency-suffix">USDT</span>';
+                if (b) b.innerHTML = balHtml;
                 var lb = document.getElementById('local-balance');
                 if (lb) lb.textContent = loc;
                 var wb = document.getElementById('wallet-balance');
-                if (wb) wb.innerHTML = bal + '<span class="currency-suffix">USDT</span>';
+                if (wb) wb.innerHTML = balHtml;
                 var wl = document.getElementById('wallet-local');
                 if (wl) wl.textContent = loc;
                 if (s.trust_score != null) {
@@ -2363,12 +2432,25 @@
       if (v === 'notifications' && token) loadNotifications();
     }
 
-    function formatUsdt(value) {
+    function isMobileDisplay() {
+      return window.matchMedia('(max-width: 767px)').matches;
+    }
+
+    function formatBalanceAmount(value) {
       const n = parseFloat(value);
-      if (!Number.isFinite(n)) return '0 USDT';
-      if (n === 0) return '0 USDT';
-      if (n < 0.01) return n.toFixed(6).replace(/\.?0+$/, '') + ' USDT';
-      return n.toFixed(4).replace(/\.?0+$/, '') + ' USDT';
+      if (!Number.isFinite(n)) return '0';
+      if (n === 0) return '0';
+      const mobile = isMobileDisplay();
+      if (n < 0.01) return n.toFixed(mobile ? 4 : 6).replace(/\.?0+$/, '');
+      return n.toFixed(mobile ? 2 : 4).replace(/\.?0+$/, '');
+    }
+
+    function balanceHtml(value) {
+      return formatBalanceAmount(value) + '<span class="currency-suffix">USDT</span>';
+    }
+
+    function formatUsdt(value) {
+      return formatBalanceAmount(value) + ' USDT';
     }
 
     function analyticsDailySeries(summary) {
@@ -2580,7 +2662,7 @@
       const target = parseUsdt(targetStr);
       const current = parseUsdt(balEl.textContent);
       if (Math.abs(target - current) < 0.0000001) {
-        balEl.innerHTML = targetStr + '<span class="currency-suffix">USDT</span>';
+        balEl.innerHTML = balanceHtml(targetStr);
         return;
       }
       const start = performance.now();
@@ -2589,10 +2671,9 @@
         const t = Math.min(1, (now - start) / duration);
         const eased = 1 - Math.pow(1 - t, 3);
         const val = current + (target - current) * eased;
-        const shown = val < 0.01 ? val.toFixed(6).replace(/\.?0+$/, '') : val.toFixed(4).replace(/\.?0+$/, '');
-        balEl.innerHTML = (shown || '0') + '<span class="currency-suffix">USDT</span>';
+        balEl.innerHTML = balanceHtml(val);
         if (t < 1) requestAnimationFrame(frame);
-        else balEl.innerHTML = targetStr + '<span class="currency-suffix">USDT</span>';
+        else balEl.innerHTML = balanceHtml(targetStr);
       }
       requestAnimationFrame(frame);
     }
@@ -2677,7 +2758,7 @@
 
     function setBalanceDisplay(targetStr) {
       const balEl = document.getElementById('balance');
-      if (balEl) balEl.innerHTML = targetStr + '<span class="currency-suffix">USDT</span>';
+      if (balEl) balEl.innerHTML = balanceHtml(targetStr);
     }
 
     function primeWalletFromStorage() {
@@ -2711,7 +2792,7 @@
       setText('local-balance', localStr);
       const walletBal = document.getElementById('wallet-balance');
       if (walletBal) {
-        walletBal.innerHTML = String(w.balance_usdt) + '<span class="currency-suffix">USDT</span>';
+        walletBal.innerHTML = balanceHtml(w.balance_usdt);
       }
       setText('wallet-local', localStr);
       setText('trust', String(w.trust_score));

@@ -14,6 +14,10 @@ use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::feature_flags::{FeatureFlagsPatch, FeatureFlagsView};
+use crate::fraud_admin::{fraud_summary, high_risk_users, FraudSummaryResponse, HighRiskUserRow};
+use crate::health::admin_health;
+use crate::middleware::client_ip;
+use crate::release_info;
 use crate::state::AppState;
 use crate::store::{
     compute_risk, csv_escape, AdminAuditEntry, AdminDailyMetric, AdminExportUserRow,
@@ -24,6 +28,7 @@ use crate::store::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/admin/stats", get(admin_stats))
+        .route("/admin/health", get(admin_health))
         .route("/admin/live", get(admin_live))
         .route("/admin/search", get(admin_search))
         .route("/admin/analytics/summary", get(admin_analytics_summary))
@@ -47,6 +52,13 @@ pub fn router() -> Router<AppState> {
         .route("/admin/export/users", get(admin_export_users))
         .route("/admin/export/audit", get(admin_export_audit))
         .route("/admin/export/payouts", get(admin_export_payouts))
+        .route("/admin/fraud/summary", get(admin_fraud_summary))
+        .route("/admin/fraud/high-risk-users", get(admin_fraud_high_risk))
+        .route("/admin/release-info", get(admin_release_info))
+}
+
+pub fn verify_admin_headers(headers: &HeaderMap) -> Result<(), ApiError> {
+    verify_admin(headers)
 }
 
 fn verify_admin(headers: &HeaderMap) -> Result<(), ApiError> {
@@ -57,19 +69,7 @@ fn verify_admin(headers: &HeaderMap) -> Result<(), ApiError> {
 }
 
 fn admin_ip(headers: &HeaderMap) -> Option<String> {
-    headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .or_else(|| {
-            headers
-                .get("x-real-ip")
-                .and_then(|v| v.to_str().ok())
-                .map(str::to_string)
-        })
+    client_ip(headers, None)
 }
 
 #[derive(Serialize)]
@@ -94,6 +94,47 @@ pub struct AdminStatsExtended {
     pub rewards_yesterday_usdt: Decimal,
     pub registrations_yesterday: i64,
     pub pending_sparkline: Vec<i64>,
+}
+
+async fn admin_fraud_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<FraudSummaryResponse>, ApiError> {
+    verify_admin(&headers)?;
+    Ok(Json(fraud_summary(&state).await))
+}
+
+#[derive(Deserialize)]
+struct FraudLimitQuery {
+    #[serde(default = "default_fraud_limit")]
+    limit: u32,
+}
+
+fn default_fraud_limit() -> u32 {
+    50
+}
+
+#[derive(Serialize)]
+struct HighRiskUsersResponse {
+    users: Vec<HighRiskUserRow>,
+}
+
+async fn admin_fraud_high_risk(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<FraudLimitQuery>,
+) -> Result<Json<HighRiskUsersResponse>, ApiError> {
+    verify_admin(&headers)?;
+    let users = high_risk_users(&state, query.limit.clamp(1, 200)).await;
+    Ok(Json(HighRiskUsersResponse { users }))
+}
+
+async fn admin_release_info(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<release_info::ReleaseInfo>, ApiError> {
+    verify_admin(&headers)?;
+    Ok(Json(release_info::release_info(state.started_at)))
 }
 
 async fn admin_stats(
@@ -267,8 +308,8 @@ async fn admin_approve_payout(
         .ok_or_else(|| shared::AppError::InvalidInput("payout not found".into()))?;
     let payout = state.admin_approve_payout(id).await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "payout_approve",
             Some(payout.user_id),
             serde_json::json!({
@@ -307,8 +348,8 @@ async fn admin_reject_payout(
         .ok_or_else(|| shared::AppError::InvalidInput("payout not found".into()))?;
     let payout = state.admin_reject_payout(id).await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "payout_reject",
             Some(payout.user_id),
             serde_json::json!({
@@ -461,8 +502,8 @@ async fn admin_credit(
     let balance_before = state.balance(user_id).await?;
     let balance = state.credit(user_id, body.amount_usdt).await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "credit",
             Some(user_id),
             serde_json::json!({
@@ -496,8 +537,8 @@ async fn admin_debit(
     let balance_before = state.balance(user_id).await?;
     let balance = state.debit(user_id, body.amount_usdt).await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "debit",
             Some(user_id),
             serde_json::json!({
@@ -541,8 +582,8 @@ async fn admin_trust_score(
     let previous = state.trust_score(user_id).await;
     state.set_trust_score(user_id, score).await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "trust_score",
             Some(user_id),
             serde_json::json!({
@@ -586,8 +627,8 @@ async fn admin_ban(
     state.save_profile(user_id, &profile).await?;
     let action = if body.banned { "ban" } else { "unban" };
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             action,
             Some(user_id),
             serde_json::json!({
@@ -646,12 +687,11 @@ async fn admin_patch_feature_flags(
     let before = state.feature_flags_view().await?;
     let after = state.patch_feature_flags(patch).await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "feature_flags_update",
             None,
             serde_json::json!({
-                "admin_ip": admin_ip(&headers),
                 "before": before,
                 "after": after,
             }),
@@ -715,8 +755,8 @@ async fn admin_bulk_credit(
         .bulk_credit_users(body.filter, body.amount_usdt)
         .await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "bulk_credit",
             None,
             serde_json::json!({
@@ -783,8 +823,8 @@ async fn admin_add_user_note(
         .admin_add_user_note(user_id, note, &created_by)
         .await?;
     state
-        .admin_log_action(
-            admin_ip(&headers),
+        .admin_log_enriched(
+            &headers,
             "user_note",
             Some(user_id),
             serde_json::json!({ "note_id": entry.id }),

@@ -1,10 +1,11 @@
-const CACHE = 'vantage-earn-v13';
+const CACHE = 'vantage-earn-v14';
 const SHELL = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((cache) => cache.addAll(SHELL))
   );
+  // Let the page decide when to skipWaiting + reload (update banner).
 });
 
 self.addEventListener('activate', (event) => {
@@ -15,12 +16,30 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data?.type === 'SHOW_STREAK_REMINDER') {
+    const title = event.data.title || 'VANTAGE-EARN';
+    const body = event.data.body || 'Dein Streak läuft heute ab!';
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: 'streak-reminder',
+        renotify: true,
+      })
+    );
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/users/') || url.pathname.startsWith('/auth/')) return;
 
-  // HTML/PWA shell: always prefer network so UI updates are not stuck behind cache.
   const isShell =
     url.pathname === '/demo' ||
     url.pathname === '/' ||
@@ -52,26 +71,15 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE).then((cache) => cache.put(event.request, copy));
         }
         return res;
+      }).catch(() => {
+        if (isShell) return caches.match(event.request);
+        return new Response('Offline — bitte Internetverbindung prüfen.', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        });
       });
     })
   );
-});
-
-// Local notification stub — no VAPID/Web Push; page schedules reminders while open.
-self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SHOW_STREAK_REMINDER') {
-    const title = event.data.title || 'VANTAGE-EARN';
-    const body = event.data.body || 'Dein Streak läuft heute ab!';
-    event.waitUntil(
-      self.registration.showNotification(title, {
-        body,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        tag: 'streak-reminder',
-        renotify: true,
-      })
-    );
-  }
 });
 
 self.addEventListener('notificationclick', (event) => {

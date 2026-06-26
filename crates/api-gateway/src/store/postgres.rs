@@ -13,8 +13,8 @@ use crate::store::week_start_utc;
 use crate::store::{
     AdminAuditEntry, AdminDailyMetric, AdminExportUserRow, AdminLiveSnapshot, AdminSearchAuditHit,
     AdminSearchPayoutHit, AdminSearchReferralHit, AdminSearchResponse, AdminSearchUserHit,
-    AdminTimelineEvent, AdminUserListRow, AdminUserNote, BulkUserFilter, LedgerItem,
-    PayoutListFilter, PayoutRequestRow,
+    AdminTimelineEvent, AdminUserListRow, AdminUserNote, AnnouncementCreate, AnnouncementPatch,
+    AnnouncementRow, BulkUserFilter, LedgerItem, PayoutListFilter, PayoutRequestRow,
 };
 
 #[derive(Clone)]
@@ -45,6 +45,40 @@ impl PgStore {
             .await
             .map(|_| true)
             .map_err(db_err)
+    }
+
+    pub async fn ping_ms(&self) -> AppResult<Option<u64>> {
+        let start = std::time::Instant::now();
+        let ok = self.ping().await?;
+        Ok(if ok {
+            Some(start.elapsed().as_millis() as u64)
+        } else {
+            None
+        })
+    }
+
+    pub async fn open_connections(&self) -> AppResult<Option<i64>> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*)::bigint FROM pg_stat_activity WHERE datname = current_database()",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(Some(row.0))
+    }
+
+    pub async fn user_pending_payout_count(&self, user_id: Uuid) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)::bigint FROM payout_requests
+            WHERE user_id = $1 AND status IN ('pending_validation', 'pending_fraud_review')
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
     }
 
     pub async fn ensure_user(&self, user_id: Uuid) -> AppResult<()> {
@@ -1574,6 +1608,115 @@ impl PgStore {
         GamificationPgStore::new(self.pool.clone())
     }
 
+    pub async fn list_active_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        let rows = sqlx::query_as::<_, AnnouncementDbRow>(
+            r#"
+            SELECT id, type, title, body, priority, starts_at, ends_at, active, created_at, updated_at
+            FROM announcements
+            WHERE active = TRUE
+              AND (starts_at IS NULL OR starts_at <= NOW())
+              AND (ends_at IS NULL OR ends_at >= NOW())
+            ORDER BY priority DESC, created_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().map(AnnouncementDbRow::into_row).collect())
+    }
+
+    pub async fn list_all_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        let rows = sqlx::query_as::<_, AnnouncementDbRow>(
+            r#"
+            SELECT id, type, title, body, priority, starts_at, ends_at, active, created_at, updated_at
+            FROM announcements
+            ORDER BY created_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(rows.into_iter().map(AnnouncementDbRow::into_row).collect())
+    }
+
+    pub async fn get_announcement(&self, id: Uuid) -> AppResult<Option<AnnouncementRow>> {
+        let row = sqlx::query_as::<_, AnnouncementDbRow>(
+            r#"
+            SELECT id, type, title, body, priority, starts_at, ends_at, active, created_at, updated_at
+            FROM announcements WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.map(AnnouncementDbRow::into_row))
+    }
+
+    pub async fn create_announcement(&self, body: AnnouncementCreate) -> AppResult<AnnouncementRow> {
+        let id = Uuid::new_v4();
+        let row = sqlx::query_as::<_, AnnouncementDbRow>(
+            r#"
+            INSERT INTO announcements (id, type, title, body, priority, starts_at, ends_at, active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, type, title, body, priority, starts_at, ends_at, active, created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(&body.announcement_type)
+        .bind(body.title.trim())
+        .bind(body.body.trim())
+        .bind(body.priority)
+        .bind(body.starts_at)
+        .bind(body.ends_at)
+        .bind(body.active)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.into_row())
+    }
+
+    pub async fn patch_announcement(
+        &self,
+        id: Uuid,
+        patch: AnnouncementPatch,
+    ) -> AppResult<AnnouncementRow> {
+        let existing = self
+            .get_announcement(id)
+            .await?
+            .ok_or_else(|| AppError::InvalidInput("announcement not found".into()))?;
+        let announcement_type = patch
+            .announcement_type
+            .unwrap_or(existing.announcement_type);
+        let title = patch.title.unwrap_or(existing.title);
+        let body = patch.body.unwrap_or(existing.body);
+        let priority = patch.priority.unwrap_or(existing.priority);
+        let starts_at = patch.starts_at.unwrap_or(existing.starts_at);
+        let ends_at = patch.ends_at.unwrap_or(existing.ends_at);
+        let active = patch.active.unwrap_or(existing.active);
+        let row = sqlx::query_as::<_, AnnouncementDbRow>(
+            r#"
+            UPDATE announcements
+            SET type = $2, title = $3, body = $4, priority = $5,
+                starts_at = $6, ends_at = $7, active = $8, updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, type, title, body, priority, starts_at, ends_at, active, created_at, updated_at
+            "#,
+        )
+        .bind(id)
+        .bind(announcement_type)
+        .bind(title)
+        .bind(body)
+        .bind(priority)
+        .bind(starts_at)
+        .bind(ends_at)
+        .bind(active)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.into_row())
+    }
+
     pub async fn admin_insights(&self) -> AppResult<crate::admin::AdminInsights> {
         let today = Utc::now().date_naive();
         let revenue_7d = self.revenue_in_period_days(7).await?;
@@ -1616,6 +1759,38 @@ struct DailyMetricRow {
     usdt: Decimal,
     watch_count: i32,
     active_users: i32,
+}
+
+#[derive(sqlx::FromRow)]
+struct AnnouncementDbRow {
+    id: Uuid,
+    #[sqlx(rename = "type")]
+    announcement_type: String,
+    title: String,
+    body: String,
+    priority: i32,
+    starts_at: Option<DateTime<Utc>>,
+    ends_at: Option<DateTime<Utc>>,
+    active: bool,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl AnnouncementDbRow {
+    fn into_row(self) -> AnnouncementRow {
+        AnnouncementRow {
+            id: self.id,
+            announcement_type: self.announcement_type,
+            title: self.title,
+            body: self.body,
+            priority: self.priority,
+            starts_at: self.starts_at,
+            ends_at: self.ends_at,
+            active: self.active,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
 }
 
 fn db_err(err: sqlx::Error) -> AppError {

@@ -1,5 +1,7 @@
 FROM rust:1-bookworm AS builder
 WORKDIR /app
+ARG GIT_COMMIT=dev
+ENV GIT_COMMIT=$GIT_COMMIT
 # Render free tier can OOM during parallel release builds
 ENV CARGO_BUILD_JOBS=1
 ENV RUSTFLAGS="-C codegen-units=1"

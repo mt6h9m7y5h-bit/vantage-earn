@@ -1,4 +1,5 @@
 mod admin_extra;
+mod announcements;
 mod audit;
 mod flags;
 mod gamification;
@@ -16,6 +17,9 @@ use rust_decimal::Decimal;
 use shared::AppResult;
 use uuid::Uuid;
 
+pub use announcements::{
+    valid_announcement_type, AnnouncementCreate, AnnouncementPatch, AnnouncementRow,
+};
 pub use admin_extra::{
     compute_risk, csv_escape, AdminExportUserRow, AdminLiveSnapshot, AdminSearchAuditHit,
     AdminSearchPayoutHit, AdminSearchReferralHit, AdminSearchResponse, AdminSearchUserHit,
@@ -64,6 +68,78 @@ impl Store {
         match self {
             Self::Memory(s) => s.ping().await,
             Self::Postgres(s) => s.ping().await,
+        }
+    }
+
+    pub async fn ping_ms(&self) -> AppResult<Option<u64>> {
+        match self {
+            Self::Memory(s) => s.ping_ms().await,
+            Self::Postgres(s) => s.ping_ms().await,
+        }
+    }
+
+    pub async fn open_connections(&self) -> AppResult<Option<i64>> {
+        match self {
+            Self::Memory(s) => s.open_connections().await,
+            Self::Postgres(s) => s.open_connections().await,
+        }
+    }
+
+    pub async fn dev_reset(&self) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.dev_reset().await,
+            Self::Postgres(_) => Err(shared::AppError::InvalidInput(
+                "reset only supported for in-memory store".into(),
+            )),
+        }
+    }
+
+    pub async fn user_pending_payout_count(&self, user_id: Uuid) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.user_pending_payout_count(user_id).await,
+            Self::Postgres(s) => s.user_pending_payout_count(user_id).await,
+        }
+    }
+
+    pub async fn list_active_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        match self {
+            Self::Memory(s) => s.list_active_announcements().await,
+            Self::Postgres(s) => s.list_active_announcements().await,
+        }
+    }
+
+    pub async fn list_all_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        match self {
+            Self::Memory(s) => s.list_all_announcements().await,
+            Self::Postgres(s) => s.list_all_announcements().await,
+        }
+    }
+
+    pub async fn get_announcement(&self, id: Uuid) -> AppResult<Option<AnnouncementRow>> {
+        match self {
+            Self::Memory(s) => s.get_announcement(id).await,
+            Self::Postgres(s) => s.get_announcement(id).await,
+        }
+    }
+
+    pub async fn create_announcement(
+        &self,
+        body: AnnouncementCreate,
+    ) -> AppResult<AnnouncementRow> {
+        match self {
+            Self::Memory(s) => s.create_announcement(body).await,
+            Self::Postgres(s) => s.create_announcement(body).await,
+        }
+    }
+
+    pub async fn patch_announcement(
+        &self,
+        id: Uuid,
+        patch: AnnouncementPatch,
+    ) -> AppResult<AnnouncementRow> {
+        match self {
+            Self::Memory(s) => s.patch_announcement(id, patch).await,
+            Self::Postgres(s) => s.patch_announcement(id, patch).await,
         }
     }
 

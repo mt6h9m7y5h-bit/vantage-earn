@@ -1,6 +1,6 @@
 use axum::{
-    http::{header, StatusCode},
-    response::{Html, IntoResponse, Redirect},
+    http::{header, StatusCode, Uri},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use std::path::PathBuf;
 
@@ -13,6 +13,8 @@ const IMPRESSUM_HTML: &str = include_str!("../../../frontend/legal/impressum.htm
 const AGB_HTML: &str = include_str!("../../../frontend/legal/agb.html");
 const MANIFEST_JSON: &str = include_str!("../../../frontend/manifest.webmanifest");
 const SERVICE_WORKER_JS: &str = include_str!("../../../frontend/sw.js");
+const ERROR_404_HTML: &str = include_str!("../../../frontend/404.html");
+const ERROR_500_HTML: &str = include_str!("../../../frontend/500.html");
 
 fn frontend_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../frontend")
@@ -99,4 +101,37 @@ fn icon_png(bytes: &'static [u8]) -> impl IntoResponse {
         [(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "public, max-age=86400")],
         bytes,
     )
+}
+
+pub async fn fallback_handler(uri: Uri) -> Response {
+    let path = uri.path();
+    if path.starts_with("/users/")
+        || path.starts_with("/auth/")
+        || path.starts_with("/admin/")
+        || path.starts_with("/api/")
+        || path.starts_with("/dev/")
+        || path.starts_with("/announcements")
+    {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "application/json")],
+            serde_json::json!({ "error": "not found" }).to_string(),
+        )
+            .into_response();
+    }
+    (
+        StatusCode::NOT_FOUND,
+        NO_CACHE,
+        Html(load_text("404.html", ERROR_404_HTML)),
+    )
+        .into_response()
+}
+
+pub fn internal_error_page() -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        NO_CACHE,
+        Html(load_text("500.html", ERROR_500_HTML)),
+    )
+        .into_response()
 }

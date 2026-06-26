@@ -5,8 +5,9 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use axum::middleware;
 
-use api_gateway::{routes, state::AppState};
+use api_gateway::{middleware as mw, routes, state::AppState};
 
 fn listen_port() -> u16 {
     std::env::var("PORT")
@@ -37,6 +38,8 @@ async fn main() {
     let state = AppState::connect().await;
     let app = Router::new()
         .merge(routes::router())
+        .layer(middleware::from_fn(mw::enrich_json_errors))
+        .layer(middleware::from_fn(mw::request_id_middleware))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);

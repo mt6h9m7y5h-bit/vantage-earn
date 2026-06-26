@@ -184,6 +184,32 @@
       from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+      html { scroll-behavior: auto; }
+    }
+    button:focus-visible, .nav-item:focus-visible, .icon-btn:focus-visible, a:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+    #update-banner, #offline-banner {
+      position: fixed;
+      top: calc(var(--header-h) + 0.5rem);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 80;
+      max-width: min(420px, calc(100% - 2rem));
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      box-shadow: var(--shadow);
+    }
+    #update-banner { background: var(--primary-soft); border: 1px solid var(--primary); color: var(--text); }
+    #offline-banner { background: var(--warning-soft); border: 1px solid var(--warning-border); color: var(--text); }
     .bottom-nav {
       display: none;
       position: fixed;
@@ -1209,6 +1235,13 @@
 <body>
   <div class="toast-stack">
     <div id="error-banner" class="toast hidden" role="alert"></div>
+    <div id="offline-banner" class="hidden" role="status" aria-live="polite">
+      <span>Du bist offline — einige Funktionen sind eingeschränkt.</span>
+    </div>
+    <div id="update-banner" class="hidden" role="status" aria-live="polite">
+      <span>Neue Version verfügbar</span>
+      <button class="primary copy-btn" type="button" onclick="applyAppUpdate()" aria-label="App-Update installieren">Update</button>
+    </div>
     <div id="success-banner" class="toast hidden" role="status"></div>
   </div>
 
@@ -1570,7 +1603,8 @@
         <!-- Profile (mobile nav) -->
         <section class="view hidden" data-view="profile" id="profile-view">
           <section class="card">
-            <h2 class="section-title">Profil</h2>
+            <h2 class="section-title">Profil &amp; Konto</h2>
+            <h3 class="section-title" style="font-size:0.9rem;margin-top:0">Profil</h3>
             <div class="kpi-strip">
               <div class="stat-tile"><span class="stat-label">Profil</span><span class="stat-value" id="profile-completion">—</span></div>
               <div class="stat-tile"><span class="stat-label">Account-Alter</span><span class="stat-value" id="profile-age">—</span></div>
@@ -1600,6 +1634,7 @@
           </section>
           <section class="card">
             <h2 class="section-title">Einstellungen</h2>
+            <h3 class="section-title" style="font-size:0.9rem;margin-top:0">App</h3>
             <div class="profile-settings-row">
               <span>Design</span>
               <button class="secondary copy-btn" type="button" onclick="toggleTheme()">Theme wechseln</button>
@@ -1610,8 +1645,11 @@
             </div>
             <div class="profile-settings-row">
               <span>Abmelden</span>
-              <button class="secondary copy-btn danger" type="button" onclick="logout()">Abmelden</button>
+              <button class="secondary copy-btn danger" type="button" onclick="logout()" aria-label="Abmelden">Abmelden</button>
             </div>
+            <h3 class="section-title" style="font-size:0.9rem;margin-top:1rem">Sicherheit</h3>
+            <p class="payout-hint">Erweiterte Sicherheitsfunktionen findest du unter „Sicherheit“ in der Navigation.</p>
+            <button class="secondary copy-btn" type="button" onclick="navigateToView('security')" aria-label="Sicherheitsbereich öffnen">Sicherheit öffnen</button>
           </section>
           <div id="install-card" class="card install-card hidden">
             <p class="card-title">App installieren</p>
@@ -2129,9 +2167,57 @@
           caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
         }
       } else {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        navigator.serviceWorker.register('/sw.js').then((reg) => {
+          reg.addEventListener('updatefound', () => {
+            const worker = reg.installing;
+            worker?.addEventListener('statechange', () => {
+              if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                document.getElementById('update-banner')?.classList.remove('hidden');
+              }
+            });
+          });
+          if (reg.waiting && navigator.serviceWorker.controller) {
+            document.getElementById('update-banner')?.classList.remove('hidden');
+          }
+        }).catch(() => {});
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (window._swReloading) return;
+        });
       }
     }
+
+    let waitingWorker = null;
+    navigator.serviceWorker?.addEventListener('message', (event) => {
+      if (event.data?.type === 'SW_UPDATE_READY') {
+        document.getElementById('update-banner')?.classList.remove('hidden');
+      }
+    });
+
+    function applyAppUpdate() {
+      window._swReloading = true;
+      const reg = navigator.serviceWorker?.controller;
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+      }
+      navigator.serviceWorker?.ready.then((registration) => {
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+      navigator.serviceWorker?.addEventListener('controllerchange', () => {
+        window.location.reload();
+      });
+      setTimeout(() => window.location.reload(), 800);
+    }
+
+    function syncOfflineBanner() {
+      const el = document.getElementById('offline-banner');
+      if (!el) return;
+      el.classList.toggle('hidden', navigator.onLine);
+    }
+    window.addEventListener('online', syncOfflineBanner);
+    window.addEventListener('offline', syncOfflineBanner);
+    syncOfflineBanner();
 
     const AdPlayer = {
       _cancelFn: null,

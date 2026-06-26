@@ -1,11 +1,9 @@
 use axum::{
     extract::{Path, Query, State},
     middleware,
-    response::IntoResponse,
     routing::{get, patch, post},
     Json, Router,
 };
-use std::collections::HashMap;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use fraud_engine::{FraudEngine, WatchSessionCheck, MAX_WATCHES_PER_DAY};
@@ -25,7 +23,12 @@ use uuid::Uuid;
 
 use crate::ad_config::AdConfig;
 use crate::error::{map_ai_error, ApiError};
+use std::collections::HashMap;
+
+use crate::announcements;
+use crate::dev;
 use crate::extractors::AuthUser;
+use crate::health;
 use crate::pwa;
 use crate::rate_limit::{self, RateLimiter};
 use crate::state::{AppState, UserProfile};
@@ -36,7 +39,7 @@ pub fn router() -> Router<AppState> {
 
     let public = Router::new()
         .route("/", get(pwa::root))
-        .route("/health", get(health))
+        .route("/health", get(health::public_health))
         .route("/config", get(public_config))
         .route("/demo", get(pwa::demo_page))
         .route("/legal/datenschutz", get(pwa::datenschutz_page))
@@ -52,6 +55,8 @@ pub fn router() -> Router<AppState> {
         .route("/leaderboard/weekly", get(weekly_leaderboard))
         .route("/admin", get(pwa::admin_page))
         .merge(crate::admin::router())
+        .merge(announcements::router())
+        .merge(dev::router())
         .layer(middleware::from_fn_with_state(
             auth_limiter,
             rate_limit::middleware,
@@ -79,11 +84,23 @@ pub fn router() -> Router<AppState> {
         .route("/users/me/ai/context", get(ai_context))
         .route("/users/me/ai/chat", post(ai_chat))
         .layer(middleware::from_fn_with_state(
-            rate_limiter,
+            rate_limiter.clone(),
             rate_limit::middleware,
         ));
 
-    public.merge(protected)
+    let api_v1 = Router::new()
+        .route("/health", get(health::public_health))
+        .route("/config", get(public_config))
+        .route("/users/me/profile-stats", get(get_profile_stats))
+        .layer(middleware::from_fn_with_state(
+            rate_limiter.clone(),
+            rate_limit::middleware,
+        ));
+
+    public
+        .merge(protected)
+        .nest("/api/v1", api_v1)
+        .fallback(pwa::fallback_handler)
 }
 
 async fn public_config(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
@@ -104,16 +121,6 @@ async fn public_config(State(state): State<AppState>) -> Result<Json<serde_json:
         );
     }
     Ok(Json(json))
-}
-
-async fn health(State(state): State<AppState>) -> impl IntoResponse {
-    let db_ok = state.store_healthy().await;
-    Json(serde_json::json!({
-        "status": if db_ok { "ok" } else { "degraded" },
-        "service": "vantage-earn",
-        "version": "0.1.0",
-        "database": db_ok,
-    }))
 }
 
 #[derive(Deserialize)]

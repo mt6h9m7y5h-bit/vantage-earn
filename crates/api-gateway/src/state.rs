@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::http::HeaderMap;
 use chrono::{DateTime, NaiveDate, Utc};
 use event_bus::EventBus;
 use reward_engine::{BonusEngine, RewardEngine, WatchBonusInput, WatchBonusResult};
@@ -16,6 +17,11 @@ use currency_engine::CurrencyEngine;
 use ai_engine::AiCopilot;
 
 use crate::auth::JwtService;
+use crate::fraud_admin::HighRiskUserRow;
+use crate::middleware::{admin_actor, client_ip};
+use crate::store::{
+    AnnouncementCreate, AnnouncementPatch, AnnouncementRow,
+};
 use crate::feature_flags::{
     FeatureFlagsPatch, FeatureFlagsView, KEY_MAINTENANCE_MESSAGE, KEY_MAINTENANCE_MODE,
     KEY_PAYOUT_DEMO_MODE, KEY_WATCH_DURATION_SECS,
@@ -129,6 +135,7 @@ pub struct AppState {
     pub events: Arc<EventBus>,
     pub copilot: AiCopilot,
     pub jwt: JwtService,
+    pub started_at: DateTime<Utc>,
 }
 
 impl Default for AppState {
@@ -165,7 +172,115 @@ impl AppState {
             events,
             copilot: AiCopilot::from_config(ai_engine::AiConfig::default()),
             jwt: JwtService::from_env(),
+            started_at: Utc::now(),
         }
+    }
+
+    pub async fn store_ping_ms(&self) -> (bool, Option<u64>) {
+        match self.store.ping_ms().await {
+            Ok(Some(ms)) => (true, Some(ms)),
+            Ok(None) => (false, None),
+            Err(_) => (false, None),
+        }
+    }
+
+    pub async fn store_open_connections(&self) -> AppResult<Option<i64>> {
+        self.store.open_connections().await
+    }
+
+    pub async fn list_active_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        self.store.list_active_announcements().await
+    }
+
+    pub async fn list_all_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        self.store.list_all_announcements().await
+    }
+
+    pub async fn get_announcement(&self, id: Uuid) -> AppResult<Option<AnnouncementRow>> {
+        self.store.get_announcement(id).await
+    }
+
+    pub async fn create_announcement(
+        &self,
+        body: AnnouncementCreate,
+    ) -> AppResult<AnnouncementRow> {
+        self.store.create_announcement(body).await
+    }
+
+    pub async fn patch_announcement(
+        &self,
+        id: Uuid,
+        patch: AnnouncementPatch,
+    ) -> AppResult<AnnouncementRow> {
+        self.store.patch_announcement(id, patch).await
+    }
+
+    pub async fn fraud_scan_users(&self) -> Vec<HighRiskUserRow> {
+        let rows = self.admin_list_users(500).await.unwrap_or_default();
+        let mut out = Vec::new();
+        for row in rows {
+            let profile = self.profile(row.user_id).await;
+            let watches_today = profile.effective_watches_today();
+            let (risk_score, risk_level) = crate::store::compute_risk(
+                row.trust_score,
+                row.banned,
+                profile.payout_history,
+                profile.sessions_last_hour,
+                watches_today,
+            );
+            let mut flags = Vec::new();
+            if row.trust_score < 40 {
+                flags.push("niedriger Trust-Score".into());
+            }
+            if profile.sessions_last_hour > 8 {
+                flags.push("schnelle Watches".into());
+            }
+            if row.banned {
+                flags.push("gesperrt".into());
+            }
+            let pending_payouts = self
+                .store
+                .user_pending_payout_count(row.user_id)
+                .await
+                .unwrap_or(0);
+            if pending_payouts > 0 {
+                flags.push("offene Auszahlung".into());
+            }
+            out.push(HighRiskUserRow {
+                user_id: row.user_id,
+                referral_code: row.referral_code,
+                trust_score: row.trust_score,
+                risk_score,
+                risk_level: risk_level.into(),
+                sessions_last_hour: profile.sessions_last_hour,
+                watches_today,
+                banned: row.banned,
+                flags,
+                pending_payouts,
+            });
+        }
+        out
+    }
+
+    pub async fn dev_reset_store(&self) -> AppResult<()> {
+        self.store.dev_reset().await
+    }
+
+    pub async fn admin_log_enriched(
+        &self,
+        headers: &HeaderMap,
+        action: &str,
+        user_id: Option<Uuid>,
+        mut details: serde_json::Value,
+    ) -> AppResult<()> {
+        if let Some(obj) = details.as_object_mut() {
+            obj.entry("actor")
+                .or_insert(serde_json::json!(admin_actor(headers)));
+            obj.entry("client_ip")
+                .or_insert(serde_json::json!(client_ip(headers, None)));
+        }
+        self.admin_log_action(client_ip(headers, None), action, user_id, details)
+            .await
     }
 
     pub fn liquidity_reserve_ratio() -> Decimal {

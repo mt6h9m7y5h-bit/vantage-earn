@@ -74,6 +74,174 @@ async fn health_returns_ok() {
     let json = body_json(response).await;
     assert_eq!(json["status"], "ok");
     assert_eq!(json["database"], true);
+    assert!(json["components"]["api"]["status"].as_str().unwrap() == "ok");
+    assert!(json["components"]["payouts"]["pending_count"].is_number());
+}
+
+#[tokio::test]
+async fn health_includes_request_id_header() {
+    let app = Router::new()
+        .merge(routes::router())
+        .layer(axum::middleware::from_fn(api_gateway::middleware::request_id_middleware))
+        .with_state(AppState::new());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(response.headers().get("x-request-id").is_some());
+}
+
+#[tokio::test]
+async fn api_v1_health_mirrors_public_health() {
+    let app = app(AppState::new());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["service"], "vantage-earn");
+}
+
+#[tokio::test]
+async fn admin_health_requires_secret() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let denied = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/admin/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+
+    let ok = app
+        .oneshot(admin_req("GET", "/admin/health", None))
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+    let json = body_json(ok).await;
+    assert!(json["uptime_secs"].as_i64().unwrap() >= 0);
+    assert!(json["components"].is_object());
+}
+
+#[tokio::test]
+async fn announcements_crud_and_public_active() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+
+    let create = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            "/admin/announcements",
+            Some(r#"{"type":"banner","title":"Test","body":"Hallo","priority":1,"active":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(create.status(), StatusCode::OK);
+    let created = body_json(create).await;
+    let id = created["id"].as_str().unwrap();
+
+    let active = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/announcements/active")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(active.status(), StatusCode::OK);
+    let active_json = body_json(active).await;
+    assert!(active_json.as_array().unwrap().iter().any(|a| a["title"] == "Test"));
+
+    let patch = app
+        .clone()
+        .oneshot(admin_req(
+            "PATCH",
+            &format!("/admin/announcements/{id}"),
+            Some(r#"{"active":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(patch.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn fraud_admin_endpoints() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (_user_id, _token) = register(&app).await;
+
+    let summary = app
+        .clone()
+        .oneshot(admin_req("GET", "/admin/fraud/summary", None))
+        .await
+        .unwrap();
+    assert_eq!(summary.status(), StatusCode::OK);
+    let summary_json = body_json(summary).await;
+    assert_eq!(summary_json["repeated_ip_tracking"], "nicht verfügbar");
+
+    let users = app
+        .oneshot(admin_req("GET", "/admin/fraud/high-risk-users", None))
+        .await
+        .unwrap();
+    assert_eq!(users.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn dev_endpoints_respect_environment() {
+    let prior = std::env::var("RUST_ENV").ok();
+    std::env::set_var("JWT_SECRET", "test-jwt-secret-for-production-guard");
+
+    std::env::set_var("RUST_ENV", "production");
+    let prod_app = app(AppState::new());
+    let prod = prod_app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/dev/seed-demo")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(prod.status(), StatusCode::NOT_FOUND);
+
+    std::env::set_var("RUST_ENV", "development");
+    let dev_app = app(AppState::new());
+    let dev = dev_app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/dev/seed-demo")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dev.status(), StatusCode::OK);
+
+    match prior {
+        Some(v) => std::env::set_var("RUST_ENV", v),
+        None => std::env::remove_var("RUST_ENV"),
+    }
 }
 
 #[tokio::test]

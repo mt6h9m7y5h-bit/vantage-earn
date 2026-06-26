@@ -14,8 +14,8 @@ use crate::store::week_start_utc;
 use crate::store::{
     AdminAuditEntry, AdminDailyMetric, AdminExportUserRow, AdminLiveSnapshot, AdminSearchAuditHit,
     AdminSearchPayoutHit, AdminSearchReferralHit, AdminSearchResponse, AdminSearchUserHit,
-    AdminTimelineEvent, AdminUserListRow, AdminUserNote, BulkUserFilter, LedgerItem, PayoutListFilter,
-    PayoutRequestRow,
+    AdminTimelineEvent, AdminUserListRow, AdminUserNote, AnnouncementCreate, AnnouncementPatch,
+    AnnouncementRow, BulkUserFilter, LedgerItem, PayoutListFilter, PayoutRequestRow,
 };
 use crate::store::gamification_memory::GamificationMemStore;
 
@@ -34,6 +34,7 @@ pub struct MemoryStore {
     feature_flags: Arc<RwLock<HashMap<String, serde_json::Value>>>,
     feature_flag_times: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
     admin_notes: Arc<RwLock<Vec<AdminUserNote>>>,
+    announcements: Arc<RwLock<Vec<AnnouncementRow>>>,
 }
 
 #[derive(Clone)]
@@ -65,11 +66,145 @@ impl MemoryStore {
             feature_flags: Arc::new(RwLock::new(HashMap::new())),
             feature_flag_times: Arc::new(RwLock::new(HashMap::new())),
             admin_notes: Arc::new(RwLock::new(Vec::new())),
+            announcements: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+
+    pub async fn dev_reset(&self) -> AppResult<()> {
+        *self.users.write().await = HashMap::new();
+        *self.trust_scores.write().await = HashMap::new();
+        *self.total_revenue.write().await = Decimal::ZERO;
+        *self.pending_payouts.write().await = Decimal::ZERO;
+        *self.held_payouts.write().await = Decimal::ZERO;
+        *self.payout_requests.write().await = Vec::new();
+        *self.revenue_events.write().await = Vec::new();
+        *self.audit_log.write().await = Vec::new();
+        *self.feature_flags.write().await = HashMap::new();
+        *self.feature_flag_times.write().await = HashMap::new();
+        *self.admin_notes.write().await = Vec::new();
+        *self.announcements.write().await = Vec::new();
+        Ok(())
     }
 
     pub async fn ping(&self) -> AppResult<bool> {
         Ok(true)
+    }
+
+    pub async fn ping_ms(&self) -> AppResult<Option<u64>> {
+        Ok(Some(0))
+    }
+
+    pub async fn open_connections(&self) -> AppResult<Option<i64>> {
+        Ok(None)
+    }
+
+    pub async fn user_pending_payout_count(&self, user_id: Uuid) -> AppResult<i64> {
+        let requests = self.payout_requests.read().await;
+        Ok(requests
+            .iter()
+            .filter(|p| {
+                p.user_id == user_id
+                    && (p.status == "pending_validation" || p.status == "pending_fraud_review")
+            })
+            .count() as i64)
+    }
+
+    fn announcement_active(row: &AnnouncementRow, now: DateTime<Utc>) -> bool {
+        if !row.active {
+            return false;
+        }
+        if let Some(start) = row.starts_at {
+            if now < start {
+                return false;
+            }
+        }
+        if let Some(end) = row.ends_at {
+            if now > end {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub async fn list_active_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        let now = Utc::now();
+        let rows = self.announcements.read().await;
+        let mut active: Vec<_> = rows
+            .iter()
+            .filter(|r| Self::announcement_active(r, now))
+            .cloned()
+            .collect();
+        active.sort_by(|a, b| b.priority.cmp(&a.priority));
+        Ok(active)
+    }
+
+    pub async fn list_all_announcements(&self) -> AppResult<Vec<AnnouncementRow>> {
+        let mut rows = self.announcements.read().await.clone();
+        rows.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(rows)
+    }
+
+    pub async fn get_announcement(&self, id: Uuid) -> AppResult<Option<AnnouncementRow>> {
+        Ok(self
+            .announcements
+            .read()
+            .await
+            .iter()
+            .find(|r| r.id == id)
+            .cloned())
+    }
+
+    pub async fn create_announcement(&self, body: AnnouncementCreate) -> AppResult<AnnouncementRow> {
+        let now = Utc::now();
+        let row = AnnouncementRow {
+            id: Uuid::new_v4(),
+            announcement_type: body.announcement_type,
+            title: body.title.trim().into(),
+            body: body.body.trim().into(),
+            priority: body.priority,
+            starts_at: body.starts_at,
+            ends_at: body.ends_at,
+            active: body.active,
+            created_at: now,
+            updated_at: now,
+        };
+        self.announcements.write().await.push(row.clone());
+        Ok(row)
+    }
+
+    pub async fn patch_announcement(
+        &self,
+        id: Uuid,
+        patch: AnnouncementPatch,
+    ) -> AppResult<AnnouncementRow> {
+        let mut rows = self.announcements.write().await;
+        let row = rows
+            .iter_mut()
+            .find(|r| r.id == id)
+            .ok_or_else(|| shared::AppError::InvalidInput("announcement not found".into()))?;
+        if let Some(t) = patch.announcement_type {
+            row.announcement_type = t;
+        }
+        if let Some(title) = patch.title {
+            row.title = title;
+        }
+        if let Some(body) = patch.body {
+            row.body = body;
+        }
+        if let Some(priority) = patch.priority {
+            row.priority = priority;
+        }
+        if let Some(starts_at) = patch.starts_at {
+            row.starts_at = starts_at;
+        }
+        if let Some(ends_at) = patch.ends_at {
+            row.ends_at = ends_at;
+        }
+        if let Some(active) = patch.active {
+            row.active = active;
+        }
+        row.updated_at = Utc::now();
+        Ok(row.clone())
     }
 
     pub async fn ensure_user(&self, user_id: Uuid) -> AppResult<()> {

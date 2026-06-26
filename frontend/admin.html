@@ -77,6 +77,10 @@
       transition: opacity 0.15s;
     }
     button:hover { opacity: 0.9; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     .btn-primary { background: var(--accent); color: #04241c; }
     .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
@@ -282,6 +286,22 @@
       background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 8px; min-height: 1rem;
     }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+    .status-strip { display:flex; gap:0.65rem; align-items:center; font-size:0.78rem; color:var(--muted); }
+    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:0.25rem; }
+    .status-dot.ok { background: var(--accent); box-shadow: 0 0 6px rgba(0,212,170,0.5); }
+    .status-dot.warn { background: var(--warn); }
+    .status-dot.err { background: var(--danger); }
+    .health-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:0.75rem; }
+    .health-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:0.85rem 1rem; }
+    .health-card .title { font-size:0.78rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.35rem; }
+    .health-card .state { font-weight:700; font-size:1rem; }
+    .health-card.ok .state { color: var(--accent); }
+    .health-card.warn .state { color: var(--warn); }
+    .health-card.err .state { color: var(--danger); }
+    .admin-footer { margin-top:2rem; padding-top:1rem; border-top:1px solid var(--border); font-size:0.78rem; color:var(--muted); display:flex; flex-wrap:wrap; gap:0.75rem 1.25rem; }
     .drawer-backdrop {
       position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200;
       opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
@@ -358,13 +378,17 @@
           <div id="search-dropdown" class="search-dropdown hidden"></div>
         </div>
         <div class="live-badges" id="live-badges" title="Live-Updates alle 8s (Polling statt SSE — siehe README)">
+          <span class="status-strip" id="header-status-strip" title="Systemstatus">
+            <span><span class="status-dot ok" id="dot-api"></span>API</span>
+            <span><span class="status-dot ok" id="dot-db"></span>DB</span>
+          </span>
           <span class="live-badge">Offen: <strong id="live-pending">—</strong></span>
           <span class="live-badge">Neu: <strong id="live-users">—</strong></span>
           <span class="live-badge">Audit: <strong id="live-audit">—</strong></span>
         </div>
       </div>
       <div class="auth-bar">
-        <button class="btn-ghost" onclick="openCommandPalette()" title="Befehle (⌘K)">⌘K</button>
+        <button class="btn-ghost" onclick="openCommandPalette()" title="Befehle (⌘K)" aria-label="Befehlspalette öffnen">⌘K</button>
         <input id="secret-inline" type="password" placeholder="ADMIN_SECRET" autocomplete="off" />
         <button class="btn-ghost" onclick="saveSecret()">Speichern</button>
       </div>
@@ -375,6 +399,9 @@
       <button class="tab" data-tab="payouts" onclick="switchTab('payouts')">Auszahlungen</button>
       <button class="tab" data-tab="users" onclick="switchTab('users')">Nutzer</button>
       <button class="tab" data-tab="actions" onclick="switchTab('actions')">Aktionen</button>
+      <button class="tab" data-tab="fraud" onclick="switchTab('fraud')">Betrug</button>
+      <button class="tab" data-tab="announcements" onclick="switchTab('announcements')">Ankündigungen</button>
+      <button class="tab" data-tab="system" onclick="switchTab('system')">System</button>
       <button class="tab" data-tab="settings" onclick="switchTab('settings')">Einstellungen</button>
       <button class="tab" data-tab="audit" onclick="switchTab('audit')">Audit</button>
     </nav>
@@ -552,6 +579,65 @@
       </div>
     </section>
 
+    <section id="panel-fraud" class="panel">
+      <div class="card">
+        <h2>Betrugszentrum</h2>
+        <div class="kpi-grid" id="fraud-kpis"></div>
+        <p class="muted" id="fraud-tracking-note" style="margin-top:0.75rem"></p>
+      </div>
+      <div class="card">
+        <h2>Hohes Risiko</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nutzer</th><th>Trust</th><th>Risiko</th><th>Flags</th><th>Aktionen</th></tr></thead>
+            <tbody id="fraud-users-body"></tbody>
+          </table>
+        </div>
+        <button class="btn-ghost" style="margin-top:0.75rem" onclick="loadFraud()">Aktualisieren</button>
+      </div>
+      <div class="card">
+        <h2>Manuelle Prüfung (Auszahlungen)</h2>
+        <p class="muted">Offene Auszahlungen zur manuellen Prüfung — siehe Tab „Auszahlungen“.</p>
+        <button class="btn-primary" onclick="switchTab('payouts')">Zur Warteschlange</button>
+      </div>
+    </section>
+
+    <section id="panel-announcements" class="panel">
+      <div class="card">
+        <h2>Ankündigungen</h2>
+        <div class="actions">
+          <div class="action-form">
+            <div class="row" style="grid-template-columns:1fr 1fr 1fr">
+              <div><label>Typ</label>
+                <select id="ann-type"><option value="banner">Banner</option><option value="popup">Popup</option><option value="notification">Benachrichtigung</option><option value="maintenance">Wartung</option></select>
+              </div>
+              <div><label>Priorität</label><input id="ann-priority" type="number" value="0" /></div>
+              <div><label style="display:flex;align-items:center;gap:0.5rem;margin-top:1.4rem"><input id="ann-active" type="checkbox" checked style="width:auto" /> Aktiv</label></div>
+            </div>
+            <div style="margin-top:0.75rem"><label>Titel</label><input id="ann-title" type="text" placeholder="z.B. Wartungsarbeiten" /></div>
+            <div style="margin-top:0.75rem"><label>Text</label><textarea id="ann-body" rows="3" placeholder="Nachricht für Nutzer…"></textarea></div>
+            <button class="btn-primary" style="margin-top:0.75rem" onclick="createAnnouncement()">Ankündigung erstellen</button>
+            <p id="ann-msg" class="success hidden"></p>
+          </div>
+        </div>
+        <div class="table-wrap" style="margin-top:1rem">
+          <table>
+            <thead><tr><th>Titel</th><th>Typ</th><th>Priorität</th><th>Status</th><th>Aktion</th></tr></thead>
+            <tbody id="announcements-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-system" class="panel">
+      <div class="card">
+        <h2>System &amp; Health</h2>
+        <p class="muted" style="margin:0 0 1rem">Auto-Aktualisierung alle 15 Sekunden.</p>
+        <div class="health-grid" id="health-grid"></div>
+        <div class="detail-grid" style="margin-top:1rem" id="health-meta"></div>
+      </div>
+    </section>
+
     <section id="panel-settings" class="panel">
       <div class="card">
         <h2>Feature-Flags</h2>
@@ -621,6 +707,12 @@
         <div class="pagination" id="audit-pagination"></div>
       </div>
     </section>
+
+    <footer class="admin-footer" id="admin-footer">
+      <span>Version: <strong id="footer-version">—</strong></span>
+      <span>Commit: <code id="footer-commit">—</code></span>
+      <span>Umgebung: <strong id="footer-env">—</strong></span>
+    </footer>
   </div>
 
   <div id="reject-modal" class="modal-backdrop hidden" onclick="if(event.target===this)closeRejectModal()">
@@ -685,6 +777,129 @@
     let payoutsCache = [];
     let usersCache = [];
     let drawerUser = null;
+    let healthPollTimer = null;
+
+    function setStatusDot(id, status) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = 'status-dot ' + (status === 'ok' ? 'ok' : status === 'degraded' ? 'warn' : 'err');
+    }
+
+    function healthCardClass(status) {
+      if (status === 'ok') return 'ok';
+      if (status === 'degraded') return 'warn';
+      return 'err';
+    }
+
+    async function loadHealth() {
+      try {
+        const d = await api('/admin/health');
+        setStatusDot('dot-api', d.components?.api?.status || d.status);
+        setStatusDot('dot-db', d.components?.database?.status || (d.database_latency_ms != null ? 'ok' : 'err'));
+        const grid = document.getElementById('health-grid');
+        const comps = d.components || {};
+        const cards = [
+          ['API', comps.api?.status || d.status],
+          ['Datenbank', comps.database?.status, comps.database?.latency_ms != null ? `${comps.database.latency_ms} ms` : ''],
+          ['Jobs-Warteschlange', comps.jobs_queue?.status, comps.jobs_queue?.note || ''],
+          ['Ads-Provider', comps.ads_provider?.status, comps.ads_provider?.provider || ''],
+          ['Auszahlungen', comps.payouts?.status, comps.payouts?.pending_count != null ? `${comps.payouts.pending_count} offen` : ''],
+        ];
+        grid.innerHTML = cards.map(([title, st, extra]) =>
+          `<div class="health-card ${healthCardClass(st)}"><div class="title">${title}</div><div class="state">${(st || '—').toUpperCase()}</div>${extra ? `<div class="muted" style="font-size:0.78rem;margin-top:0.25rem">${extra}</div>` : ''}</div>`
+        ).join('');
+        document.getElementById('health-meta').innerHTML = `
+          <div class="detail-item"><div class="k">Uptime</div><div class="v">${Math.floor((d.uptime_secs||0)/60)} min</div></div>
+          <div class="detail-item"><div class="k">DB-Latenz</div><div class="v">${d.database_latency_ms ?? '—'} ms</div></div>
+          <div class="detail-item"><div class="k">DB-Verbindungen</div><div class="v">${d.open_db_connections ?? 'n/a'}</div></div>
+          <div class="detail-item"><div class="k">RAM (Linux)</div><div class="v">${d.memory_mb != null ? d.memory_mb.toFixed(0) + ' MB frei' : 'n/a'}</div></div>
+          <div class="detail-item"><div class="k">CPU (Linux)</div><div class="v">${d.cpu_percent != null ? d.cpu_percent.toFixed(1) + '%' : 'n/a'}</div></div>`;
+        document.getElementById('footer-version').textContent = d.version || '—';
+        document.getElementById('footer-commit').textContent = d.commit || '—';
+        document.getElementById('footer-env').textContent = d.environment || '—';
+      } catch (e) {
+        setStatusDot('dot-api', 'error');
+        setStatusDot('dot-db', 'error');
+      }
+    }
+
+    function startHealthPoll() {
+      if (healthPollTimer) clearInterval(healthPollTimer);
+      loadHealth();
+      healthPollTimer = setInterval(() => {
+        if (!document.getElementById('app').classList.contains('hidden')) loadHealth();
+      }, 15000);
+    }
+
+    async function loadFraud() {
+      try {
+        const [summary, users] = await Promise.all([
+          api('/admin/fraud/summary'),
+          api('/admin/fraud/high-risk-users?limit=50'),
+        ]);
+        document.getElementById('fraud-kpis').innerHTML = `
+          <div class="kpi"><div class="label">Hohes Risiko</div><div class="value">${summary.high_risk_count}</div></div>
+          <div class="kpi"><div class="label">Offene Prüfungen</div><div class="value">${summary.pending_review_payouts}</div></div>
+          <div class="kpi"><div class="label">Niedriger Trust</div><div class="value">${summary.low_trust_users}</div></div>
+          <div class="kpi"><div class="label">Schnelle Watches</div><div class="value">${summary.fast_watch_users}</div></div>
+          <div class="kpi"><div class="label">Gesperrt</div><div class="value">${summary.banned_users}</div></div>`;
+        document.getElementById('fraud-tracking-note').textContent =
+          `IP-Wiederholungen: ${summary.repeated_ip_tracking} · Wallet-Muster: ${summary.wallet_pattern_tracking}`;
+        const tbody = document.getElementById('fraud-users-body');
+        const rows = users.users || [];
+        tbody.innerHTML = rows.length ? rows.map(u => `<tr>
+          <td><code>${u.user_id}</code><br><span class="muted">${u.referral_code}</span></td>
+          <td>${u.trust_score}</td>
+          <td><span class="risk-${u.risk_level.toLowerCase()}">${u.risk_score} (${u.risk_level})</span></td>
+          <td>${(u.flags||[]).join(', ') || '—'}</td>
+          <td><button class="btn-ghost" onclick="openUserDrawer('${u.user_id}')">Profil</button></td>
+        </tr>`).join('') : '<tr><td colspan="5" class="muted">Keine auffälligen Nutzer</td></tr>';
+      } catch (e) { showError(e.message); }
+    }
+
+    async function loadAnnouncements() {
+      try {
+        const rows = await api('/admin/announcements');
+        document.getElementById('announcements-body').innerHTML = (rows || []).map(a => `<tr>
+          <td>${a.title}</td><td>${a.type}</td><td>${a.priority}</td>
+          <td>${a.active ? 'aktiv' : 'inaktiv'}</td>
+          <td><button class="btn-ghost" onclick="toggleAnnouncement('${a.id}', ${!a.active})">${a.active ? 'Deaktivieren' : 'Aktivieren'}</button></td>
+        </tr>`).join('') || '<tr><td colspan="5" class="muted">Keine Ankündigungen</td></tr>';
+      } catch (e) { showError(e.message); }
+    }
+
+    async function createAnnouncement() {
+      const body = {
+        type: document.getElementById('ann-type').value,
+        title: document.getElementById('ann-title').value.trim(),
+        body: document.getElementById('ann-body').value.trim(),
+        priority: parseInt(document.getElementById('ann-priority').value, 10) || 0,
+        active: document.getElementById('ann-active').checked,
+      };
+      if (!body.title || !body.body) { alert('Titel und Text sind Pflicht.'); return; }
+      try {
+        await api('/admin/announcements', { method: 'POST', body: JSON.stringify(body) });
+        document.getElementById('ann-msg').textContent = 'Ankündigung erstellt.';
+        document.getElementById('ann-msg').classList.remove('hidden');
+        loadAnnouncements();
+      } catch (e) { showError(e.message); }
+    }
+
+    async function toggleAnnouncement(id, active) {
+      try {
+        await api(`/admin/announcements/${id}`, { method: 'PATCH', body: JSON.stringify({ active }) });
+        loadAnnouncements();
+      } catch (e) { showError(e.message); }
+    }
+
+    async function loadReleaseFooter() {
+      try {
+        const d = await api('/admin/release-info');
+        document.getElementById('footer-version').textContent = d.version || '—';
+        document.getElementById('footer-commit').textContent = d.commit || '—';
+        document.getElementById('footer-env').textContent = d.environment || '—';
+      } catch (_) {}
+    }
 
     function trendPct(today, yesterday) {
       if (yesterday == null || yesterday === 0) return today > 0 ? '+100%' : '—';
@@ -914,6 +1129,9 @@
       if (name === 'users') { loadUsersTable(); }
       if (name === 'settings') loadFeatureFlags();
       if (name === 'audit') loadAudit();
+      if (name === 'system') loadHealth();
+      if (name === 'fraud') loadFraud();
+      if (name === 'announcements') loadAnnouncements();
     }
 
     function startLivePoll() {
@@ -990,6 +1208,9 @@
       { id: 'tab-actions', label: 'Gehe zu: Aktionen (Bonus)', run: () => switchTab('actions') },
       { id: 'tab-settings', label: 'Gehe zu: Feature Flags', run: () => switchTab('settings') },
       { id: 'tab-audit', label: 'Gehe zu: Audit', run: () => switchTab('audit') },
+      { id: 'tab-system', label: 'Gehe zu: System / Health', run: () => switchTab('system') },
+      { id: 'tab-fraud', label: 'Gehe zu: Betrug', run: () => switchTab('fraud') },
+      { id: 'tab-announcements', label: 'Gehe zu: Ankündigungen', run: () => switchTab('announcements') },
       { id: 'search', label: 'Nutzer suchen', run: () => document.getElementById('global-search').focus() },
       { id: 'refresh', label: 'Dashboard aktualisieren', run: () => { loadStats(); loadAnalytics(); } },
     ];
@@ -1348,8 +1569,8 @@
         loadStats();
         loadAnalytics();
         startLivePoll();
-      } catch (e) {
-        err.textContent = e.message;
+        startHealthPoll();
+        loadReleaseFooter();
       }
     }
 
@@ -1367,6 +1588,8 @@
         loadStats();
         loadAnalytics();
         startLivePoll();
+        startHealthPoll();
+        loadReleaseFooter();
       } catch (e) {
         showError(e.message);
       }

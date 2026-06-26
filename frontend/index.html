@@ -633,6 +633,16 @@
       color: var(--muted);
       margin: 0 0 0.75rem;
     }
+    .hero-wallet.wallet-pending .balance,
+    .hero-wallet.wallet-pending .local {
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .hero-wallet:not(.wallet-pending) .balance,
+    .hero-wallet:not(.wallet-pending) .local {
+      opacity: 1;
+      transition: opacity 0.15s ease;
+    }
     .hero-wallet {
       padding: 1.5rem 1.25rem;
       background: linear-gradient(180deg, var(--surface) 0%, rgba(17, 24, 39, 0.6) 100%);
@@ -2503,6 +2513,28 @@
       } catch (_) { /* private mode */ }
     }
 
+    function markWalletPending() {
+      document.querySelectorAll('.hero-wallet').forEach((el) => el.classList.add('wallet-pending'));
+    }
+
+    function markWalletReady() {
+      document.querySelectorAll('.hero-wallet').forEach((el) => el.classList.remove('wallet-pending'));
+    }
+
+    function setBalanceDisplay(targetStr) {
+      const balEl = document.getElementById('balance');
+      if (balEl) balEl.innerHTML = targetStr + '<span class="currency-suffix">USDT</span>';
+    }
+
+    function primeWalletFromStorage() {
+      if (!token) return;
+      if (readWalletSnapshot()) {
+        showWalletSnapshot();
+      } else {
+        markWalletPending();
+      }
+    }
+
     function showWalletSnapshot() {
       const snap = readWalletSnapshot();
       if (!snap) return;
@@ -2512,7 +2544,11 @@
     function applyWallet(w, opts = {}) {
       if (!w || w.balance_usdt == null) return;
       if (!opts.fromSnapshot) persistWalletSnapshot(w);
-      animateBalance(String(w.balance_usdt));
+      if (opts.fromSnapshot) {
+        setBalanceDisplay(String(w.balance_usdt));
+      } else {
+        animateBalance(String(w.balance_usdt));
+      }
       const localStr = '≈ ' + w.localized_balance + ' ' + w.currency;
       setText('local-balance', localStr);
       const walletBal = document.getElementById('wallet-balance');
@@ -2526,6 +2562,7 @@
       setText('currency', w.currency);
       window._balance = w.balance_usdt;
       window.__ve_debug.lastWallet = w;
+      markWalletReady();
     }
 
     async function copyReferralCode() {
@@ -4219,7 +4256,7 @@
       }
     }
 
-    if (token) showWalletSnapshot();
+    primeWalletFromStorage();
 
     (async function bootstrapUi() {
       loadHealthVersion();
@@ -4254,7 +4291,7 @@
         authCard.classList.add('hidden');
         appEl.classList.remove('hidden');
         setAppChromeVisible(true);
-        showWalletSnapshot();
+        primeWalletFromStorage();
         renderReferralBanner();
         if (Notification.permission === 'granted') {
           const btn = document.getElementById('notify-btn');

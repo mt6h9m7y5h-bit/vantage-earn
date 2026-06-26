@@ -596,6 +596,7 @@
         max-width: 100%;
         line-height: 1.15;
         letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -716,6 +717,7 @@
         display: block;
         width: 100%;
         min-width: 0;
+        font-variant-numeric: tabular-nums;
         font-size: clamp(0.7rem, 3.5vw, 0.85rem) !important;
       }
       #balance,
@@ -960,6 +962,7 @@
       letter-spacing: -0.04em;
       line-height: 1.05;
       font-variant-numeric: tabular-nums;
+      display: inline-block;
     }
     .balance .currency-suffix {
       font-size: 1.1rem;
@@ -1022,6 +1025,7 @@
       font-weight: 700;
       color: var(--text);
       font-variant-numeric: tabular-nums;
+      display: inline-block;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -3742,7 +3746,7 @@
         return `<div class="leaderboard-item${rankCls}">
           <span class="leaderboard-rank">#${e.rank}</span>
           <span class="leaderboard-name">${e.display_name}</span>
-          <span class="leaderboard-earn">${e.weekly_earnings_usdt} USDT</span>
+          <span class="leaderboard-earn">${formatBalanceAmount(e.weekly_earnings_usdt)} USDT</span>
         </div>`;
       }).join('');
     }
@@ -3833,7 +3837,7 @@
       }
       list.innerHTML = catalog.map(item => {
         const amount = parseFloat(item.amount) > 0
-          ? '<span class="bonus-amount">+' + item.amount + ' USDT</span>'
+          ? '<span class="bonus-amount">+' + formatBalanceAmount(item.amount) + ' USDT</span>'
           : '<span class="bonus-amount">—</span>';
         const statusCls = item.status === 'claimed' ? 'claimed'
           : item.status === 'available' ? 'available' : '';
@@ -3906,7 +3910,7 @@
           const pct = Math.min(100, (m.progress / m.target_count) * 100);
           const cls = m.claimed ? 'claimed' : (m.completed ? 'completed' : '');
           const btn = m.completed && !m.claimed
-            ? `<button class="primary" type="button" onclick="claimMission(${m.id})">Abholen (+${m.reward_usdt} USDT)</button>`
+            ? `<button class="primary" type="button" onclick="claimMission(${m.id})">Abholen (+${formatBalanceAmount(m.reward_usdt)} USDT)</button>`
             : (m.claimed ? '<span class="payout-hint">Abgeholt ✓</span>' : '');
           return `<div class="mission-card ${cls}">
             <div class="mission-head">

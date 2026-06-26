@@ -1101,8 +1101,8 @@
     #register-btn:active { transform: none; opacity: 0.9; }
     #register-btn.btn-loading {
       pointer-events: auto;
-      color: #fff !important;
-      opacity: 0.75;
+      color: transparent !important;
+      opacity: 0.85;
     }
     #register-btn.btn-pending-terms { opacity: 0.72; }
     button.btn-loading {
@@ -3018,6 +3018,24 @@
       document.querySelectorAll('.hero-wallet').forEach((el) => el.classList.remove('wallet-pending'));
     }
 
+    function ensureWalletVisible() {
+      markWalletReady();
+      const balEl = document.getElementById('balance');
+      const hasBalance = balEl && /\d/.test(balEl.textContent || '');
+      if (!hasBalance) {
+        setBalanceDisplay('0');
+        setText('local-balance', localBalanceLine('0', 'EUR'));
+        const walletBal = document.getElementById('wallet-balance');
+        if (walletBal && !/\d/.test(walletBal.textContent || '')) {
+          walletBal.innerHTML = balanceHtml('0');
+        }
+        const walletLocal = document.getElementById('wallet-local');
+        if (walletLocal && walletLocal.textContent.trim() === '') {
+          walletLocal.textContent = localBalanceLine('0', 'EUR');
+        }
+      }
+    }
+
     function setBalanceDisplay(targetStr) {
       const balEl = document.getElementById('balance');
       if (balEl) balEl.innerHTML = balanceHtml(targetStr);
@@ -3034,8 +3052,11 @@
 
     function showWalletSnapshot() {
       const snap = readWalletSnapshot();
-      if (!snap) return;
-      applyWallet(snap, { fromSnapshot: true });
+      if (snap) {
+        applyWallet(snap, { fromSnapshot: true });
+        return;
+      }
+      ensureWalletVisible();
     }
 
     function applyWallet(w, opts = {}) {
@@ -4468,13 +4489,14 @@
 
     async function doRefresh(opts = {}) {
       const quiet = opts.quiet !== false;
+      const showShellLoading = opts.showLoading === true || !quiet;
       if (!token) {
         if (!quiet) showError('Nicht angemeldet — bitte „Kostenlos starten“.');
         return;
       }
       const refreshBtn = document.getElementById('refresh-btn');
       const appEl = document.getElementById('app');
-      if (!quiet) {
+      if (showShellLoading) {
         if (refreshBtn) refreshBtn.classList.add('is-loading');
         if (appEl) appEl.classList.add('is-loading');
       }
@@ -4532,6 +4554,7 @@
             throw new Error('Daten konnten nicht geladen werden' + (failed.length ? ' (' + failed.join(', ') + ')' : ''));
           }
           showWalletSnapshot();
+          if (lastEl) lastEl.textContent = 'Server antwortet nicht — bitte erneut versuchen';
           return;
         }
         if (!wallet) console.warn('Wallet konnte nicht geladen werden');
@@ -4610,7 +4633,6 @@
           analyticsSummary = analyticsData;
           renderAnalytics(analyticsData);
         }
-        await loadPremiumData();
         markUpdated();
         veLogState('refresh_ok', resolvedWallet ? String(resolvedWallet.balance_usdt) : 'no-wallet');
       } catch (e) {
@@ -4621,10 +4643,12 @@
         if (lastEl) lastEl.textContent = quiet ? 'Offline — letzte bekannte Daten' : 'Aktualisieren fehlgeschlagen';
         showWalletSnapshot();
       } finally {
+        ensureWalletVisible();
         if (refreshBtn) refreshBtn.classList.remove('is-loading');
         if (appEl) appEl.classList.remove('is-loading');
         requestAnimationFrame(forceLayoutFix);
       }
+      void loadPremiumData().catch(() => {});
     }
 
     async function shareReferral() {
@@ -4916,12 +4940,13 @@
         await loadAdConfig();
         try {
           invalidateUserDataCache();
-          await refresh({ bustCache: true, quiet: true });
+          await refresh({ bustCache: true, quiet: true, showLoading: true });
         } catch (e) {
           if (isAuthError(e)) {
             handleAuthFailure({ silent: true });
           } else {
             showWalletSnapshot();
+            ensureWalletVisible();
             veLogState('bootstrap_refresh_fail', e.message || 'unknown');
           }
         }
@@ -4948,7 +4973,7 @@
     document.getElementById('accept-age')?.addEventListener('input', () => syncRegisterButtonState());
     initRegisterBtn();
     syncRegisterButtonState();
-    document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true }));
+    document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true, showLoading: true }));
 
     (function initPullToRefresh() {
       let startY = 0;
@@ -4967,7 +4992,7 @@
         const pull = e.changedTouches[0].clientY - startY;
         if (ptr) ptr.classList.remove('active');
         if (pull > 72 && token && window.scrollY <= 0) {
-          refresh({ quiet: true, bustCache: true }).catch(() => {});
+          refresh({ quiet: true, bustCache: true, showLoading: true }).catch(() => {});
         }
         startY = 0;
       }, { passive: true });

@@ -12,7 +12,8 @@
       --bg: #070B14;
       --surface: #0D1420;
       --card: #111A28;
-      --border: #1E2D42;
+      --border: #2a3d56;
+      --radius-card: 8px;
       --accent: #00D4AA;
       --accent-dim: rgba(0, 212, 170, 0.12);
       --text: #E8EEF5;
@@ -82,6 +83,14 @@
       outline-offset: 2px;
     }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button:active:not(:disabled) { transform: scale(0.97); }
+    button.btn-loading { position: relative; color: transparent !important; pointer-events: none; }
+    button.btn-loading::after {
+      content: ''; position: absolute; inset: 0; margin: auto; width: 1rem; height: 1rem;
+      border: 2px solid rgba(0,0,0,0.2); border-top-color: #04241c; border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .btn-primary { background: var(--accent); color: #04241c; }
     .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
     .btn-danger { background: rgba(255,107,107,0.15); color: var(--danger); border: 1px solid rgba(255,107,107,0.35); }
@@ -109,7 +118,7 @@
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: var(--radius-card);
       padding: 1.1rem 1.25rem;
       margin-bottom: 1rem;
     }
@@ -310,9 +319,12 @@
     .user-drawer {
       position: fixed; top: 0; right: 0; height: 100%; width: min(480px, 100vw);
       background: var(--card); border-left: 1px solid var(--border); z-index: 210;
-      transform: translateX(100%); transition: transform 0.28s ease;
+      transform: translateX(100%); transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
       display: flex; flex-direction: column; overflow: hidden;
     }
+    .empty-state { text-align: center; padding: 1.5rem 1rem; color: var(--muted); }
+    .empty-state .empty-title { margin: 0 0 0.35rem; font-weight: 600; color: var(--text); font-size: 0.9rem; }
+    .empty-state .empty-desc { margin: 0; font-size: 0.82rem; line-height: 1.45; }
     .user-drawer.open { transform: translateX(0); }
     .drawer-head { padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; }
     .drawer-body { padding: 1rem 1.1rem; overflow-y: auto; flex: 1; }
@@ -478,7 +490,7 @@
           </table>
         </div>
         <div class="pagination" id="payouts-pagination"></div>
-        <p id="payouts-empty" class="muted hidden">Keine Auszahlungen in dieser Ansicht.</p>
+        <p id="payouts-empty" class="empty-state hidden"><span class="empty-title">Keine Auszahlungen</span><span class="empty-desc">In dieser Filteransicht liegen keine Auszahlungsanfragen vor.</span></p>
       </div>
     </section>
 
@@ -876,7 +888,7 @@
         priority: parseInt(document.getElementById('ann-priority').value, 10) || 0,
         active: document.getElementById('ann-active').checked,
       };
-      if (!body.title || !body.body) { alert('Titel und Text sind Pflicht.'); return; }
+      if (!body.title || !body.body) { showError('Titel und Text sind Pflichtfelder.'); return; }
       try {
         await api('/admin/announcements', { method: 'POST', body: JSON.stringify(body) });
         document.getElementById('ann-msg').textContent = 'Ankündigung erstellt.';
@@ -1104,10 +1116,31 @@
       return Number(v).toFixed(6).replace(/\.?0+$/, '') + ' USDT';
     }
 
+    function friendlyError(err) {
+      const msg = String(err?.message || err || '');
+      const lower = msg.toLowerCase();
+      if (!navigator.onLine || lower.includes('failed to fetch')) {
+        return 'Keine Verbindung zum Server. Bitte Netzwerk prüfen und erneut versuchen.';
+      }
+      if (err?.status === 401 || err?.status === 503 || lower.includes('secret')) return AUTH_ERROR_DE;
+      return msg || 'Ein Fehler ist aufgetreten. Bitte erneut versuchen.';
+    }
+
     function showError(msg) {
       const el = document.getElementById('global-error');
-      el.textContent = msg;
-      el.classList.toggle('hidden', !msg);
+      const text = msg ? friendlyError(msg) : '';
+      el.textContent = text;
+      el.classList.toggle('hidden', !text);
+    }
+
+    function setButtonLoading(btn, loading) {
+      if (!btn) return;
+      btn.classList.toggle('btn-loading', loading);
+      btn.disabled = loading;
+    }
+
+    function adminEmpty(title, desc) {
+      return `<div class="empty-state"><p class="empty-title">${title}</p><p class="empty-desc">${desc}</p></div>`;
     }
 
     async function api(path, opts = {}) {
@@ -1303,7 +1336,7 @@
         document.getElementById('drawer-pane-ledger').innerHTML = ledger.length
           ? `<table><thead><tr><th>Datum</th><th>Titel</th><th>Betrag</th></tr></thead><tbody>
             ${ledger.map(e => `<tr><td>${new Date(e.occurred_at).toLocaleString('de-DE')}</td><td>${e.title}</td><td>${fmtUsdt(e.details?.amount_usdt)}</td></tr>`).join('')}
-            </tbody></table>` : '<p class="muted">Keine Ledger-Einträge</p>';
+            </tbody></table>` : adminEmpty('Keine Ledger-Einträge', 'Für diesen Nutzer liegen noch keine Buchungen vor.');
       } catch (_) {}
     }
 
@@ -1314,7 +1347,7 @@
         document.getElementById('drawer-pane-withdrawals').innerHTML = rows.length
           ? `<table><thead><tr><th>Datum</th><th>Betrag</th><th>Status</th></tr></thead><tbody>
             ${rows.map(p => `<tr><td>${new Date(p.created_at).toLocaleString('de-DE')}</td><td>${fmtUsdt(p.amount_usdt)}</td><td>${payoutStatusLabel(p.status)}</td></tr>`).join('')}
-            </tbody></table>` : '<p class="muted">Keine Auszahlungen</p>';
+            </tbody></table>` : adminEmpty('Keine Auszahlungen', 'Dieser Nutzer hat noch keine Auszahlung beantragt.');
       } catch (_) {}
     }
 
@@ -1342,7 +1375,7 @@
         const events = d.events || [];
         document.getElementById('drawer-pane-timeline').innerHTML = events.length
           ? `<ul class="user-list">${events.map(e => `<li><strong>${e.title}</strong><br><span class="muted">${new Date(e.occurred_at).toLocaleString('de-DE')}</span><br><code>${JSON.stringify(e.details)}</code></li>`).join('')}</ul>`
-          : '<p class="muted">Keine Ereignisse</p>';
+          : adminEmpty('Keine Ereignisse', 'Die Timeline ist für diesen Nutzer noch leer.');
       } catch (_) {}
     }
 
@@ -1539,7 +1572,7 @@
     async function confirmReject() {
       if (!rejectPayoutId) return;
       const reason = document.getElementById('reject-reason').value.trim();
-      if (!reason) { alert('Bitte eine Begründung angeben.'); return; }
+      if (!reason) { showError('Bitte eine Begründung angeben.'); return; }
       try {
         await api(`/admin/payouts/${rejectPayoutId}/reject`, {
           method: 'POST',
@@ -1829,8 +1862,8 @@
 
     async function executeBulkCredit() {
       const body = bulkRequestBody();
-      if (!body.reason) { alert('Bitte einen Grund angeben.'); return; }
-      if (!body.amount_usdt || Number(body.amount_usdt) <= 0) { alert('Bitte einen positiven Betrag eingeben.'); return; }
+      if (!body.reason) { showError('Bitte einen Grund angeben.'); return; }
+      if (!body.amount_usdt || Number(body.amount_usdt) <= 0) { showError('Bitte einen positiven Betrag eingeben.'); return; }
       try {
         const preview = await api('/admin/bulk/credit/preview', {
           method: 'POST',

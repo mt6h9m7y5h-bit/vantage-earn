@@ -40,12 +40,29 @@
       --warning: #F59E0B;
       --warning-soft: rgba(245, 158, 11, 0.1);
       --warning-border: rgba(245, 158, 11, 0.35);
-      --border: rgba(255, 255, 255, 0.08);
+      --border: rgba(255, 255, 255, 0.12);
+      --border-strong: rgba(255, 255, 255, 0.18);
       --input-bg: #0d1424;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
       --shadow: 0 1px 2px rgba(0, 0, 0, 0.24), 0 8px 32px rgba(0, 0, 0, 0.32);
-      --radius: 12px;
-      --radius-lg: 16px;
-      --radius-xl: 20px;
+      --shadow-card-hover: 0 4px 24px rgba(0, 0, 0, 0.28);
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 0.75rem;
+      --space-lg: 1rem;
+      --space-xl: 1.5rem;
+      --radius-card: 8px;
+      --radius: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --text-xs: 0.7rem;
+      --text-sm: 0.875rem;
+      --text-md: 1rem;
+      --text-lg: 1.25rem;
+      --text-xl: 1.5rem;
+      --heading-sm: 0.7rem;
+      --heading-md: 0.95rem;
+      --heading-lg: 1.25rem;
       --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
       --header-h: 56px;
       --accent: var(--success);
@@ -226,11 +243,12 @@
     .bottom-nav .nav-item {
       flex-direction: column;
       gap: 0.2rem;
-      padding: 0.45rem 0.25rem;
+      padding: 0.5rem 0.25rem;
       font-size: 0.65rem;
       border-radius: 10px;
       justify-content: center;
       min-width: 0;
+      min-height: 44px;
     }
     .bottom-nav .nav-item svg { width: 22px; height: 22px; }
     .fab-watch {
@@ -509,9 +527,9 @@
       background: var(--primary);
     }
     .icon-btn {
-      width: 36px;
-      height: 36px;
-      min-height: 36px;
+      width: 44px;
+      height: 44px;
+      min-height: 44px;
       padding: 0;
       margin: 0;
       border-radius: 10px;
@@ -526,7 +544,9 @@
       transition: color var(--transition), border-color var(--transition), background var(--transition);
     }
     .icon-btn:hover { color: var(--text); background: var(--surface-elevated); }
-    .icon-btn svg { width: 17px; height: 17px; }
+    .icon-btn svg { width: 18px; height: 18px; }
+    .icon-sm { width: 16px; height: 16px; flex-shrink: 0; }
+    .icon-md { width: 20px; height: 20px; flex-shrink: 0; }
     .icon-btn.is-loading svg { animation: spin 0.8s linear infinite; }
     .icon-btn.text-btn {
       width: auto;
@@ -547,11 +567,15 @@
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 1.25rem;
-      margin-bottom: 0.75rem;
-      box-shadow: var(--shadow);
-      transition: border-color var(--transition), transform var(--transition);
+      border-radius: var(--radius-card);
+      padding: var(--space-lg) var(--space-xl);
+      margin-bottom: var(--space-md);
+      box-shadow: var(--shadow-sm);
+      transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+    }
+    .card:hover {
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-card-hover);
     }
     .card-title {
       font-size: 0.7rem;
@@ -705,8 +729,29 @@
       touch-action: manipulation;
       transition: background var(--transition), opacity var(--transition), transform var(--transition);
     }
-    button:active:not(:disabled) { transform: scale(0.98); }
+    button:active:not(:disabled) { transform: scale(0.97); }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.btn-loading {
+      position: relative;
+      color: transparent !important;
+      pointer-events: none;
+    }
+    button.btn-loading::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 1.1rem;
+      height: 1.1rem;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    .secondary.btn-loading::after {
+      border-color: rgba(148,163,184,0.35);
+      border-top-color: var(--text);
+    }
     .primary {
       background: var(--primary);
       color: #fff;
@@ -752,6 +797,19 @@
       border-color: var(--primary);
       box-shadow: 0 0 0 3px var(--primary-soft);
     }
+    input.field-invalid, .payout-method-select.field-invalid {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px var(--danger-soft);
+    }
+    .field-error {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--danger);
+      margin: -0.25rem 0 0.5rem;
+      font-weight: 500;
+      min-height: 1.1rem;
+    }
+    .field-error:empty { display: none; }
     .auth-card {
       text-align: center;
       padding: 2rem 1.25rem;
@@ -832,6 +890,43 @@
       background: var(--success-soft);
       border: 1px solid rgba(16, 185, 129, 0.3);
       color: var(--success);
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+    .toast-check {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 50%;
+      background: var(--success);
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .toast-check svg { width: 0.9rem; height: 0.9rem; }
+    .toast-check-path {
+      stroke-dasharray: 24;
+      stroke-dashoffset: 24;
+      animation: toast-check-draw 0.45s ease forwards 0.1s;
+    }
+    @keyframes toast-check-draw {
+      to { stroke-dashoffset: 0; }
+    }
+    #retry-banner {
+      background: var(--warning-soft);
+      border: 1px solid var(--warning-border);
+      color: var(--text);
+      font-size: 0.8rem;
+    }
+    #confetti-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 199;
     }
     .row {
       display: flex;
@@ -967,6 +1062,54 @@
       text-align: center;
       padding: 1rem 0;
       font-weight: 500;
+    }
+    .empty-state {
+      text-align: center;
+      padding: var(--space-xl) var(--space-lg);
+      color: var(--muted);
+    }
+    .empty-icon-wrap {
+      width: 3rem;
+      height: 3rem;
+      margin: 0 auto var(--space-md);
+      border-radius: 50%;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+    }
+    .empty-icon-wrap svg { width: 1.35rem; height: 1.35rem; }
+    .empty-title {
+      margin: 0 0 0.35rem;
+      font-size: var(--text-sm);
+      font-weight: 700;
+      color: var(--text);
+    }
+    .empty-desc {
+      margin: 0 0 var(--space-md);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      max-width: 280px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .empty-cta .secondary, .empty-cta .primary {
+      width: auto;
+      display: inline-block;
+      margin-top: 0;
+      min-height: 44px;
+      padding: 0.65rem 1.1rem;
+      font-size: 0.85rem;
+    }
+    .skeleton-block {
+      background: linear-gradient(90deg, var(--surface-elevated) 25%, var(--surface-hover) 50%, var(--surface-elevated) 75%);
+      background-size: 200% 100%;
+      animation: skeleton 1.2s ease-in-out infinite;
+      border-radius: var(--radius-card);
+      min-height: 3.5rem;
+      margin-bottom: var(--space-sm);
     }
     .demo-badge {
       display: inline-block;
@@ -1216,9 +1359,24 @@
     .onboarding-check.done { color: var(--success); }
     #profile-view.is-loading .stat-value,
     #rewards-view.is-loading .mission-card,
-    #wallet-view.is-loading #ledger {
+    #wallet-view.is-loading #ledger,
+    #payouts-view.is-loading #payout-timeline-list,
+    #notifications-view.is-loading #notifications-list,
+    #referrals-view.is-loading #referral-stats {
       opacity: 0.45;
       pointer-events: none;
+    }
+    #profile-view.is-loading .stat-value::after,
+    #wallet-view.is-loading #ledger::after,
+    #notifications-view.is-loading #notifications-list::after {
+      content: '';
+      display: block;
+      height: 3rem;
+      margin-top: var(--space-sm);
+      border-radius: var(--radius-card);
+      background: linear-gradient(90deg, var(--surface-elevated) 25%, var(--surface-hover) 50%, var(--surface-elevated) 75%);
+      background-size: 200% 100%;
+      animation: skeleton 1.2s ease-in-out infinite;
     }
     .sr-only {
       position: absolute;
@@ -1242,14 +1400,17 @@
       <span>Neue Version verfügbar</span>
       <button class="primary copy-btn" type="button" onclick="applyAppUpdate()" aria-label="App-Update installieren">Update</button>
     </div>
-    <div id="success-banner" class="toast hidden" role="status"></div>
+    <div id="retry-banner" class="toast hidden" role="status" aria-live="polite"></div>
+    <div id="success-banner" class="toast hidden" role="status" aria-live="polite"></div>
   </div>
+  <canvas id="confetti-canvas" class="hidden" aria-hidden="true"></canvas>
 
   <div id="auth-card" class="card auth-card auth-screen">
     <div class="brand-mark" aria-hidden="true">V</div>
     <p class="card-title">Willkommen bei VANTAGE</p>
     <p class="auth-hint">Institutionelles Watch-to-Earn. Starte in Sekunden — kein Passwort, dein Gerät bleibt angemeldet.</p>
-    <input id="referral" placeholder="Referral-Code (optional)" autocomplete="off" />
+    <input id="referral" placeholder="Empfehlungscode (optional)" autocomplete="off" aria-describedby="referral-error" />
+    <span id="referral-error" class="field-error" role="alert"></span>
     <label class="terms-accept" for="accept-terms">
       <input type="checkbox" id="accept-terms" name="accept-terms" required />
       <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
@@ -1468,7 +1629,7 @@
         </section>
 
         <!-- Referrals -->
-        <section class="view hidden" data-view="referrals">
+        <section class="view hidden" data-view="referrals" id="referrals-view">
           <div class="kpi-strip" id="referral-stats">
             <div class="stat-tile"><span class="stat-label">Verdienst</span><span class="stat-value success" id="ref-earnings">—</span></div>
             <div class="stat-tile"><span class="stat-label">Aktiv</span><span class="stat-value" id="ref-active">—</span></div>
@@ -1487,7 +1648,7 @@
         </section>
 
         <!-- Payouts -->
-        <section class="view hidden" data-view="payouts">
+        <section class="view hidden" data-view="payouts" id="payouts-view">
           <section class="card" id="payout-section">
             <h2 class="section-title">Auszahlung <span id="demo-badge" class="demo-badge hidden">DEMO</span></h2>
             <div class="progress-wrap">
@@ -1513,7 +1674,8 @@
               <div class="payout-timing-note" id="payout-first-time-note"></div>
             </div>
             <p class="payout-hint" id="payout-threshold-hint"></p>
-            <button class="primary" id="payout-btn" onclick="requestPayout()">Alles auszahlen</button>
+            <span id="payout-error" class="field-error" role="alert"></span>
+            <button class="primary" id="payout-btn" type="button" onclick="requestPayout()">Alles auszahlen</button>
           </section>
           <section class="card" id="payout-history-card">
             <h2 class="section-title">Auszahlungsstatus</h2>
@@ -1665,17 +1827,7 @@
           <section class="card">
             <div class="hero-top" style="margin-bottom:0.75rem">
               <h2 class="section-title" style="margin:0">Benachrichtigungen</h2>
-              <button class="secondary copy-btn" type="button" onclick="markAllNotificationsRead()">Alle gelesen</button>
-            </div>
-            <div id="notifications-list"><p class="empty">Keine Benachrichtigungen</p></div>
-          </section>
-        </section>
-
-        <section class="view hidden" data-view="notifications" id="notifications-view">
-          <section class="card">
-            <div class="hero-top" style="margin-bottom:0.75rem">
-              <h2 class="section-title" style="margin:0">Benachrichtigungen</h2>
-              <button class="secondary copy-btn" type="button" onclick="markAllNotificationsRead()">Alle gelesen</button>
+              <button class="secondary copy-btn" type="button" onclick="markAllNotificationsRead()" aria-label="Alle Benachrichtigungen als gelesen markieren">Alle gelesen</button>
             </div>
             <div id="notifications-list"><p class="empty">Keine Benachrichtigungen</p></div>
           </section>
@@ -1781,6 +1933,178 @@
     const REFERRER_BONUS = '0.001';
     const REFEREE_BONUS = '0.001';
     const MIN_WATCH_SECS = 15;
+    let refreshInFlight = null;
+    let submitInFlight = false;
+    const _fetchCache = new Map();
+    const _fetchInflight = new Map();
+
+    const EMPTY_ICONS = {
+      bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+      wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15v-7"/></svg>',
+      payout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+      users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+      star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+      chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+      gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+    };
+
+    function emptyState(iconKey, title, desc, ctaHtml) {
+      const icon = EMPTY_ICONS[iconKey] || EMPTY_ICONS.star;
+      return `<div class="empty-state">
+        <div class="empty-icon-wrap" aria-hidden="true">${icon}</div>
+        <p class="empty-title">${title}</p>
+        <p class="empty-desc">${desc}</p>
+        ${ctaHtml ? `<div class="empty-cta">${ctaHtml}</div>` : ''}
+      </div>`;
+    }
+
+    function friendlyError(err) {
+      const msg = String(err?.message || err || '');
+      const lower = msg.toLowerCase();
+      if (msg === 'offline' || lower === 'offline' || (!navigator.onLine && !msg)) {
+        return 'Keine Verbindung. Bitte WLAN oder mobile Daten prüfen und erneut versuchen.';
+      }
+      if (msg === 'timeout' || lower.includes('abort')) {
+        return 'Zeitüberschreitung — der Server antwortet nicht. Bitte in 30 Sekunden erneut versuchen.';
+      }
+      if (msg === 'network' || lower.includes('failed to fetch') || lower.includes('networkerror')) {
+        return 'Server nicht erreichbar. Bitte kurz warten und erneut versuchen.';
+      }
+      if (lower.includes('429') || lower.includes('too many') || lower.includes('zu viele')) {
+        return 'Zu viele Anfragen. Bitte 10 Sekunden warten und erneut versuchen.';
+      }
+      if (lower.includes('unauthorized') || lower.includes('401') || lower.includes('invalid token')) {
+        return 'Sitzung abgelaufen. Bitte erneut „Kostenlos starten“.';
+      }
+      if (lower.includes('mindestbetrag') || lower.includes('minimum')) {
+        return 'Mindestbetrag noch nicht erreicht. Schau weiter Videos, um auszahlen zu können.';
+      }
+      if (msg.length > 24) return msg;
+      return msg || 'Ein unerwarteter Fehler ist aufgetreten. Bitte erneut versuchen.';
+    }
+
+    function setButtonLoading(btn, loading) {
+      if (!btn) return;
+      btn.classList.toggle('btn-loading', loading);
+      btn.disabled = loading || btn.dataset.forceDisabled === 'true';
+    }
+
+    function showRetryBanner(msg) {
+      const el = document.getElementById('retry-banner');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function hideRetryBanner() {
+      document.getElementById('retry-banner')?.classList.add('hidden');
+    }
+
+    function launchConfetti() {
+      const canvas = document.getElementById('confetti-canvas');
+      if (!canvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      canvas.classList.remove('hidden');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const colors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6'];
+      const pieces = Array.from({ length: 48 }, () => ({
+        x: Math.random() * canvas.width,
+        y: -10 - Math.random() * canvas.height * 0.3,
+        r: 3 + Math.random() * 4,
+        d: 2 + Math.random() * 3,
+        c: colors[Math.floor(Math.random() * colors.length)],
+        tilt: Math.random() * 10,
+      }));
+      let frame = 0;
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pieces.forEach((p) => {
+          p.y += p.d;
+          p.x += Math.sin(frame / 10 + p.tilt);
+          ctx.fillStyle = p.c;
+          ctx.fillRect(p.x, p.y, p.r, p.r * 0.6);
+        });
+        frame += 1;
+        if (frame < 90) requestAnimationFrame(draw);
+        else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          canvas.classList.add('hidden');
+        }
+      }
+      draw();
+    }
+
+    function showSuccessCelebration(msg, withConfetti = true) {
+      const el = document.getElementById('success-banner');
+      if (!el) return;
+      el.innerHTML = '<span class="toast-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path class="toast-check-path" d="M20 6L9 17l-5-5"/></svg></span><span>' + msg + '</span>';
+      el.classList.remove('hidden');
+      el.setAttribute('role', 'status');
+      document.getElementById('error-banner')?.classList.add('hidden');
+      if (withConfetti) launchConfetti();
+      setTimeout(() => el.classList.add('hidden'), 6000);
+    }
+
+    async function apiFetch(path, opts = {}) {
+      const url = path.startsWith('http') ? path : API + path;
+      const method = (opts.method || 'GET').toUpperCase();
+      const cacheKey = method + ':' + url + ':' + (opts.body || '');
+      const isGet = method === 'GET';
+
+      if (isGet) {
+        const cached = _fetchCache.get(cacheKey);
+        if (cached && Date.now() - cached.at < 500) return cached.promise;
+        const inflight = _fetchInflight.get(cacheKey);
+        if (inflight) return inflight;
+      }
+
+      const maxRetries = 2;
+      const backoff = [1000, 2000];
+
+      const run = async () => {
+        let lastErr;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          if (attempt > 0) {
+            showRetryBanner('Verbindung instabil — erneuter Versuch (' + attempt + '/' + maxRetries + ')…');
+            await new Promise((r) => setTimeout(r, backoff[attempt - 1]));
+          }
+          const controller = new AbortController();
+          const timeoutMs = opts.timeoutMs || 20000;
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          try {
+            const res = await fetch(url, {
+              ...opts,
+              cache: 'no-store',
+              signal: controller.signal,
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: 'Bearer ' + token } : {}),
+                ...opts.headers,
+              },
+            });
+            clearTimeout(timer);
+            hideRetryBanner();
+            return res;
+          } catch (err) {
+            clearTimeout(timer);
+            lastErr = err;
+            if (attempt === maxRetries) hideRetryBanner();
+          }
+        }
+        if (lastErr?.name === 'AbortError') throw new Error('timeout');
+        if (!navigator.onLine) throw new Error('offline');
+        throw new Error('network');
+      };
+
+      const promise = run();
+      if (isGet) {
+        _fetchInflight.set(cacheKey, promise);
+        promise.finally(() => _fetchInflight.delete(cacheKey));
+        _fetchCache.set(cacheKey, { at: Date.now(), promise });
+      }
+      return promise;
+    }
 
     const VIEW_TITLES = {
       dashboard: ['Dashboard', 'Übersicht'],
@@ -1866,9 +2190,17 @@
     function renderBarChart(svgEl, series) {
       if (!svgEl) return;
       if (!series || !series.length) {
-        svgEl.innerHTML = '<text x="160" y="90" text-anchor="middle" class="analytics-chart-axis">Noch keine Verdienstdaten</text>';
+        svgEl.innerHTML = '';
+        const wrap = svgEl.closest('.analytics-chart-wrap');
+        if (wrap && !wrap.querySelector('.empty-state')) {
+          const placeholder = document.createElement('div');
+          placeholder.innerHTML = emptyState('chart', 'Noch keine Verdienstdaten', 'Schau dein erstes Video — hier siehst du bald deine täglichen Einnahmen.', '<button class="primary" type="button" onclick="navigateToView(\'earn\')">Video ansehen</button>');
+          wrap.appendChild(placeholder.firstElementChild);
+        }
         return;
       }
+      const wrap = svgEl.closest('.analytics-chart-wrap');
+      wrap?.querySelector('.empty-state')?.remove();
       const values = series.map((d) => parseFloat(d.usdt) || 0);
       const max = Math.max(...values, 0.000001);
       const w = 320;
@@ -2103,7 +2435,7 @@
       }
       try {
         await navigator.clipboard.writeText(code);
-        showSuccess('Code kopiert: ' + code);
+        showSuccessCelebration('Code kopiert — teile ihn mit Freunden!');
       } catch {
         showError('Kopieren fehlgeschlagen.');
       }
@@ -2152,6 +2484,7 @@
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('ve_theme', next);
       updateThemeButton(next);
+      showSuccessCelebration('Design gespeichert', false);
     }
 
     initTheme();
@@ -2626,15 +2959,22 @@
 
     function showError(msg) {
       const el = document.getElementById('error-banner');
-      el.textContent = msg;
+      const text = friendlyError(msg);
+      el.textContent = text;
       el.classList.remove('hidden');
+      el.setAttribute('role', 'alert');
       document.getElementById('success-banner').classList.add('hidden');
     }
 
-    function showSuccess(msg) {
+    function showSuccess(msg, celebrate = false) {
+      if (celebrate) {
+        showSuccessCelebration(msg);
+        return;
+      }
       const el = document.getElementById('success-banner');
       el.textContent = msg;
       el.classList.remove('hidden');
+      el.setAttribute('role', 'status');
       document.getElementById('error-banner').classList.add('hidden');
       setTimeout(() => el.classList.add('hidden'), 6000);
     }
@@ -2739,33 +3079,15 @@
 
     async function api(path, opts = {}) {
       if (!navigator.onLine) {
-        showError('Kein Internet. Bitte WLAN oder mobile Daten prüfen.');
+        showError('offline');
         throw new Error('offline');
       }
-      const controller = new AbortController();
-      const timeoutMs = opts.timeoutMs || 20000;
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
       let res;
       try {
-        res = await fetch(API + path, {
-          ...opts,
-          cache: 'no-store',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: 'Bearer ' + token } : {}),
-            ...opts.headers,
-          },
-        });
+        res = await apiFetch(path, opts);
       } catch (err) {
-        if (err.name === 'AbortError') {
-          showError('Zeitüberschreitung — Server antwortet nicht. Bei Render Free Tier: 30s warten und erneut versuchen.');
-          throw new Error('timeout');
-        }
-        showError('Server nicht erreichbar. Läuft der Server? Lokal: ./scripts/restart-dev.sh');
-        throw new Error('network');
-      } finally {
-        clearTimeout(timer);
+        showError(err.message || 'network');
+        throw err;
       }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -2835,7 +3157,7 @@
       const el = document.getElementById('leaderboard-list');
       const entries = data?.entries || [];
       if (!entries.length) {
-        el.innerHTML = '<p class="empty">Noch keine Verdiener diese Woche</p>';
+        el.innerHTML = emptyState('star', 'Noch keine Verdiener', 'Diese Woche hat noch niemand verdient. Sei der Erste!', '<button class="primary" type="button" onclick="navigateToView(\'earn\')">Jetzt verdienen</button>');
         return;
       }
       el.innerHTML = entries.map(e => {
@@ -2876,6 +3198,7 @@
         btn.title = 'Benachrichtigungen aktiv';
         btn.setAttribute('aria-label', 'Benachrichtigungen aktiv');
         scheduleStreakReminder();
+        showSuccessCelebration('Benachrichtigungen aktiviert', false);
         log('Streak-Erinnerungen aktiviert (lokal, kein Push-Server)');
       } else {
         showError('Benachrichtigungen abgelehnt — nutze die In-App-Warnung abends.');
@@ -2928,7 +3251,7 @@
 
       const catalog = statsData.bonus_catalog || [];
       if (!catalog.length) {
-        list.innerHTML = '<p class="empty">Keine Boni verfügbar</p>';
+        list.innerHTML = emptyState('gift', 'Keine Boni verfügbar', 'Schau Videos und halte deinen Streak, um Boni freizuschalten.', '<button class="primary" type="button" onclick="navigateToView(\'earn\')">Video ansehen</button>');
         return;
       }
       list.innerHTML = catalog.map(item => {
@@ -2952,7 +3275,7 @@
       const el = document.getElementById('ledger');
       const dashEl = document.getElementById('dashboard-ledger');
       if (!entries || entries.length === 0) {
-        const empty = '<p class="empty">Noch keine Einträge</p>';
+        const empty = emptyState('wallet', 'Noch keine Transaktionen', 'Deine Gutschriften und Abbuchungen erscheinen hier, sobald du verdienst.', '<button class="primary" type="button" onclick="navigateToView(\'earn\')">Erstes Video schauen</button>');
         if (el) el.innerHTML = empty;
         if (dashEl) dashEl.innerHTML = empty;
         return;
@@ -2998,7 +3321,7 @@
       const el = document.getElementById(containerId);
       if (!el) return;
       if (!missions || !missions.length) {
-        el.innerHTML = '';
+        el.innerHTML = emptyState('star', 'Keine Missionen', 'Neue Missionen erscheinen täglich — schau bald wieder vorbei.', '<button class="secondary" type="button" onclick="loadMissions()">Aktualisieren</button>');
         return;
       }
       el.innerHTML = `<h3 class="section-title" style="font-size:0.9rem;margin:0 0 0.5rem">${title}</h3>
@@ -3023,6 +3346,16 @@
 
     function renderMissions(data) {
       if (!data) return;
+      const allEmpty = !(data.daily?.length || data.weekly?.length || data.monthly?.length);
+      const dailyEl = document.getElementById('missions-daily');
+      if (allEmpty && dailyEl) {
+        dailyEl.innerHTML = emptyState('star', 'Keine aktiven Missionen', 'Schau Videos, um Missionen zu starten und XP zu sammeln.', '<button class="primary" type="button" onclick="navigateToView(\'earn\')">Jetzt verdienen</button>');
+        const w = document.getElementById('missions-weekly');
+        const m = document.getElementById('missions-monthly');
+        if (w) w.innerHTML = '';
+        if (m) m.innerHTML = '';
+        return;
+      }
       renderMissionGroup('missions-daily', 'Täglich', data.daily);
       renderMissionGroup('missions-weekly', 'Wöchentlich', data.weekly);
       renderMissionGroup('missions-monthly', 'Monatlich', data.monthly);
@@ -3042,12 +3375,16 @@
     }
 
     async function claimMission(id) {
+      if (submitInFlight) return;
+      submitInFlight = true;
       try {
         const data = await api(`/users/me/missions/${id}/claim`, { method: 'POST', body: '{}' });
-        showSuccess('Mission abgeholt: +' + data.credited_usdt + ' USDT');
+        showSuccessCelebration('Mission abgeholt: +' + data.credited_usdt + ' USDT');
         await Promise.all([loadMissions(), refresh(), loadNotifications()]);
       } catch (e) {
         if (!isAuthError(e)) showError(e.message || 'Abholen fehlgeschlagen');
+      } finally {
+        submitInFlight = false;
       }
     }
 
@@ -3125,6 +3462,8 @@
     }
 
     async function loadReferralDashboard() {
+      const view = document.getElementById('referrals-view');
+      if (view) view.classList.add('is-loading');
       try {
         const d = await api('/users/me/referrals/dashboard');
         setText('ref-earnings', formatUsdt(d.total_earnings_usdt));
@@ -3136,6 +3475,8 @@
         }
       } catch (e) {
         if (!isAuthError(e)) console.warn('Referral-Dashboard fehlgeschlagen', e);
+      } finally {
+        if (view) view.classList.remove('is-loading');
       }
     }
 
@@ -3143,7 +3484,7 @@
       const el = document.getElementById('payout-timeline-list');
       if (!el) return;
       if (!rows || !rows.length) {
-        el.innerHTML = '<p class="empty">Noch keine Auszahlungen</p>';
+        el.innerHTML = emptyState('payout', 'Noch keine Auszahlungen', 'Sobald du den Mindestbetrag erreichst, kannst du hier deine Auszahlungen verfolgen.', '<button class="secondary" type="button" onclick="navigateToView(\'payouts\')">Zur Auszahlung</button>');
         return;
       }
       el.innerHTML = rows.map((p) => {
@@ -3159,11 +3500,15 @@
     }
 
     async function loadPayoutTimeline() {
+      const view = document.getElementById('payouts-view');
+      if (view) view.classList.add('is-loading');
       try {
         const rows = await api('/users/me/payouts');
         renderPayoutTimeline(rows);
       } catch (e) {
         if (!isAuthError(e)) console.warn('Auszahlungen laden fehlgeschlagen', e);
+      } finally {
+        if (view) view.classList.remove('is-loading');
       }
     }
 
@@ -3185,7 +3530,7 @@
       if (!el) return;
       const list = data?.notifications || [];
       if (!list.length) {
-        el.innerHTML = '<p class="empty">Keine Benachrichtigungen</p>';
+        el.innerHTML = emptyState('bell', 'Keine Benachrichtigungen', 'Hier erscheinen Erfolge, Boni und wichtige Updates zu deinem Konto.', '<button class="secondary" type="button" onclick="navigateToView(\'earn\')">Verdienen starten</button>');
         return;
       }
       el.innerHTML = list.map((n) => {
@@ -3199,11 +3544,15 @@
     }
 
     async function loadNotifications() {
+      const view = document.getElementById('notifications-view');
+      if (view) view.classList.add('is-loading');
       try {
         const data = await api('/users/me/notifications');
         renderNotifications(data);
       } catch (e) {
         if (!isAuthError(e)) console.warn('Benachrichtigungen fehlgeschlagen', e);
+      } finally {
+        if (view) view.classList.remove('is-loading');
       }
     }
 
@@ -3274,15 +3623,26 @@
     }
 
     async function register() {
+      if (submitInFlight) return;
       const btn = document.getElementById('register-btn');
       const terms = document.getElementById('accept-terms');
+      const referralInput = document.getElementById('referral');
+      const referralErr = document.getElementById('referral-error');
+      if (referralErr) referralErr.textContent = '';
+      if (referralInput) referralInput.classList.remove('field-invalid');
       if (!terms?.checked) {
         showError('Bitte AGB und Datenschutzerklärung akzeptieren.');
         return;
       }
-      if (btn) btn.disabled = true;
+      const referral_code = referralInput?.value.trim() || undefined;
+      if (referral_code && !/^[A-Za-z0-9_-]{4,32}$/.test(referral_code)) {
+        if (referralErr) referralErr.textContent = 'Ungültiger Code — nur Buchstaben, Zahlen, Binde- und Unterstrich (4–32 Zeichen).';
+        referralInput?.classList.add('field-invalid');
+        return;
+      }
+      submitInFlight = true;
+      setButtonLoading(btn, true);
       try {
-        const referral_code = document.getElementById('referral').value.trim() || undefined;
         const body = {
           locale: 'de_DE',
           accept_terms: true,
@@ -3296,13 +3656,15 @@
         setAppChromeVisible(true);
         navigateToView('dashboard');
         log('Account erstellt: ' + data.user_id.slice(0, 8) + '…');
+        showSuccessCelebration('Willkommen bei VANTAGE!');
         await refresh();
       } catch (e) {
         if (!isAuthError(e)) {
           showError(e.message || 'Registrierung fehlgeschlagen');
         }
       } finally {
-        if (btn) btn.disabled = false;
+        submitInFlight = false;
+        setButtonLoading(btn, false);
       }
     }
 
@@ -3335,6 +3697,12 @@
     }
 
     async function refresh() {
+      if (refreshInFlight) return refreshInFlight;
+      refreshInFlight = doRefresh().finally(() => { refreshInFlight = null; });
+      return refreshInFlight;
+    }
+
+    async function doRefresh() {
       if (!token) {
         showError('Nicht angemeldet — bitte „Kostenlos starten“.');
         return;
@@ -3617,7 +3985,7 @@
           body: JSON.stringify(body),
         });
         console.log('[VE] WATCH RESPONSE', data);
-        showSuccess(data.message);
+        showSuccessCelebration(data.message || 'Belohnung gutgeschrieben!');
         applyWatchResponse(data);
         log(data.message);
         if (data.bonuses && data.bonuses.length) {
@@ -3648,14 +4016,24 @@
     }
 
     async function requestPayout() {
+      if (submitInFlight) return;
       const balance = window._balance;
       const method = document.getElementById('payout-method').value;
+      const payoutErr = document.getElementById('payout-error');
+      if (payoutErr) payoutErr.textContent = '';
       if (!balance || parseFloat(balance) < parseFloat(stats?.min_payout_usdt || '0')) {
-        showError('Mindestbetrag noch nicht erreicht.');
+        const msg = 'Mindestbetrag noch nicht erreicht.';
+        if (payoutErr) payoutErr.textContent = msg;
+        showError(msg);
+        return;
+      }
+      if (!method) {
+        if (payoutErr) payoutErr.textContent = 'Bitte eine Auszahlungsmethode wählen.';
         return;
       }
       const btn = document.getElementById('payout-btn');
-      btn.disabled = true;
+      submitInFlight = true;
+      setButtonLoading(btn, true);
       try {
         const data = await api('/users/me/payout/request', {
           method: 'POST',
@@ -3664,9 +4042,17 @@
         const methodLabel = PAYOUT_METHOD_LABELS[data.payout_method] || data.payout_method;
         const timeHint = data.estimated_time_de ? ` — geschätzt ${data.estimated_time_de}` : '';
         log(`Auszahlung ${data.amount_usdt} USDT via ${methodLabel}${timeHint} — ${data.status} (${data.tier})`);
+        showSuccessCelebration('Auszahlung beantragt: ' + data.amount_usdt + ' USDT');
         await refresh();
+      } catch (e) {
+        if (!isAuthError(e) && payoutErr) payoutErr.textContent = friendlyError(e);
       } finally {
-        btn.disabled = false;
+        submitInFlight = false;
+        setButtonLoading(btn, false);
+        if (stats && window._balance) {
+          const canPayout = parseFloat(window._balance) >= parseFloat(stats.min_payout_usdt || '0');
+          if (btn) btn.disabled = !canPayout;
+        }
       }
     }
 

@@ -38,6 +38,7 @@ async fn main() {
     let state = AppState::connect().await;
     let app = Router::new()
         .merge(routes::router())
+        .layer(middleware::from_fn(mw::security_headers_middleware))
         .layer(middleware::from_fn(mw::enrich_json_errors))
         .layer(middleware::from_fn(mw::request_id_middleware))
         .layer(CorsLayer::permissive())

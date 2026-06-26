@@ -1825,7 +1825,7 @@
       <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
     </label>
     <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkbox oben aktivieren.</p>
-    <button class="primary btn-pending-terms" type="button" id="register-btn" onclick="window.register && window.register()">Kostenlos starten</button>
+    <button class="primary btn-pending-terms" type="button" id="register-btn" onclick="onRegisterBtnTap(event)">Kostenlos starten</button>
   </div>
 
   <div id="app" class="app-shell hidden">
@@ -4300,13 +4300,22 @@
       ]);
     }
 
+    function onRegisterBtnTap(e) {
+      const now = Date.now();
+      if (e?.type === 'click' && now - (window._registerTapAt || 0) < 450) return;
+      window._registerTapAt = now;
+      const terms = document.getElementById('accept-terms');
+      showBetaDebugToast('Tap · AGB ' + (terms?.checked ? '✓' : '✗'));
+      void register();
+    }
+
     function initRegisterBtn() {
       const btn = document.getElementById('register-btn');
       if (!btn || btn.dataset.registerWired === '1') return;
       btn.dataset.registerWired = '1';
       btn.addEventListener('touchend', (ev) => {
         ev.preventDefault();
-        if (typeof window.register === 'function') window.register();
+        onRegisterBtnTap({ type: 'touchend' });
       }, { passive: false });
     }
 

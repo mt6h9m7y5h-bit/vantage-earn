@@ -15,9 +15,8 @@ services:
     envVars:
       - key: RUST_ENV
         value: production
-      # Already set in Dashboard — avoid blueprint regeneration conflicts on sync
       - key: JWT_SECRET
-        sync: false
+        generateValue: true
       - key: ADMIN_SECRET
         generateValue: true
       - key: DATABASE_URL

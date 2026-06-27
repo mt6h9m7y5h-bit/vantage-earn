@@ -17,15 +17,36 @@ pub struct JwtService {
     decoding: DecodingKey,
 }
 
+fn non_empty_env(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+fn jwt_secret_from_env() -> String {
+    if let Some(secret) = non_empty_env("JWT_SECRET") {
+        return secret;
+    }
+    if let Some(secret) = non_empty_env("ADMIN_SECRET") {
+        tracing::warn!(
+            "JWT_SECRET not set — using ADMIN_SECRET for JWT signing; set JWT_SECRET explicitly in production"
+        );
+        return secret;
+    }
+    if std::env::var("RUST_ENV").as_deref() == Ok("production") {
+        tracing::error!(
+            "JWT_SECRET (or ADMIN_SECRET) must be set in production — check Render Dashboard → Environment"
+        );
+        std::process::exit(1);
+    }
+    tracing::warn!("JWT_SECRET not set — using insecure dev default");
+    "dev-secret-change-in-production".into()
+}
+
 impl JwtService {
     pub fn from_env() -> Self {
-        let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-            if std::env::var("RUST_ENV").as_deref() == Ok("production") {
-                panic!("JWT_SECRET must be set in production");
-            }
-            tracing::warn!("JWT_SECRET not set — using insecure dev default");
-            "dev-secret-change-in-production".into()
-        });
+        let secret = jwt_secret_from_env();
         Self {
             encoding: EncodingKey::from_secret(secret.as_bytes()),
             decoding: DecodingKey::from_secret(secret.as_bytes()),
@@ -56,5 +77,39 @@ impl JwtService {
         .map_err(|_| AppError::Unauthorized)?;
 
         Uuid::parse_str(&data.claims.sub).map_err(|_| AppError::Unauthorized)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn production_falls_back_to_admin_secret_for_jwt() {
+        let prior_jwt = std::env::var("JWT_SECRET").ok();
+        let prior_admin = std::env::var("ADMIN_SECRET").ok();
+        let prior_env = std::env::var("RUST_ENV").ok();
+
+        std::env::remove_var("JWT_SECRET");
+        std::env::set_var("ADMIN_SECRET", "render-generated-admin-secret");
+        std::env::set_var("RUST_ENV", "production");
+
+        let svc = JwtService::from_env();
+        let user_id = Uuid::new_v4();
+        let token = svc.issue(user_id).expect("issue with admin fallback");
+        assert_eq!(svc.verify(&token).expect("verify with admin fallback"), user_id);
+
+        match prior_jwt {
+            Some(v) => std::env::set_var("JWT_SECRET", v),
+            None => std::env::remove_var("JWT_SECRET"),
+        }
+        match prior_admin {
+            Some(v) => std::env::set_var("ADMIN_SECRET", v),
+            None => std::env::remove_var("ADMIN_SECRET"),
+        }
+        match prior_env {
+            Some(v) => std::env::set_var("RUST_ENV", v),
+            None => std::env::remove_var("RUST_ENV"),
+        }
     }
 }

@@ -1061,8 +1061,9 @@ impl AppState {
 
 async fn connect_store_with_retry(database_url: &str) -> Store {
     let dev = std::env::var("RUST_ENV").as_deref() == Ok("development");
-    let max_attempts = if dev { 1 } else { 3 };
-    const RETRY_SECS: u64 = 2;
+    // Render free-tier Postgres can take 30s+ to wake; allow more attempts in production.
+    let max_attempts = if dev { 1 } else { 8 };
+    const RETRY_SECS: u64 = 5;
     let mut last_err = None;
     for attempt in 1..=max_attempts {
         match Store::connect(database_url).await {

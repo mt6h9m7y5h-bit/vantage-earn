@@ -1331,21 +1331,22 @@
       }
     }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
-    #register-btn {
+    #auth-submit-btn {
       position: relative;
       z-index: 2;
       min-height: 52px;
+      width: 100%;
       -webkit-appearance: none;
       appearance: none;
       touch-action: manipulation;
     }
-    #register-btn:active { transform: none; opacity: 0.9; }
-    #register-btn.btn-loading {
+    #auth-submit-btn:active { transform: none; opacity: 0.9; }
+    #auth-submit-btn.btn-loading {
       pointer-events: auto;
       color: transparent !important;
       opacity: 0.85;
     }
-    #register-btn.btn-pending-terms { opacity: 0.72; }
+    #auth-submit-btn.btn-pending-terms { opacity: 0.72; }
     button.btn-loading {
       position: relative;
       color: transparent !important;
@@ -1446,6 +1447,34 @@
       line-height: 1.55;
       font-weight: 500;
     }
+    .auth-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin: 0 0 1rem;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 0.65rem 0.75rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .auth-tab.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .auth-card input[type="email"],
+    .auth-card input[type="password"] {
+      width: 100%;
+      margin-bottom: 0.65rem;
+      text-align: left;
+    }
+    #auth-submit-btn { margin-top: 0.35rem; }
     .terms-accept {
       display: flex;
       align-items: flex-start;
@@ -2060,19 +2089,29 @@
   <div id="auth-card" class="card auth-card auth-screen">
     <div class="brand-mark" aria-hidden="true">V</div>
     <p class="card-title">Willkommen bei VANTAGE</p>
-    <p class="auth-hint">Institutionelles Watch-to-Earn. Starte in Sekunden — kein Passwort, dein Gerät bleibt angemeldet.</p>
-    <input id="referral" placeholder="Empfehlungscode (optional)" autocomplete="off" aria-describedby="referral-error" />
-    <span id="referral-error" class="field-error" role="alert"></span>
-    <label class="terms-accept" for="accept-terms">
-      <input type="checkbox" id="accept-terms" name="accept-terms" required />
-      <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
-    </label>
-    <label class="terms-accept" for="accept-age">
-      <input type="checkbox" id="accept-age" name="accept-age" required />
-      <span>Ich bin mindestens 18 Jahre alt.</span>
-    </label>
-    <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Starten bitte die Checkboxen oben aktivieren.</p>
-    <button class="primary btn-pending-terms" type="button" id="register-btn">Kostenlos starten</button>
+    <p class="auth-hint" id="auth-hint">Melde dich an oder erstelle ein Konto — dein Guthaben bleibt auf allen Geräten gespeichert.</p>
+    <div class="auth-tabs" role="tablist" aria-label="Anmeldung">
+      <button type="button" class="auth-tab active" id="auth-tab-login" role="tab" aria-selected="true" onclick="setAuthMode('login')">Anmelden</button>
+      <button type="button" class="auth-tab" id="auth-tab-register" role="tab" aria-selected="false" onclick="setAuthMode('register')">Registrieren</button>
+    </div>
+    <input id="auth-email" type="email" placeholder="E-Mail" autocomplete="email" inputmode="email" aria-describedby="auth-email-error" />
+    <span id="auth-email-error" class="field-error" role="alert"></span>
+    <input id="auth-password" type="password" placeholder="Passwort (mind. 8 Zeichen)" autocomplete="current-password" aria-describedby="auth-password-error" />
+    <span id="auth-password-error" class="field-error" role="alert"></span>
+    <div id="auth-register-extras">
+      <input id="referral" placeholder="Empfehlungscode (optional)" autocomplete="off" aria-describedby="referral-error" />
+      <span id="referral-error" class="field-error" role="alert"></span>
+      <label class="terms-accept" for="accept-terms">
+        <input type="checkbox" id="accept-terms" name="accept-terms" required />
+        <span>Ich akzeptiere die <a href="/legal/agb" target="_blank" rel="noopener">AGB</a> und habe die <a href="/legal/datenschutz" target="_blank" rel="noopener">Datenschutzerklärung</a> gelesen.</span>
+      </label>
+      <label class="terms-accept" for="accept-age">
+        <input type="checkbox" id="accept-age" name="accept-age" required />
+        <span>Ich bin mindestens 18 Jahre alt.</span>
+      </label>
+      <p id="register-terms-hint" class="register-terms-hint" role="status">Zum Registrieren bitte die Checkboxen aktivieren.</p>
+    </div>
+    <button class="primary" type="button" id="auth-submit-btn">Anmelden</button>
   </div>
 
   <div id="app" class="app-shell hidden">
@@ -2499,6 +2538,22 @@
             </div>
             <button class="primary" type="button" onclick="shareReferral()">Einladungslink teilen</button>
           </section>
+          <section class="card hidden" id="profile-account-info-card">
+            <h2 class="section-title">Konto</h2>
+            <div class="profile-settings-row">
+              <span>E-Mail</span>
+              <span id="profile-email">—</span>
+            </div>
+          </section>
+          <section class="card hidden" id="profile-account-link-card">
+            <h2 class="section-title">Konto sichern</h2>
+            <p class="payout-hint">Verknüpfe E-Mail und Passwort, damit dein Guthaben auf anderen Geräten verfügbar bleibt.</p>
+            <input id="link-email" type="email" placeholder="E-Mail" autocomplete="email" />
+            <span id="link-email-error" class="field-error" role="alert"></span>
+            <input id="link-password" type="password" placeholder="Passwort (mind. 8 Zeichen)" autocomplete="new-password" />
+            <span id="link-password-error" class="field-error" role="alert"></span>
+            <button class="primary" type="button" id="link-account-btn" onclick="linkAccount()">Konto verknüpfen</button>
+          </section>
           <section class="card">
             <h2 class="section-title">Einstellungen</h2>
             <h3 class="section-title" style="font-size:0.9rem;margin-top:0">App</h3>
@@ -2657,7 +2712,6 @@
     ];
     let refreshInFlight = null;
     let submitInFlight = false;
-    let registerInFlight = false;
     const _fetchCache = new Map();
     const _fetchInflight = new Map();
 
@@ -2732,7 +2786,7 @@
 
     function setButtonLoading(btn, loading) {
       if (!btn) return;
-      if (btn.id === 'register-btn') {
+      if (btn.id === 'auth-submit-btn') {
         btn.classList.toggle('btn-loading', loading);
         btn.setAttribute('aria-busy', loading ? 'true' : 'false');
         return;
@@ -4547,6 +4601,17 @@
         }).join('');
       }
       updateOnboardingFromStats(ps);
+      const email = ps.email || null;
+      const infoCard = document.getElementById('profile-account-info-card');
+      const linkCard = document.getElementById('profile-account-link-card');
+      if (email) {
+        setText('profile-email', email);
+        infoCard?.classList.remove('hidden');
+        linkCard?.classList.add('hidden');
+      } else {
+        infoCard?.classList.add('hidden');
+        linkCard?.classList.remove('hidden');
+      }
     }
 
     async function loadProfileStats() {
@@ -4763,36 +4828,113 @@
       ]);
     }
 
-    function onRegisterBtnTap(e) {
+    let authMode = 'login';
+    let authInFlight = false;
+
+    function setAuthMode(mode) {
+      authMode = mode === 'register' ? 'register' : 'login';
+      document.getElementById('auth-tab-login')?.classList.toggle('active', authMode === 'login');
+      document.getElementById('auth-tab-register')?.classList.toggle('active', authMode === 'register');
+      document.getElementById('auth-tab-login')?.setAttribute('aria-selected', authMode === 'login' ? 'true' : 'false');
+      document.getElementById('auth-tab-register')?.setAttribute('aria-selected', authMode === 'register' ? 'true' : 'false');
+      document.getElementById('auth-register-extras')?.classList.toggle('hidden', authMode !== 'register');
+      const btn = document.getElementById('auth-submit-btn');
+      if (btn) btn.textContent = authMode === 'login' ? 'Anmelden' : 'Kostenlos starten';
+      const pwd = document.getElementById('auth-password');
+      if (pwd) pwd.autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+      syncAuthButtonState();
+    }
+
+    function readAuthCredentials() {
+      const email = document.getElementById('auth-email')?.value.trim() || '';
+      const password = document.getElementById('auth-password')?.value || '';
+      const emailErr = document.getElementById('auth-email-error');
+      const pwdErr = document.getElementById('auth-password-error');
+      if (emailErr) emailErr.textContent = '';
+      if (pwdErr) pwdErr.textContent = '';
+      document.getElementById('auth-email')?.classList.remove('field-invalid');
+      document.getElementById('auth-password')?.classList.remove('field-invalid');
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (emailErr) emailErr.textContent = 'Bitte eine gültige E-Mail eingeben.';
+        document.getElementById('auth-email')?.classList.add('field-invalid');
+        return null;
+      }
+      if (password.length < 8) {
+        if (pwdErr) pwdErr.textContent = 'Passwort muss mindestens 8 Zeichen haben.';
+        document.getElementById('auth-password')?.classList.add('field-invalid');
+        return null;
+      }
+      return { email, password };
+    }
+
+    function applyAuthSuccess(data, message) {
+      token = data.token;
+      localStorage.setItem('ve_token', token);
+      if (data.email) localStorage.setItem('ve_email', data.email);
+      document.getElementById('auth-card').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      setAuthScreenActive(false);
+      setAppChromeVisible(true);
+      navigateToView('dashboard');
+      log(message || ('Angemeldet: ' + (data.email || data.user_id.slice(0, 8) + '…')));
+      showSuccessCelebration(message || 'Willkommen bei VANTAGE!');
+      void refresh({ quiet: true, bustCache: true }).catch(() => {});
+    }
+
+    function onAuthSubmitTap(e) {
       const now = Date.now();
       if (now - (window._registerTapAt || 0) < 450) return;
       window._registerTapAt = now;
-      const terms = document.getElementById('accept-terms');
-      const age = document.getElementById('accept-age');
-      showBetaDebugToast('Tap · AGB ' + (terms?.checked ? '✓' : '✗') + ' · 18+ ' + (age?.checked ? '✓' : '✗'));
-      void doRegisterAccount();
+      if (authMode === 'login') void doLoginAccount();
+      else void doRegisterAccount();
     }
 
-    function initRegisterBtn() {
-      const btn = document.getElementById('register-btn');
+    function initAuthSubmitBtn() {
+      const btn = document.getElementById('auth-submit-btn');
       if (!btn || btn.dataset.registerWired === '1') return;
       btn.dataset.registerWired = '1';
       btn.addEventListener('touchend', (ev) => {
         ev.preventDefault();
-        onRegisterBtnTap({ type: 'touchend' });
+        onAuthSubmitTap({ type: 'touchend' });
       }, { passive: false });
       btn.addEventListener('click', () => {
-        onRegisterBtnTap({ type: 'click' });
+        onAuthSubmitTap({ type: 'click' });
       });
     }
 
+    async function doLoginAccount() {
+      if (authInFlight) return;
+      const creds = readAuthCredentials();
+      if (!creds) return;
+      authInFlight = true;
+      const btn = document.getElementById('auth-submit-btn');
+      setButtonLoading(btn, true);
+      try {
+        const data = await api('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: creds.email, password: creds.password }),
+        });
+        applyAuthSuccess(data, 'Willkommen zurück!');
+      } catch (e) {
+        if (!isAuthError(e)) {
+          showError(e.message || 'Anmeldung fehlgeschlagen');
+        } else {
+          showError('E-Mail oder Passwort ungültig.');
+        }
+      } finally {
+        authInFlight = false;
+        setButtonLoading(btn, false);
+        syncAuthButtonState();
+      }
+    }
+
     async function doRegisterAccount() {
-      if (registerInFlight) {
+      if (authInFlight) {
         showBetaDebugToast('Registrierung läuft…');
         return;
       }
-      registerInFlight = true;
-      const btn = document.getElementById('register-btn');
+      authInFlight = true;
+      const btn = document.getElementById('auth-submit-btn');
       setButtonLoading(btn, true);
       try {
         const terms = document.getElementById('accept-terms');
@@ -4823,6 +4965,8 @@
           age?.focus({ preventScroll: true });
           return;
         }
+        const creds = readAuthCredentials();
+        if (!creds) return;
         const referral_code = referralInput?.value.trim() || undefined;
         if (referral_code && !/^[A-Za-z0-9_-]{4,32}$/.test(referral_code)) {
           if (referralErr) referralErr.textContent = 'Ungültiger Code — nur Buchstaben, Zahlen, Binde- und Unterstrich (4–32 Zeichen).';
@@ -4834,31 +4978,72 @@
           locale: 'de_DE',
           accept_terms: true,
           accept_age_minimum: true,
+          email: creds.email,
+          password: creds.password,
           ...(referral_code ? { referral_code } : {}),
         };
-        const data = await api('/auth/register', { method: 'POST', body: JSON.stringify(body) });
-        token = data.token;
-        localStorage.setItem('ve_token', token);
-        document.getElementById('auth-card').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
-        setAuthScreenActive(false);
-        setAppChromeVisible(true);
-        navigateToView('dashboard');
-        log('Account erstellt: ' + data.user_id.slice(0, 8) + '…');
-        showSuccessCelebration('Willkommen bei VANTAGE!');
-        void refresh({ quiet: true, bustCache: true }).catch(() => {});
+        const headers = {};
+        const existingToken = localStorage.getItem('ve_token');
+        if (existingToken) headers.Authorization = 'Bearer ' + existingToken;
+        const data = await api('/auth/register', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
+        applyAuthSuccess(data, 'Willkommen bei VANTAGE!');
       } catch (e) {
         if (!isAuthError(e)) {
           showError(e.message || 'Registrierung fehlgeschlagen');
         }
       } finally {
-        registerInFlight = false;
+        authInFlight = false;
         setButtonLoading(btn, false);
-        syncRegisterButtonState();
+        syncAuthButtonState();
       }
     }
 
     window.veRegister = doRegisterAccount;
+
+    async function linkAccount() {
+      const email = document.getElementById('link-email')?.value.trim() || '';
+      const password = document.getElementById('link-password')?.value || '';
+      const emailErr = document.getElementById('link-email-error');
+      const pwdErr = document.getElementById('link-password-error');
+      if (emailErr) emailErr.textContent = '';
+      if (pwdErr) pwdErr.textContent = '';
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (emailErr) emailErr.textContent = 'Bitte eine gültige E-Mail eingeben.';
+        return;
+      }
+      if (password.length < 8) {
+        if (pwdErr) pwdErr.textContent = 'Passwort muss mindestens 8 Zeichen haben.';
+        return;
+      }
+      const btn = document.getElementById('link-account-btn');
+      setButtonLoading(btn, true);
+      try {
+        const data = await api('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            locale: 'de_DE',
+            accept_terms: true,
+            accept_age_minimum: true,
+            email,
+            password,
+          }),
+        });
+        token = data.token;
+        localStorage.setItem('ve_token', token);
+        if (data.email) localStorage.setItem('ve_email', data.email);
+        showSuccessCelebration('Konto verknüpft!');
+        void loadProfileStats();
+        void refresh({ quiet: true, bustCache: true }).catch(() => {});
+      } catch (e) {
+        if (!isAuthError(e)) showError(e.message || 'Verknüpfung fehlgeschlagen');
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    }
 
     function focusTermsAcceptance() {
       const label = document.querySelector('.terms-accept');
@@ -4869,19 +5054,31 @@
       window.setTimeout(() => label?.classList.remove('terms-highlight'), 2400);
     }
 
-    function syncRegisterButtonState() {
+    function syncAuthButtonState() {
       const terms = document.getElementById('accept-terms');
       const age = document.getElementById('accept-age');
-      const btn = document.getElementById('register-btn');
+      const btn = document.getElementById('auth-submit-btn');
       const hint = document.getElementById('register-terms-hint');
+      if (authMode === 'login') {
+        if (btn && !authInFlight) {
+          btn.disabled = false;
+          btn.removeAttribute('aria-disabled');
+          btn.classList.remove('btn-pending-terms');
+        }
+        return;
+      }
       const checked = !!terms?.checked && !!age?.checked;
-      if (btn && !registerInFlight) {
+      if (btn && !authInFlight) {
         btn.disabled = false;
         btn.removeAttribute('aria-disabled');
         btn.classList.toggle('btn-pending-terms', !checked);
       }
       hint?.classList.toggle('hidden', checked);
       if (checked) document.querySelectorAll('.terms-accept').forEach((el) => el.classList.remove('terms-highlight'));
+    }
+
+    function syncRegisterButtonState() {
+      syncAuthButtonState();
     }
 
     function payoutMethodInfoMap(statsData) {
@@ -5153,6 +5350,7 @@
     function logout() {
       token = null;
       localStorage.removeItem('ve_token');
+      localStorage.removeItem('ve_email');
       try {
         localStorage.removeItem(WALLET_SNAPSHOT_KEY);
         sessionStorage.removeItem(WALLET_SNAPSHOT_KEY);
@@ -5165,7 +5363,8 @@
       setAppChromeVisible(false);
       setAuthScreenActive(true);
       syncTrustBadge(null);
-      syncRegisterButtonState();
+      syncAuthButtonState();
+      setAuthMode('login');
       history.replaceState(null, '', location.pathname + location.search);
     }
 
@@ -5423,7 +5622,8 @@
         setAppChromeVisible(false);
         const ref = params.get('ref');
         if (ref) document.getElementById('referral').value = ref;
-        syncRegisterButtonState();
+        syncAuthButtonState();
+        setAuthMode('login');
         void loadAdConfig();
       }
       requestAnimationFrame(forceLayoutFix);
@@ -5433,12 +5633,13 @@
       if (e.key === 'Escape') cancelWatch();
     });
 
-    document.getElementById('accept-terms')?.addEventListener('change', () => syncRegisterButtonState());
-    document.getElementById('accept-terms')?.addEventListener('input', () => syncRegisterButtonState());
-    document.getElementById('accept-age')?.addEventListener('change', () => syncRegisterButtonState());
-    document.getElementById('accept-age')?.addEventListener('input', () => syncRegisterButtonState());
-    initRegisterBtn();
-    syncRegisterButtonState();
+    document.getElementById('accept-terms')?.addEventListener('change', () => syncAuthButtonState());
+    document.getElementById('accept-terms')?.addEventListener('input', () => syncAuthButtonState());
+    document.getElementById('accept-age')?.addEventListener('change', () => syncAuthButtonState());
+    document.getElementById('accept-age')?.addEventListener('input', () => syncAuthButtonState());
+    initAuthSubmitBtn();
+    setAuthMode('login');
+    syncAuthButtonState();
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true, showLoading: true }));
 
     (function initPullToRefresh() {

@@ -28,7 +28,8 @@ use std::collections::HashMap;
 
 use crate::announcements;
 use crate::dev;
-use crate::extractors::AuthUser;
+use crate::extractors::{AuthUser, OptionalAuthUser};
+use crate::auth::{hash_password, normalize_email, validate_password, verify_password};
 use crate::health;
 use crate::pwa;
 use crate::rate_limit::{self, RateLimiter};
@@ -143,23 +144,36 @@ struct RegisterRequest {
     accept_terms: Option<bool>,
     #[serde(default)]
     accept_age_minimum: Option<bool>,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct LoginRequest {
-    user_id: Uuid,
+    email: String,
+    password: String,
 }
 
 #[derive(Serialize)]
 struct AuthResponse {
     user_id: Uuid,
     token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<String>,
 }
 
 async fn register(
     State(state): State<AppState>,
+    OptionalAuthUser(link_user_id): OptionalAuthUser,
     Json(body): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
+    let has_credentials = body.email.is_some() || body.password.is_some();
+    if has_credentials {
+        return register_with_credentials(state, link_user_id, body).await;
+    }
+
     if body.accept_terms != Some(true) {
         return Err(shared::AppError::InvalidInput(
             "accept_terms must be true".into(),
@@ -192,23 +206,112 @@ async fn register(
     let _ = state.gamification_on_register(user_id).await;
 
     let token = state.jwt.issue(user_id)?;
-    Ok(Json(AuthResponse { user_id, token }))
+    Ok(Json(AuthResponse {
+        user_id,
+        token,
+        email: None,
+    }))
+}
+
+async fn register_with_credentials(
+    state: AppState,
+    link_user_id: Option<Uuid>,
+    body: RegisterRequest,
+) -> Result<Json<AuthResponse>, ApiError> {
+    if body.accept_terms != Some(true) {
+        return Err(shared::AppError::InvalidInput(
+            "accept_terms must be true".into(),
+        )
+        .into());
+    }
+    if body.accept_age_minimum != Some(true) {
+        return Err(shared::AppError::InvalidInput(
+            "accept_age_minimum must be true".into(),
+        )
+        .into());
+    }
+
+    let email_raw = body.email.as_deref().ok_or_else(|| {
+        ApiError(shared::AppError::InvalidInput("email is required".into()))
+    })?;
+    let password = body.password.as_deref().ok_or_else(|| {
+        ApiError(shared::AppError::InvalidInput("password is required".into()))
+    })?;
+    let email = normalize_email(email_raw).ok_or_else(|| {
+        ApiError(shared::AppError::InvalidInput("invalid email".into()))
+    })?;
+    validate_password(password)?;
+
+    if state.find_user_by_email(&email).await?.is_some() {
+        return Err(shared::AppError::EmailAlreadyRegistered.into());
+    }
+
+    let password_hash = hash_password(password)?;
+    let (user_id, is_new) = if let Some(existing_id) = link_user_id {
+        if !state.user_exists(existing_id).await {
+            return Err(AppError::UserNotFound(existing_id).into());
+        }
+        state
+            .set_user_credentials(existing_id, &email, &password_hash)
+            .await?;
+        (existing_id, false)
+    } else {
+        let user_id = Uuid::new_v4();
+        state.ensure_user(user_id).await;
+        state
+            .set_user_credentials(user_id, &email, &password_hash)
+            .await?;
+        (user_id, true)
+    };
+
+    let mut profile = state.profile(user_id).await;
+    if let Some(locale) = &body.locale {
+        profile.locale = locale.clone();
+    }
+    if is_new {
+        if let Some(code) = body.referral_code {
+            if let Some(referrer) = state.find_user_by_referral_code(&code).await? {
+                if referrer != user_id {
+                    profile.referred_by = Some(referrer);
+                }
+            }
+        }
+        state.save_profile(user_id, &profile).await?;
+        let _ = state.gamification_on_register(user_id).await;
+    } else if body.locale.is_some() {
+        state.save_profile(user_id, &profile).await?;
+    }
+
+    let token = state.jwt.issue(user_id)?;
+    Ok(Json(AuthResponse {
+        user_id,
+        token,
+        email: Some(email),
+    }))
 }
 
 async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
-    if !state.user_exists(body.user_id).await {
-        return Err(AppError::UserNotFound(body.user_id).into());
+    let email = normalize_email(&body.email)
+        .ok_or_else(|| AppError::from(AppError::InvalidInput("invalid email".into())))?;
+
+    let Some((user_id, password_hash)) = state.find_user_by_email(&email).await? else {
+        return Err(AppError::Unauthorized.into());
+    };
+
+    if !verify_password(&body.password, &password_hash) {
+        return Err(AppError::Unauthorized.into());
     }
 
-    let _ = state.gamification_on_login(body.user_id).await;
+    let _ = state.gamification_on_login(user_id).await;
 
-    let token = state.jwt.issue(body.user_id)?;
+    let token = state.jwt.issue(user_id)?;
     Ok(Json(AuthResponse {
-        user_id: body.user_id,
+        user_id,
         token,
+        email: Some(email),
     }))
 }
 

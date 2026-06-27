@@ -37,3 +37,4 @@ async-trait = "0.1"
 jsonwebtoken = "9"
 local-ip-address = "0.6"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "rust_decimal", "migrate", "derive", "macros"] }
+argon2 = "0.5"

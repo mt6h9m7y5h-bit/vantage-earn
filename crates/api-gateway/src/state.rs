@@ -680,6 +680,25 @@ impl AppState {
         self.store.user_exists(user_id).await.unwrap_or(false)
     }
 
+    pub async fn user_email(&self, user_id: Uuid) -> Option<String> {
+        self.store.user_email(user_id).await.ok().flatten()
+    }
+
+    pub async fn find_user_by_email(&self, email: &str) -> AppResult<Option<(Uuid, String)>> {
+        self.store.find_user_by_email(email).await
+    }
+
+    pub async fn set_user_credentials(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        password_hash: &str,
+    ) -> AppResult<()> {
+        self.store
+            .set_user_credentials(user_id, email, password_hash)
+            .await
+    }
+
     pub async fn local_currency_for_user(&self, user_id: Uuid) -> Currency {
         let profile = self.profile(user_id).await;
         localization_engine::LocalizationEngine::default_currency_for_locale(&profile.locale)

@@ -115,6 +115,7 @@ impl AppState {
 
     pub async fn build_profile_stats(&self, user_id: Uuid) -> AppResult<serde_json::Value> {
         let profile = self.profile(user_id).await;
+        let email = self.user_email(user_id).await;
         let xp = self.store.gamification_get_user_xp(user_id).await?;
         let streak = self.store.gamification_get_login_streak(user_id).await?;
         let achievements = self.store.gamification_list_achievements(user_id).await?;
@@ -145,6 +146,7 @@ impl AppState {
         );
 
         Ok(serde_json::json!({
+            "email": email,
             "lifetime_earnings_usdt": lifetime_earnings.to_string(),
             "total_withdrawals_usdt": withdrawals.to_string(),
             "ads_watched": profile.total_watches,

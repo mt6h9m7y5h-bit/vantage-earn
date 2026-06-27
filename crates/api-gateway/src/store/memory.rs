@@ -23,6 +23,8 @@ use crate::store::gamification_memory::GamificationMemStore;
 pub struct MemoryStore {
     wallet: Arc<WalletEngine>,
     users: Arc<RwLock<HashMap<Uuid, UserProfile>>>,
+    user_credentials: Arc<RwLock<HashMap<Uuid, UserCredentialRecord>>>,
+    email_index: Arc<RwLock<HashMap<String, Uuid>>>,
     gamification: GamificationMemStore,
     trust_scores: Arc<RwLock<HashMap<Uuid, i32>>>,
     total_revenue: Arc<RwLock<Decimal>>,
@@ -49,12 +51,20 @@ struct PayoutRecord {
     created_at: DateTime<Utc>,
 }
 
+#[derive(Clone)]
+struct UserCredentialRecord {
+    email: String,
+    password_hash: String,
+}
+
 impl MemoryStore {
     pub fn new() -> Self {
         let users = Arc::new(RwLock::new(HashMap::new()));
         Self {
             wallet: Arc::new(WalletEngine::new()),
             users: users.clone(),
+            user_credentials: Arc::new(RwLock::new(HashMap::new())),
+            email_index: Arc::new(RwLock::new(HashMap::new())),
             gamification: GamificationMemStore::new(users),
             trust_scores: Arc::new(RwLock::new(HashMap::new())),
             total_revenue: Arc::new(RwLock::new(Decimal::ZERO)),
@@ -72,6 +82,8 @@ impl MemoryStore {
 
     pub async fn dev_reset(&self) -> AppResult<()> {
         *self.users.write().await = HashMap::new();
+        *self.user_credentials.write().await = HashMap::new();
+        *self.email_index.write().await = HashMap::new();
         *self.trust_scores.write().await = HashMap::new();
         *self.total_revenue.write().await = Decimal::ZERO;
         *self.pending_payouts.write().await = Decimal::ZERO;
@@ -219,6 +231,52 @@ impl MemoryStore {
 
     pub async fn user_exists(&self, user_id: Uuid) -> AppResult<bool> {
         Ok(self.users.read().await.contains_key(&user_id))
+    }
+
+    pub async fn user_email(&self, user_id: Uuid) -> AppResult<Option<String>> {
+        Ok(self
+            .user_credentials
+            .read()
+            .await
+            .get(&user_id)
+            .map(|c| c.email.clone()))
+    }
+
+    pub async fn find_user_by_email(&self, email: &str) -> AppResult<Option<(Uuid, String)>> {
+        let user_id = self.email_index.read().await.get(email).copied();
+        let Some(user_id) = user_id else {
+            return Ok(None);
+        };
+        let creds = self.user_credentials.read().await;
+        Ok(creds.get(&user_id).map(|c| (user_id, c.password_hash.clone())))
+    }
+
+    pub async fn set_user_credentials(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        password_hash: &str,
+    ) -> AppResult<()> {
+        if self.email_index.read().await.contains_key(email) {
+            return Err(shared::AppError::EmailAlreadyRegistered);
+        }
+        if self.user_credentials.read().await.contains_key(&user_id) {
+            return Err(shared::AppError::InvalidInput(
+                "account already has credentials".into(),
+            ));
+        }
+        self.user_credentials.write().await.insert(
+            user_id,
+            UserCredentialRecord {
+                email: email.to_string(),
+                password_hash: password_hash.to_string(),
+            },
+        );
+        self.email_index
+            .write()
+            .await
+            .insert(email.to_string(), user_id);
+        Ok(())
     }
 
     pub async fn profile(&self, user_id: Uuid) -> AppResult<UserProfile> {

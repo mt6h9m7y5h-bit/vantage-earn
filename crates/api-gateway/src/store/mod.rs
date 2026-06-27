@@ -157,6 +157,32 @@ impl Store {
         }
     }
 
+    pub async fn user_email(&self, user_id: Uuid) -> AppResult<Option<String>> {
+        match self {
+            Self::Memory(s) => s.user_email(user_id).await,
+            Self::Postgres(s) => s.user_email(user_id).await,
+        }
+    }
+
+    pub async fn find_user_by_email(&self, email: &str) -> AppResult<Option<(Uuid, String)>> {
+        match self {
+            Self::Memory(s) => s.find_user_by_email(email).await,
+            Self::Postgres(s) => s.find_user_by_email(email).await,
+        }
+    }
+
+    pub async fn set_user_credentials(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        password_hash: &str,
+    ) -> AppResult<()> {
+        match self {
+            Self::Memory(s) => s.set_user_credentials(user_id, email, password_hash).await,
+            Self::Postgres(s) => s.set_user_credentials(user_id, email, password_hash).await,
+        }
+    }
+
     pub async fn profile(&self, user_id: Uuid) -> AppResult<UserProfile> {
         match self {
             Self::Memory(s) => s.profile(user_id).await,

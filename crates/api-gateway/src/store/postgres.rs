@@ -145,6 +145,64 @@ impl PgStore {
         Ok(row.is_some())
     }
 
+    pub async fn user_email(&self, user_id: Uuid) -> AppResult<Option<String>> {
+        let row: Option<(Option<String>,)> =
+            sqlx::query_as("SELECT email FROM users WHERE id = $1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(db_err)?;
+        Ok(row.and_then(|(email,)| email))
+    }
+
+    pub async fn find_user_by_email(&self, email: &str) -> AppResult<Option<(Uuid, String)>> {
+        let row: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, password_hash FROM users WHERE email = $1 AND password_hash IS NOT NULL",
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row)
+    }
+
+    pub async fn set_user_credentials(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        password_hash: &str,
+    ) -> AppResult<()> {
+        let result = sqlx::query(
+            r#"
+            UPDATE users
+            SET email = $2, password_hash = $3
+            WHERE id = $1 AND email IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(email)
+        .bind(password_hash)
+        .execute(&self.pool)
+        .await;
+
+        match result {
+            Ok(r) if r.rows_affected() == 1 => Ok(()),
+            Ok(_) => {
+                if self.user_email(user_id).await?.is_some() {
+                    Err(shared::AppError::InvalidInput(
+                        "account already has credentials".into(),
+                    ))
+                } else {
+                    Err(shared::AppError::UserNotFound(user_id))
+                }
+            }
+            Err(sqlx::Error::Database(db)) if db.code().as_deref() == Some("23505") => {
+                Err(shared::AppError::EmailAlreadyRegistered)
+            }
+            Err(e) => Err(db_err(e)),
+        }
+    }
+
     pub async fn profile(&self, user_id: Uuid) -> AppResult<UserProfile> {
         let row = sqlx::query_as::<_, UserRow>(
             r#"

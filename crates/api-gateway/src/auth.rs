@@ -17,6 +17,51 @@ pub struct JwtService {
     decoding: DecodingKey,
 }
 
+pub fn normalize_email(email: &str) -> Option<String> {
+    let trimmed = email.trim().to_lowercase();
+    if trimmed.is_empty() || !trimmed.contains('@') || trimmed.len() > 254 {
+        return None;
+    }
+    Some(trimmed)
+}
+
+pub fn validate_password(password: &str) -> Result<(), AppError> {
+    if password.len() < 8 {
+        return Err(AppError::InvalidInput(
+            "password must be at least 8 characters".into(),
+        ));
+    }
+    if password.len() > 128 {
+        return Err(AppError::InvalidInput("password too long".into()));
+    }
+    Ok(())
+}
+
+pub fn hash_password(password: &str) -> Result<String, AppError> {
+    use argon2::password_hash::{PasswordHasher, SaltString};
+    use argon2::Argon2;
+    use rand::rngs::OsRng;
+
+    let salt = SaltString::generate(&mut OsRng);
+    let hash = Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|e| AppError::InvalidInput(e.to_string()))?;
+    Ok(hash.to_string())
+}
+
+pub fn verify_password(password: &str, hash: &str) -> bool {
+    use argon2::password_hash::{PasswordHash, PasswordVerifier};
+    use argon2::Argon2;
+
+    PasswordHash::new(hash)
+        .ok()
+        .is_some_and(|parsed| {
+            Argon2::default()
+                .verify_password(password.as_bytes(), &parsed)
+                .is_ok()
+        })
+}
+
 fn non_empty_env(key: &str) -> Option<String> {
     std::env::var(key)
         .ok()

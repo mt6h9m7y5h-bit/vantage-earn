@@ -17,6 +17,9 @@ pub enum AppError {
     #[error("invalid input: {0}")]
     InvalidInput(String),
 
+    #[error("email already registered")]
+    EmailAlreadyRegistered,
+
     #[error("payout pool insufficient: max {max_available} USDT available (10% platform reserve)")]
     InsufficientLiquidity {
         max_available: rust_decimal::Decimal,

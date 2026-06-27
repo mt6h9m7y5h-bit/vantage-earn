@@ -54,6 +54,32 @@ async fn register(app: &Router) -> (Uuid, String) {
     )
 }
 
+async fn register_with_email(app: &Router, email: &str, password: &str) -> (Uuid, String) {
+    let body = format!(
+        r#"{{"accept_terms":true,"accept_age_minimum":true,"email":"{email}","password":"{password}"}}"#
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK, "email register failed");
+    let json = body_json(response).await;
+    assert_eq!(json["email"], email);
+    (
+        Uuid::parse_str(json["user_id"].as_str().unwrap()).unwrap(),
+        json["token"].as_str().unwrap().to_string(),
+    )
+}
+
 fn authed(method: &str, uri: &str, token: &str, body: Option<&str>) -> Request<Body> {
     let builder = Request::builder()
         .method(method)
@@ -334,7 +360,8 @@ async fn register_requires_accept_terms() {
 #[tokio::test]
 async fn register_and_login_issue_tokens() {
     let app = app(AppState::new());
-    let (user_id, token) = register(&app).await;
+    let email = format!("user-{}@example.com", Uuid::new_v4());
+    let (user_id, _token) = register_with_email(&app, &email, "securepass1").await;
 
     let response = app
         .oneshot(
@@ -342,7 +369,9 @@ async fn register_and_login_issue_tokens() {
                 .method("POST")
                 .uri("/auth/login")
                 .header("content-type", "application/json")
-                .body(Body::from(format!(r#"{{"user_id":"{user_id}"}}"#)))
+                .body(Body::from(format!(
+                    r#"{{"email":"{email}","password":"securepass1"}}"#
+                )))
                 .unwrap(),
         )
         .await
@@ -351,8 +380,65 @@ async fn register_and_login_issue_tokens() {
     assert_eq!(response.status(), StatusCode::OK);
     let json = body_json(response).await;
     assert_eq!(json["user_id"], user_id.to_string());
+    assert_eq!(json["email"], email);
     assert!(!json["token"].as_str().unwrap().is_empty());
-    assert!(!token.is_empty());
+}
+
+#[tokio::test]
+async fn register_links_anonymous_account_when_jwt_present() {
+    let app = app(AppState::new());
+    let (anon_id, anon_token) = register(&app).await;
+    let email = format!("link-{}@example.com", Uuid::new_v4());
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {anon_token}"))
+                .body(Body::from(format!(
+                    r#"{{"accept_terms":true,"accept_age_minimum":true,"email":"{email}","password":"linkpass12"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["user_id"], anon_id.to_string());
+    assert_eq!(json["email"], email);
+
+    let wallet = app
+        .oneshot(authed("GET", "/users/me/wallet", json["token"].as_str().unwrap(), None))
+        .await
+        .unwrap();
+    assert_eq!(wallet.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn login_rejects_invalid_credentials() {
+    let app = app(AppState::new());
+    let email = format!("bad-{}@example.com", Uuid::new_v4());
+    register_with_email(&app, &email, "correctpass").await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"email":"{email}","password":"wrongpass"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]

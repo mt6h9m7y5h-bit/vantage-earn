@@ -26,6 +26,7 @@ impl IntoResponse for ApiError {
             AppError::InsufficientBalance { .. } => (StatusCode::BAD_REQUEST, self.0.to_string()),
             AppError::FraudBlocked(_) => (StatusCode::FORBIDDEN, self.0.to_string()),
             AppError::InvalidInput(_) => (StatusCode::BAD_REQUEST, self.0.to_string()),
+            AppError::EmailAlreadyRegistered => (StatusCode::CONFLICT, self.0.to_string()),
             AppError::InsufficientLiquidity { .. } => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.0.to_string())
             }

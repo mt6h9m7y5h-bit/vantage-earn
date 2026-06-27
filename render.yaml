@@ -29,8 +29,11 @@ services:
         value: "0.5"
       - key: EARLY_ADOPTER_MAX_USERS
         value: "40"
-      - key: EARLY_ADOPTER_UNTIL
-        value: "2026-07-31"
+      - key: EARLY_ADOPTER_DAYS
+        value: "30"
+      # Optional: set to go-live date (YYYY-MM-DD). If omitted, campaign starts at first email signup.
+      # - key: EARLY_ADOPTER_START
+      #   value: "2026-06-27"
       # Optional SMTP — without these, welcome emails are skipped in production (logged only in dev)
       # - key: SMTP_HOST
       #   sync: false

@@ -282,12 +282,21 @@ impl MemoryStore {
         Ok(())
     }
 
+    pub async fn first_email_registration_at(&self) -> AppResult<Option<DateTime<Utc>>> {
+        let creds = self.user_credentials.read().await;
+        let users = self.users.read().await;
+        Ok(creds
+            .keys()
+            .filter_map(|id| users.get(id).map(|p| p.created_at))
+            .min())
+    }
+
     pub async fn try_grant_early_bonus(
         &self,
         user_id: Uuid,
         config: &crate::early_adopter::EarlyAdopterConfig,
     ) -> AppResult<Option<Decimal>> {
-        if !config.is_active() {
+        if !config.enabled() {
             return Ok(None);
         }
         if self.early_bonus_granted.read().await.contains(&user_id) {
@@ -297,11 +306,31 @@ impl MemoryStore {
             return Ok(None);
         }
 
+        let now = Utc::now();
+        let start = match config.start_override {
+            Some(s) => s,
+            None => self
+                .first_email_registration_at()
+                .await?
+                .unwrap_or(now),
+        };
+        if !config.is_campaign_active(now, start) {
+            return Ok(None);
+        }
+
         let creds = self.user_credentials.read().await;
         let users = self.users.read().await;
+        let Some(user_created) = users.get(&user_id).map(|p| p.created_at) else {
+            return Ok(None);
+        };
+        if !config.registration_in_window(user_created, start) {
+            return Ok(None);
+        }
+
         let mut email_users: Vec<_> = creds
             .keys()
             .filter_map(|id| users.get(id).map(|p| (*id, p.created_at)))
+            .filter(|(_, created)| config.registration_in_window(*created, start))
             .collect();
         email_users.sort_by_key(|(_, created)| *created);
         let eligible: HashSet<_> = email_users

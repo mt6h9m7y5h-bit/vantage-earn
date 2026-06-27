@@ -12,8 +12,29 @@ use api_gateway::routes;
 use api_gateway::state::AppState;
 
 static EARLY_ADOPTER_ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static INTEGRATION_TEST_ENV: std::sync::Once = std::sync::Once::new();
+
+fn early_adopter_env_lock() -> std::sync::MutexGuard<'static, ()> {
+    EARLY_ADOPTER_ENV.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn set_early_adopter_active(bonus: &str, max_users: &str) {
+    std::env::set_var("EARLY_ADOPTER_BONUS_USDT", bonus);
+    std::env::set_var("EARLY_ADOPTER_MAX_USERS", max_users);
+    std::env::set_var("EARLY_ADOPTER_DAYS", "30");
+    std::env::remove_var("EARLY_ADOPTER_START");
+}
+
+fn init_integration_test_env() {
+    INTEGRATION_TEST_ENV.call_once(|| {
+        if std::env::var("EARLY_ADOPTER_BONUS_USDT").is_err() {
+            std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0");
+        }
+    });
+}
 
 fn app(state: AppState) -> Router {
+    init_integration_test_env();
     routes::router().with_state(state)
 }
 
@@ -361,9 +382,8 @@ async fn register_requires_accept_terms() {
 
 #[tokio::test]
 async fn email_register_grants_early_adopter_bonus_once() {
-    let _guard = EARLY_ADOPTER_ENV.lock().unwrap();
-    std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0.5");
-    std::env::set_var("EARLY_ADOPTER_MAX_USERS", "40");
+    let _guard = early_adopter_env_lock();
+    set_early_adopter_active("0.5", "40");
     let state = AppState::new();
     let app = app(state.clone());
     let email = format!("early-{}@example.com", Uuid::new_v4());
@@ -530,9 +550,8 @@ async fn login_rejects_invalid_credentials() {
 
 #[tokio::test]
 async fn early_adopter_bonus_respects_max_users() {
-    let _guard = EARLY_ADOPTER_ENV.lock().unwrap();
-    std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0.25");
-    std::env::set_var("EARLY_ADOPTER_MAX_USERS", "1");
+    let _guard = early_adopter_env_lock();
+    set_early_adopter_active("0.25", "1");
 
     let app = app(AppState::new());
     let first_email = format!("first-{}@example.com", Uuid::new_v4());
@@ -573,6 +592,34 @@ async fn early_adopter_bonus_respects_max_users() {
         .unwrap();
     let second_json = body_json(second).await;
     assert!(second_json.get("welcome_bonus_usdt").is_none());
+}
+
+#[tokio::test]
+async fn early_adopter_bonus_expires_after_window() {
+    let _guard = early_adopter_env_lock();
+    std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0.5");
+    std::env::set_var("EARLY_ADOPTER_MAX_USERS", "40");
+    std::env::set_var("EARLY_ADOPTER_DAYS", "7");
+    std::env::set_var("EARLY_ADOPTER_START", "2020-01-01");
+
+    let app = app(AppState::new());
+    let email = format!("late-{}@example.com", Uuid::new_v4());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"accept_terms":true,"accept_age_minimum":true,"email":"{email}","password":"securepass1"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert!(json.get("welcome_bonus_usdt").is_none());
 }
 
 #[tokio::test]

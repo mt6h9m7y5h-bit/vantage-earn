@@ -203,12 +203,35 @@ impl PgStore {
         }
     }
 
+    pub async fn first_email_registration_at(&self) -> AppResult<Option<DateTime<Utc>>> {
+        let row: Option<(DateTime<Utc>,)> = sqlx::query_as(
+            "SELECT MIN(created_at) FROM users WHERE email IS NOT NULL",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.map(|(t,)| t))
+    }
+
     pub async fn try_grant_early_bonus(
         &self,
         user_id: Uuid,
         config: &crate::early_adopter::EarlyAdopterConfig,
     ) -> AppResult<Option<Decimal>> {
-        if !config.is_active() {
+        if !config.enabled() {
+            return Ok(None);
+        }
+
+        let now = Utc::now();
+        let start = match config.start_override {
+            Some(s) => s,
+            None => self
+                .first_email_registration_at()
+                .await?
+                .unwrap_or(now),
+        };
+        let end = config.campaign_end(start);
+        if !config.is_campaign_active(now, start) {
             return Ok(None);
         }
 
@@ -245,6 +268,8 @@ impl PgStore {
             WITH eligible AS (
                 SELECT id FROM users
                 WHERE email IS NOT NULL
+                  AND created_at >= $3
+                  AND created_at <= $4
                 ORDER BY created_at ASC
                 LIMIT $2
             )
@@ -253,14 +278,17 @@ impl PgStore {
             WHERE u.id = $1
               AND u.early_bonus_granted = false
               AND u.email IS NOT NULL
+              AND u.created_at >= $3
+              AND u.created_at <= $4
               AND u.id IN (SELECT id FROM eligible)
-              AND NOW() <= $3
+              AND NOW() <= $4
             RETURNING u.id
             "#,
         )
         .bind(user_id)
         .bind(config.max_users as i64)
-        .bind(config.until)
+        .bind(start)
+        .bind(end)
         .fetch_optional(&mut *tx)
         .await
         .map_err(db_err)?;

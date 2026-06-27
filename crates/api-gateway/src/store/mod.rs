@@ -183,6 +183,13 @@ impl Store {
         }
     }
 
+    pub async fn first_email_registration_at(&self) -> AppResult<Option<DateTime<Utc>>> {
+        match self {
+            Self::Memory(s) => s.first_email_registration_at().await,
+            Self::Postgres(s) => s.first_email_registration_at().await,
+        }
+    }
+
     pub async fn try_grant_early_bonus(
         &self,
         user_id: Uuid,

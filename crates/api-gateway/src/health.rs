@@ -33,6 +33,8 @@ pub struct HealthResponse {
     pub status: &'static str,
     pub service: &'static str,
     pub version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     pub database: bool,
     pub components: HealthComponents,
 }
@@ -62,6 +64,17 @@ pub async fn build_health(state: &AppState) -> HealthResponse {
         status: if overall_ok { "ok" } else { "degraded" },
         service: "vantage-earn",
         version: release_info::app_version(),
+        commit: std::env::var("GIT_COMMIT")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                let c = release_info::git_commit();
+                if c == "dev" {
+                    None
+                } else {
+                    Some(c.to_string())
+                }
+            }),
         database: db_ok,
         components: HealthComponents {
             api: ComponentStatus {

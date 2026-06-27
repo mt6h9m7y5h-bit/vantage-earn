@@ -292,6 +292,8 @@ pub struct BitlabsCallbackQuery {
     pub hash: Option<String>,
     #[serde(default, rename = "OFFER:TASK:STATE")]
     pub offer_task_state: Option<String>,
+    #[serde(default)]
+    pub debug: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -403,6 +405,19 @@ pub async fn handle_callback(
             "bitlabs callback hash mismatch"
         );
         return (StatusCode::FORBIDDEN, "invalid hash");
+    }
+
+    if query
+        .debug
+        .as_deref()
+        .is_some_and(|d| d == "true" || d == "1")
+    {
+        info!(
+            uid = %query.uid,
+            tx = %query.tx,
+            "bitlabs debug callback accepted (no wallet change)"
+        );
+        return (StatusCode::OK, "OK");
     }
 
     let user_id = match Uuid::parse_str(query.uid.trim()) {

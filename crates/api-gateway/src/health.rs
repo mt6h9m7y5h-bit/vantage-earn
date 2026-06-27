@@ -68,6 +68,11 @@ pub async fn build_health(state: &AppState) -> HealthResponse {
             .ok()
             .filter(|s| !s.is_empty())
             .or_else(|| {
+                std::env::var("RENDER_GIT_COMMIT")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+            })
+            .or_else(|| {
                 let c = release_info::git_commit();
                 if c == "dev" {
                     None

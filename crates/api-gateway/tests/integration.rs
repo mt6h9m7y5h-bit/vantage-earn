@@ -1779,6 +1779,42 @@ async fn bitlabs_webhook_accepts_get_and_post() {
 }
 
 #[tokio::test]
+async fn bitlabs_webhook_accepts_debug_param_and_proxy_headers() {
+    std::env::set_var("BITLABS_SECRET_KEY", "test-bitlabs-secret");
+    std::env::set_var("BITLABS_APP_TOKEN", "tok");
+    std::env::remove_var("OFFERWALL_ENABLED");
+
+    let app = app(AppState::new());
+    let (user_id, _token) = register(&app).await;
+    let secret = "test-bitlabs-secret";
+    let tx = "bitlabs-tx-debug";
+
+    let base = format!(
+        "https://vantage-earn.onrender.com/webhooks/bitlabs?uid={user_id}&val=100&tx={tx}&debug=true"
+    );
+    let signed = api_gateway::bitlabs::sign_callback_url(&base, secret);
+    let path_query = signed
+        .strip_prefix("https://vantage-earn.onrender.com")
+        .unwrap();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(path_query)
+                .header("host", "internal:10000")
+                .header("x-forwarded-host", "vantage-earn.onrender.com")
+                .header("x-forwarded-proto", "https")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn admin_insights_endpoint() {
     std::env::set_var("ADMIN_SECRET", "test-admin-secret");
     let app = app(AppState::new());

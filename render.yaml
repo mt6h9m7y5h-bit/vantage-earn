@@ -24,3 +24,5 @@ services:
         fromDatabase:
           name: vantage-earn-db
           property: connectionString
+      - key: BITLABS_CALLBACK_BASE_URL
+        value: https://vantage-earn.onrender.com

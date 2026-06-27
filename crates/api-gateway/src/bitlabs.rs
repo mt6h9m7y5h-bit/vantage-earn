@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use axum::extract::OriginalUri;
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
@@ -10,7 +11,6 @@ use axum::{
 };
 use hmac::{Hmac, Mac};
 use rust_decimal::Decimal;
-use axum::extract::OriginalUri;
 use serde::Deserialize;
 use sha1::Sha1;
 use shared::Currency;
@@ -88,17 +88,116 @@ pub fn sign_callback_url(url_without_hash: &str, secret_key: &str) -> String {
 
 /// Verify BitLabs callback hash (HEX SHA1-HMAC of URL without `&hash=` suffix).
 pub fn verify_callback_hash(callback_url: &str, secret_key: &str) -> bool {
-    let Some((url_without_hash, received)) = callback_url.rsplit_once("&hash=") else {
+    let Some(received) = extract_hash_from_url(callback_url) else {
         return false;
     };
-    let received = received.split('&').next().unwrap_or(received);
-    if received.is_empty() {
+    verify_callback_hash_explicit(callback_url, received, secret_key)
+}
+
+/// Verify when hash value is known (e.g. from `query.hash` or URL parsing).
+pub fn verify_callback_hash_explicit(
+    callback_url: &str,
+    received_hash: &str,
+    secret_key: &str,
+) -> bool {
+    let received_hash = received_hash.split('&').next().unwrap_or(received_hash);
+    if received_hash.is_empty() {
         return false;
     }
-    let Some(expected) = callback_hash_hex(url_without_hash, secret_key) else {
+    let Some(url_without_hash) = url_without_hash_param(callback_url, received_hash) else {
         return false;
     };
-    constant_time_eq(received.as_bytes(), expected.as_bytes())
+    let Some(expected) = callback_hash_hex(&url_without_hash, secret_key) else {
+        return false;
+    };
+    constant_time_eq(received_hash.as_bytes(), expected.as_bytes())
+}
+
+fn extract_hash_from_url(callback_url: &str) -> Option<&str> {
+    let (_, received) = callback_url.rsplit_once("&hash=")?;
+    let received = received.split('&').next().unwrap_or(received);
+    if received.is_empty() {
+        None
+    } else {
+        Some(received)
+    }
+}
+
+/// Strip trailing `&hash=` / `?hash=` per BitLabs PHP reference (hash appended last).
+fn url_without_hash_param(callback_url: &str, hash_value: &str) -> Option<String> {
+    let suffix = format!("&hash={hash_value}");
+    if callback_url.ends_with(&suffix) {
+        return Some(callback_url[..callback_url.len() - suffix.len()].to_string());
+    }
+    let suffix = format!("?hash={hash_value}");
+    if callback_url.ends_with(&suffix) {
+        return Some(callback_url[..callback_url.len() - suffix.len()].to_string());
+    }
+    None
+}
+
+fn normalize_host(host: &str) -> String {
+    let host = host.split(',').next().unwrap_or(host).trim();
+    host.strip_suffix(":443")
+        .or_else(|| host.strip_suffix(":80"))
+        .unwrap_or(host)
+        .to_string()
+}
+
+fn callback_base_url_candidates(headers: &HeaderMap) -> Vec<String> {
+    let mut bases = Vec::new();
+
+    if let Some(configured) = non_empty_env("BITLABS_CALLBACK_BASE_URL") {
+        bases.push(configured.trim_end_matches('/').to_string());
+    }
+
+    let hosts: Vec<String> = ["x-forwarded-host", "host"]
+        .iter()
+        .filter_map(|name| headers.get(*name).and_then(|v| v.to_str().ok()))
+        .map(normalize_host)
+        .collect();
+
+    let schemes: Vec<&str> = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .map(|p| vec![p])
+        .unwrap_or_else(|| vec!["https", "http"]);
+
+    for host in &hosts {
+        for scheme in &schemes {
+            let base = format!("{scheme}://{host}");
+            if !bases.iter().any(|b| b == &base) {
+                bases.push(base);
+            }
+        }
+    }
+
+    if bases.is_empty() {
+        bases.push("https://localhost".to_string());
+    }
+
+    bases
+}
+
+fn verify_callback_hash_for_request(
+    headers: &HeaderMap,
+    uri_path_and_query: &str,
+    hash_from_query: Option<&str>,
+    secret_key: &str,
+) -> bool {
+    let received_hash = hash_from_query.or_else(|| extract_hash_from_url(uri_path_and_query));
+    let Some(received_hash) = received_hash else {
+        return false;
+    };
+
+    for base in callback_base_url_candidates(headers) {
+        let callback_url = format!("{base}{uri_path_and_query}");
+        if verify_callback_hash_explicit(&callback_url, received_hash, secret_key) {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -113,11 +212,13 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 #[derive(Debug, Deserialize)]
 pub struct BitlabsCallbackQuery {
+    #[serde(default, alias = "UID")]
     pub uid: String,
     #[serde(default)]
     pub val: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "RAW")]
     pub raw: Option<String>,
+    #[serde(default, alias = "TX")]
     pub tx: String,
     #[serde(default, alias = "type")]
     pub activity_type: Option<String>,
@@ -148,19 +249,6 @@ impl BitlabsCallbackState {
 pub fn callback_state() -> &'static BitlabsCallbackState {
     static STATE: std::sync::OnceLock<BitlabsCallbackState> = std::sync::OnceLock::new();
     STATE.get_or_init(BitlabsCallbackState::new)
-}
-
-fn build_callback_url(headers: &HeaderMap, uri_path_and_query: &str) -> String {
-    let host = headers
-        .get("x-forwarded-host")
-        .or_else(|| headers.get("host"))
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost");
-    let scheme = headers
-        .get("x-forwarded-proto")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("https");
-    format!("{scheme}://{host}{uri_path_and_query}")
 }
 
 async fn parse_reward_usdt(
@@ -223,9 +311,13 @@ pub async fn handle_callback(
         return (StatusCode::SERVICE_UNAVAILABLE, "not configured");
     };
 
-    let callback_url = build_callback_url(&headers, &uri_path_and_query);
-    if !verify_callback_hash(&callback_url, secret) {
-        warn!(%callback_url, "bitlabs callback hash mismatch");
+    if !verify_callback_hash_for_request(
+        &headers,
+        &uri_path_and_query,
+        query.hash.as_deref(),
+        secret,
+    ) {
+        warn!(path = %uri_path_and_query, "bitlabs callback hash mismatch");
         return (StatusCode::FORBIDDEN, "invalid hash");
     }
 
@@ -262,14 +354,14 @@ pub async fn handle_callback(
         return (StatusCode::OK, "OK");
     }
 
-    let amount_usdt = match parse_reward_usdt(state, query.val.as_deref(), query.raw.as_deref()).await
-    {
-        Some(a) if a > Decimal::ZERO => a,
-        _ => {
-            info!(%user_id, %tx, "bitlabs callback zero reward");
-            return (StatusCode::OK, "OK");
-        }
-    };
+    let amount_usdt =
+        match parse_reward_usdt(state, query.val.as_deref(), query.raw.as_deref()).await {
+            Some(a) if a > Decimal::ZERO => a,
+            _ => {
+                info!(%user_id, %tx, "bitlabs callback zero reward");
+                return (StatusCode::OK, "OK");
+            }
+        };
 
     let activity = query.activity_type.as_deref();
     let offer_state = query.offer_task_state.as_deref();
@@ -330,6 +422,64 @@ mod tests {
     fn rejects_tampered_hash() {
         let url = "https://publisher.com/complete?uid=8cc877ee-af19-488d-b28d-216fb866b996&val=500&hash=deadbeef";
         assert!(!verify_callback_hash(url, "secret"));
+    }
+
+    #[test]
+    fn verifies_with_explicit_hash_and_php_style_strip() {
+        let url_without =
+            "https://vantage-earn.onrender.com/webhooks/bitlabs?uid=abc&val=100&tx=t1&debug=true";
+        let secret = "test-secret";
+        let signed = sign_callback_url(url_without, secret);
+        let hash = signed.rsplit_once("&hash=").unwrap().1;
+        assert!(verify_callback_hash_explicit(&signed, hash, secret));
+    }
+
+    #[test]
+    fn tries_configured_callback_base_url() {
+        std::env::set_var(
+            "BITLABS_CALLBACK_BASE_URL",
+            "https://vantage-earn.onrender.com",
+        );
+        let secret = "proxy-secret";
+        let path = "/webhooks/bitlabs?uid=abc&val=1&tx=t2";
+        let signed_path = format!(
+            "{path}&hash={}",
+            callback_hash_hex(&format!("https://vantage-earn.onrender.com{path}"), secret,)
+                .unwrap()
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "internal:10000".parse().unwrap());
+        headers.insert("x-forwarded-proto", "http".parse().unwrap());
+
+        assert!(verify_callback_hash_for_request(
+            &headers,
+            &signed_path,
+            None,
+            secret,
+        ));
+        std::env::remove_var("BITLABS_CALLBACK_BASE_URL");
+    }
+
+    #[test]
+    fn normalizes_forwarded_host_port() {
+        let secret = "port-secret";
+        let path = "/webhooks/bitlabs?uid=abc&val=1&tx=t3";
+        let signed_path = format!(
+            "{path}&hash={}",
+            callback_hash_hex(&format!("https://example.com{path}"), secret,).unwrap()
+        );
+
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "example.com:443".parse().unwrap());
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+
+        assert!(verify_callback_hash_for_request(
+            &headers,
+            &signed_path,
+            None,
+            secret,
+        ));
     }
 
     #[test]

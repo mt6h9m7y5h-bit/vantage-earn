@@ -21,6 +21,9 @@ impl FromRequestParts<AppState> for AuthUser {
     ) -> Result<Self, Self::Rejection> {
         let user_id = optional_auth_user_id(parts, state)?
             .ok_or(AppError::Unauthorized)?;
+        if state.is_user_banned(user_id).await {
+            return Err(AppError::AccountBanned.into());
+        }
         Ok(AuthUser(user_id))
     }
 }

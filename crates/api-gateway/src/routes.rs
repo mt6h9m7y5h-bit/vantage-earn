@@ -315,6 +315,10 @@ async fn login(
         return Err(AppError::Unauthorized.into());
     }
 
+    if state.is_user_banned(user_id).await {
+        return Err(AppError::AccountBanned.into());
+    }
+
     let _ = state.gamification_on_login(user_id).await;
 
     let token = state.jwt.issue(user_id)?;
@@ -725,7 +729,7 @@ async fn watch_complete(
         return Err(AppError::InvalidInput(maintenance_msg).into());
     }
     if state.is_user_banned(user_id).await {
-        return Err(AppError::FraudBlocked("account suspended".into()).into());
+        return Err(AppError::AccountBanned.into());
     }
     let mut profile = state.profile(user_id).await;
 
@@ -894,7 +898,7 @@ async fn payout_request(
     Json(body): Json<PayoutRequest>,
 ) -> Result<Json<PayoutResponse>, ApiError> {
     if state.is_user_banned(user_id).await {
-        return Err(AppError::FraudBlocked("account suspended".into()).into());
+        return Err(AppError::AccountBanned.into());
     }
     let Some(method) = PayoutMethod::parse(&body.payout_method) else {
         return Err(AppError::InvalidInput(format!(

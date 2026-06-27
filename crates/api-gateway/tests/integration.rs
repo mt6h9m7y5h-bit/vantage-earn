@@ -1304,6 +1304,69 @@ async fn admin_ban_blocks_watch() {
 }
 
 #[tokio::test]
+async fn admin_ban_blocks_login() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let email = format!("banned-{}@example.com", Uuid::new_v4());
+    let password = "securepass1";
+    let (user_id, _token) = register_with_email(&app, &email, password).await;
+
+    let ban = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/users/{user_id}/ban"),
+            Some(r#"{"banned":true,"reason":"Test-Sperre"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ban.status(), StatusCode::OK);
+
+    let login = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"email":"{email}","password":"{password}"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(login.status(), StatusCode::FORBIDDEN);
+    let login_json = body_json(login).await;
+    assert_eq!(login_json["error"], "Konto gesperrt");
+}
+
+#[tokio::test]
+async fn admin_ban_blocks_authenticated_requests() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let (user_id, token) = register(&app).await;
+
+    let ban = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/users/{user_id}/ban"),
+            Some(r#"{"banned":true,"reason":"Test-Sperre"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ban.status(), StatusCode::OK);
+
+    let wallet = app
+        .oneshot(authed("GET", "/users/me/wallet", &token, None))
+        .await
+        .unwrap();
+    assert_eq!(wallet.status(), StatusCode::FORBIDDEN);
+    let wallet_json = body_json(wallet).await;
+    assert_eq!(wallet_json["error"], "Konto gesperrt");
+}
+
+#[tokio::test]
 async fn admin_stats_extended_fields() {
     std::env::set_var("ADMIN_SECRET", "test-admin-secret");
     let app = app(AppState::new());

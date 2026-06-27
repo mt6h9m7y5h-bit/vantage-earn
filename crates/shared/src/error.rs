@@ -28,6 +28,9 @@ pub enum AppError {
     #[error("unauthorized")]
     Unauthorized,
 
+    #[error("Konto gesperrt")]
+    AccountBanned,
+
     #[error("ADMIN_SECRET not configured on server")]
     AdminNotConfigured,
 

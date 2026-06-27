@@ -4254,6 +4254,11 @@
       return msg.includes('unauthorized') || msg.includes('401') || msg.includes('invalid token');
     }
 
+    function isAccountBannedError(err) {
+      const msg = String(err?.message || err || '').toLowerCase();
+      return msg.includes('konto gesperrt') || msg.includes('account banned');
+    }
+
     function applyQuickStats(s) {
       if (!s) return;
       const watchesToday = s.watches_today + ' / ' + (s.watches_today + s.watches_remaining_today);
@@ -4370,6 +4375,9 @@
           const msg = data.error || ('Fehler ' + res.status);
           if (res.status === 401) {
             if (token && authCritical) handleAuthFailure();
+          } else if (res.status === 403 && isAccountBannedError({ message: msg })) {
+            logout();
+            if (!silent) showError('Konto gesperrt');
           } else if (!silent && !isBenignEmptyMessage(msg) && !isRateLimitError(msg)) {
             showError(msg);
           }
@@ -5154,7 +5162,9 @@
         });
         applyAuthSuccess(data, 'Willkommen zurück!');
       } catch (e) {
-        if (!isAuthError(e)) {
+        if (isAccountBannedError(e)) {
+          showError('Konto gesperrt');
+        } else if (!isAuthError(e)) {
           showError(e.message || 'Anmeldung fehlgeschlagen');
         } else {
           showError('E-Mail oder Passwort ungültig.');
@@ -5853,7 +5863,10 @@
           });
           showOnboardingIfNeeded();
         } catch (e) {
-          if (isAuthError(e)) {
+          if (isAccountBannedError(e)) {
+            logout();
+            showError('Konto gesperrt');
+          } else if (isAuthError(e)) {
             handleAuthFailure({ silent: true });
           } else {
             showWalletSnapshot();

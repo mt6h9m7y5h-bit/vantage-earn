@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -25,6 +25,7 @@ pub struct MemoryStore {
     users: Arc<RwLock<HashMap<Uuid, UserProfile>>>,
     user_credentials: Arc<RwLock<HashMap<Uuid, UserCredentialRecord>>>,
     email_index: Arc<RwLock<HashMap<String, Uuid>>>,
+    early_bonus_granted: Arc<RwLock<HashSet<Uuid>>>,
     gamification: GamificationMemStore,
     trust_scores: Arc<RwLock<HashMap<Uuid, i32>>>,
     total_revenue: Arc<RwLock<Decimal>>,
@@ -65,6 +66,7 @@ impl MemoryStore {
             users: users.clone(),
             user_credentials: Arc::new(RwLock::new(HashMap::new())),
             email_index: Arc::new(RwLock::new(HashMap::new())),
+            early_bonus_granted: Arc::new(RwLock::new(HashSet::new())),
             gamification: GamificationMemStore::new(users),
             trust_scores: Arc::new(RwLock::new(HashMap::new())),
             total_revenue: Arc::new(RwLock::new(Decimal::ZERO)),
@@ -84,6 +86,7 @@ impl MemoryStore {
         *self.users.write().await = HashMap::new();
         *self.user_credentials.write().await = HashMap::new();
         *self.email_index.write().await = HashMap::new();
+        *self.early_bonus_granted.write().await = HashSet::new();
         *self.trust_scores.write().await = HashMap::new();
         *self.total_revenue.write().await = Decimal::ZERO;
         *self.pending_payouts.write().await = Decimal::ZERO;
@@ -277,6 +280,44 @@ impl MemoryStore {
             .await
             .insert(email.to_string(), user_id);
         Ok(())
+    }
+
+    pub async fn try_grant_early_bonus(
+        &self,
+        user_id: Uuid,
+        config: &crate::early_adopter::EarlyAdopterConfig,
+    ) -> AppResult<Option<Decimal>> {
+        if !config.is_active() {
+            return Ok(None);
+        }
+        if self.early_bonus_granted.read().await.contains(&user_id) {
+            return Ok(None);
+        }
+        if !self.user_credentials.read().await.contains_key(&user_id) {
+            return Ok(None);
+        }
+
+        let creds = self.user_credentials.read().await;
+        let users = self.users.read().await;
+        let mut email_users: Vec<_> = creds
+            .keys()
+            .filter_map(|id| users.get(id).map(|p| (*id, p.created_at)))
+            .collect();
+        email_users.sort_by_key(|(_, created)| *created);
+        let eligible: HashSet<_> = email_users
+            .iter()
+            .take(config.max_users as usize)
+            .map(|(id, _)| *id)
+            .collect();
+        if !eligible.contains(&user_id) {
+            return Ok(None);
+        }
+        drop(creds);
+        drop(users);
+
+        self.early_bonus_granted.write().await.insert(user_id);
+        self.credit(user_id, config.bonus_usdt).await?;
+        Ok(Some(config.bonus_usdt))
     }
 
     pub async fn profile(&self, user_id: Uuid) -> AppResult<UserProfile> {

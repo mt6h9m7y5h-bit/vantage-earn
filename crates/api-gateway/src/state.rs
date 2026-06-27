@@ -17,6 +17,8 @@ use currency_engine::CurrencyEngine;
 use ai_engine::AiCopilot;
 
 use crate::auth::JwtService;
+use crate::email::EmailService;
+use crate::early_adopter::EarlyAdopterConfig;
 use crate::fraud_admin::HighRiskUserRow;
 use crate::middleware::{admin_actor, client_ip};
 use crate::store::{
@@ -135,6 +137,7 @@ pub struct AppState {
     pub events: Arc<EventBus>,
     pub copilot: AiCopilot,
     pub jwt: JwtService,
+    pub email: EmailService,
     pub started_at: DateTime<Utc>,
 }
 
@@ -175,6 +178,7 @@ impl AppState {
             events,
             copilot: AiCopilot::from_config(ai_engine::AiConfig::default()),
             jwt: JwtService::from_env(),
+            email: EmailService::from_env(),
             started_at: Utc::now(),
         }
     }
@@ -697,6 +701,33 @@ impl AppState {
         self.store
             .set_user_credentials(user_id, email, password_hash)
             .await
+    }
+
+    pub async fn try_grant_early_adopter_bonus(&self, user_id: Uuid) -> AppResult<Option<Decimal>> {
+        let config = EarlyAdopterConfig::from_env();
+        let amount = self.store.try_grant_early_bonus(user_id, &config).await?;
+        if let Some(amt) = amount {
+            let msg = format!("+{amt} USDT Willkommensbonus als Early Adopter.");
+            let _ = self
+                .store
+                .gamification_push_notification(user_id, "bonus", "Willkommensbonus", &msg)
+                .await;
+        }
+        Ok(amount)
+    }
+
+    pub fn send_registration_welcome_email(
+        &self,
+        to: &str,
+        bonus_usdt: Option<Decimal>,
+    ) {
+        let email = self.email.clone();
+        let to = to.to_string();
+        tokio::spawn(async move {
+            if let Err(e) = email.send_registration_welcome(&to, bonus_usdt).await {
+                tracing::warn!(to = %to, error = %e, "registration welcome email failed");
+            }
+        });
     }
 
     pub async fn local_currency_for_user(&self, user_id: Uuid) -> Currency {

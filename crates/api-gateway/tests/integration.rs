@@ -11,6 +11,8 @@ use uuid::Uuid;
 use api_gateway::routes;
 use api_gateway::state::AppState;
 
+static EARLY_ADOPTER_ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn app(state: AppState) -> Router {
     routes::router().with_state(state)
 }
@@ -358,6 +360,91 @@ async fn register_requires_accept_terms() {
 }
 
 #[tokio::test]
+async fn email_register_grants_early_adopter_bonus_once() {
+    let _guard = EARLY_ADOPTER_ENV.lock().unwrap();
+    std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0.5");
+    std::env::set_var("EARLY_ADOPTER_MAX_USERS", "40");
+    let state = AppState::new();
+    let app = app(state.clone());
+    let email = format!("early-{}@example.com", Uuid::new_v4());
+
+    let body = format!(
+        r#"{{"accept_terms":true,"accept_age_minimum":true,"email":"{email}","password":"securepass1"}}"#
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert_eq!(json["email"], email);
+    assert_eq!(json["welcome_bonus_usdt"].as_f64().unwrap(), 0.5);
+
+    let user_id = Uuid::parse_str(json["user_id"].as_str().unwrap()).unwrap();
+    let token = json["token"].as_str().unwrap();
+    let balance = state.balance(user_id).await.unwrap();
+    assert_eq!(balance, Decimal::from_str_exact("0.5").unwrap());
+
+    let wallet = app
+        .clone()
+        .oneshot(authed("GET", "/users/me/wallet", token, None))
+        .await
+        .unwrap();
+    assert_eq!(wallet.status(), StatusCode::OK);
+    let wallet_json = body_json(wallet).await;
+    assert_eq!(
+        json_decimal(&wallet_json["balance_usdt"]),
+        Decimal::from_str_exact("0.5").unwrap()
+    );
+
+    // Second email registration still gets bonus while under cap.
+    let email2 = format!("early-{}@example.com", Uuid::new_v4());
+    let body2 = format!(
+        r#"{{"accept_terms":true,"accept_age_minimum":true,"email":"{email2}","password":"securepass1"}}"#
+    );
+    let response2 = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(body2))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+    let json2 = body_json(response2).await;
+    assert_eq!(json2["welcome_bonus_usdt"].as_f64().unwrap(), 0.5);
+
+    let login = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"email":"{email}","password":"securepass1"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let login_json = body_json(login).await;
+    assert!(login_json.get("welcome_bonus_usdt").is_none());
+}
+
+#[tokio::test]
 async fn register_and_login_issue_tokens() {
     let app = app(AppState::new());
     let email = format!("user-{}@example.com", Uuid::new_v4());
@@ -439,6 +526,53 @@ async fn login_rejects_invalid_credentials() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn early_adopter_bonus_respects_max_users() {
+    let _guard = EARLY_ADOPTER_ENV.lock().unwrap();
+    std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0.25");
+    std::env::set_var("EARLY_ADOPTER_MAX_USERS", "1");
+
+    let app = app(AppState::new());
+    let first_email = format!("first-{}@example.com", Uuid::new_v4());
+    let second_email = format!("second-{}@example.com", Uuid::new_v4());
+
+    let first = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"accept_terms":true,"accept_age_minimum":true,"email":"{first_email}","password":"securepass1"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(first).await["welcome_bonus_usdt"].as_f64().unwrap(),
+        0.25
+    );
+
+    let second = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"accept_terms":true,"accept_age_minimum":true,"email":"{second_email}","password":"securepass1"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let second_json = body_json(second).await;
+    assert!(second_json.get("welcome_bonus_usdt").is_none());
 }
 
 #[tokio::test]

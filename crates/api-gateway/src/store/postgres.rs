@@ -203,6 +203,78 @@ impl PgStore {
         }
     }
 
+    pub async fn try_grant_early_bonus(
+        &self,
+        user_id: Uuid,
+        config: &crate::early_adopter::EarlyAdopterConfig,
+    ) -> AppResult<Option<Decimal>> {
+        if !config.is_active() {
+            return Ok(None);
+        }
+
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+
+        let granted: Option<(bool,)> = sqlx::query_as(
+            "SELECT early_bonus_granted FROM users WHERE id = $1 FOR UPDATE",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+
+        let Some((already_granted,)) = granted else {
+            return Ok(None);
+        };
+        if already_granted {
+            return Ok(None);
+        }
+
+        let email: Option<(Option<String>,)> = sqlx::query_as(
+            "SELECT email FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        if email.and_then(|(e,)| e).is_none() {
+            return Ok(None);
+        }
+
+        let updated: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            WITH eligible AS (
+                SELECT id FROM users
+                WHERE email IS NOT NULL
+                ORDER BY created_at ASC
+                LIMIT $2
+            )
+            UPDATE users u
+            SET early_bonus_granted = true
+            WHERE u.id = $1
+              AND u.early_bonus_granted = false
+              AND u.email IS NOT NULL
+              AND u.id IN (SELECT id FROM eligible)
+              AND NOW() <= $3
+            RETURNING u.id
+            "#,
+        )
+        .bind(user_id)
+        .bind(config.max_users as i64)
+        .bind(config.until)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+
+        if updated.is_none() {
+            tx.rollback().await.map_err(db_err)?;
+            return Ok(None);
+        }
+
+        tx.commit().await.map_err(db_err)?;
+        self.credit(user_id, config.bonus_usdt).await?;
+        Ok(Some(config.bonus_usdt))
+    }
+
     pub async fn profile(&self, user_id: Uuid) -> AppResult<UserProfile> {
         let row = sqlx::query_as::<_, UserRow>(
             r#"

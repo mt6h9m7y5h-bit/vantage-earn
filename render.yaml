@@ -25,3 +25,18 @@ services:
           property: connectionString
       - key: BITLABS_CALLBACK_BASE_URL
         value: https://vantage-earn.onrender.com
+      - key: EARLY_ADOPTER_BONUS_USDT
+        value: "0.5"
+      - key: EARLY_ADOPTER_MAX_USERS
+        value: "40"
+      - key: EARLY_ADOPTER_UNTIL
+        value: "2026-07-31"
+      # Optional SMTP — without these, welcome emails are skipped in production (logged only in dev)
+      # - key: SMTP_HOST
+      #   sync: false
+      # - key: SMTP_USER
+      #   sync: false
+      # - key: SMTP_PASS
+      #   sync: false
+      # - key: SMTP_FROM
+      #   value: VANTAGE-EARN <noreply@vantage-earn.onrender.com>

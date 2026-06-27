@@ -162,6 +162,8 @@ struct AuthResponse {
     token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    welcome_bonus_usdt: Option<f64>,
 }
 
 async fn register(
@@ -210,6 +212,7 @@ async fn register(
         user_id,
         token,
         email: None,
+        welcome_bonus_usdt: None,
     }))
 }
 
@@ -282,11 +285,15 @@ async fn register_with_credentials(
         state.save_profile(user_id, &profile).await?;
     }
 
+    let welcome_bonus = state.try_grant_early_adopter_bonus(user_id).await?;
+    state.send_registration_welcome_email(&email, welcome_bonus);
+
     let token = state.jwt.issue(user_id)?;
     Ok(Json(AuthResponse {
         user_id,
         token,
         email: Some(email),
+        welcome_bonus_usdt: welcome_bonus.and_then(|a| a.to_string().parse().ok()),
     }))
 }
 
@@ -312,6 +319,7 @@ async fn login(
         user_id,
         token,
         email: Some(email),
+        welcome_bonus_usdt: None,
     }))
 }
 

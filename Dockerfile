@@ -18,6 +18,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /app/target/release/vantage-earn /app/vantage-earn
 COPY crates/api-gateway/migrations ./migrations
+COPY templates/email ./templates/email
+ENV EMAIL_TEMPLATES_DIR=/app/templates/email
 # Render injects PORT at runtime (default 10000); 3000 fallback for local docker-compose
 ENV PORT=3000
 CMD ["./vantage-earn"]

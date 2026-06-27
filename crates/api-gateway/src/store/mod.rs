@@ -183,6 +183,17 @@ impl Store {
         }
     }
 
+    pub async fn try_grant_early_bonus(
+        &self,
+        user_id: Uuid,
+        config: &crate::early_adopter::EarlyAdopterConfig,
+    ) -> AppResult<Option<Decimal>> {
+        match self {
+            Self::Memory(s) => s.try_grant_early_bonus(user_id, config).await,
+            Self::Postgres(s) => s.try_grant_early_bonus(user_id, config).await,
+        }
+    }
+
     pub async fn profile(&self, user_id: Uuid) -> AppResult<UserProfile> {
         match self {
             Self::Memory(s) => s.profile(user_id).await,

@@ -4876,8 +4876,15 @@
       setAuthScreenActive(false);
       setAppChromeVisible(true);
       navigateToView('dashboard');
-      log(message || ('Angemeldet: ' + (data.email || data.user_id.slice(0, 8) + '…')));
-      showSuccessCelebration(message || 'Willkommen bei VANTAGE!');
+      const bonus = data.welcome_bonus_usdt;
+      if (bonus != null && Number(bonus) > 0) {
+        const bonusMsg = 'Willkommensbonus: +' + formatBalanceAmount(bonus) + ' USDT';
+        log(bonusMsg);
+        showSuccessCelebration(bonusMsg);
+      } else {
+        log(message || ('Angemeldet: ' + (data.email || data.user_id.slice(0, 8) + '…')));
+        showSuccessCelebration(message || 'Willkommen bei VANTAGE!');
+      }
       void refresh({ quiet: true, bustCache: true }).catch(() => {});
     }
 
@@ -5035,7 +5042,12 @@
         token = data.token;
         localStorage.setItem('ve_token', token);
         if (data.email) localStorage.setItem('ve_email', data.email);
-        showSuccessCelebration('Konto verknüpft!');
+        const bonus = data.welcome_bonus_usdt;
+        if (bonus != null && Number(bonus) > 0) {
+          showSuccessCelebration('Willkommensbonus: +' + formatBalanceAmount(bonus) + ' USDT');
+        } else {
+          showSuccessCelebration('Konto verknüpft!');
+        }
         void loadProfileStats();
         void refresh({ quiet: true, bustCache: true }).catch(() => {});
       } catch (e) {

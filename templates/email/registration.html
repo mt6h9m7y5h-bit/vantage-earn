@@ -1,11 +1,43 @@
 <!DOCTYPE html>
 <html lang="de">
-<head><meta charset="UTF-8"><title>Registrierung</title></head>
-<body style="font-family:Inter,system-ui,sans-serif;color:#0F172A">
-  <h1>Willkommen bei VANTAGE-EARN</h1>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Willkommen bei VANTAGE-EARN</title>
+</head>
+<body style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#0F172A;line-height:1.6;max-width:560px;margin:0 auto;padding:24px">
+  <h1 style="font-size:1.5rem;margin:0 0 8px">Willkommen bei VANTAGE-EARN</h1>
+  <p style="color:#64748B;margin:0 0 24px">Dein Konto wurde erfolgreich erstellt.</p>
+
   <p>Hallo {{name}},</p>
-  <p>vielen Dank für deine Registrierung. Du kannst jetzt Videos schauen und USDT verdienen.</p>
-  <p><a href="{{app_url}}">Zur App</a></p>
-  <p style="color:#64748B;font-size:0.85rem">Diese E-Mail wurde automatisch versendet.</p>
+
+  <p>
+    schön, dass du dabei bist! <strong>VANTAGE-EARN</strong> ist deine App, um mit kurzen
+    Aktivitäten echte Belohnungen in <strong>USDT</strong> zu verdienen — fair, transparent
+    und direkt auf dein Wallet.
+  </p>
+
+  {{bonus_block}}
+
+  <h2 style="font-size:1.1rem;margin:24px 0 8px">Was dich erwartet</h2>
+  <ul style="padding-left:1.25rem;margin:0 0 24px">
+    <li><strong>Wallet auf allen Geräten:</strong> Mit E-Mail und Passwort bleibt dein Guthaben
+        gespeichert — egal ob Handy, Tablet oder neuer Browser.</li>
+    <li><strong>Videos &amp; tägliche Boni:</strong> Schau Werbung, sammle Streaks und hole
+        tägliche Belohnungen ab.</li>
+    <li><strong>BitLabs-Angebote kommen bald:</strong> Zusätzliche Umfragen und Partner-Offers
+        erweitern deine Verdienstmöglichkeiten — wir halten dich auf dem Laufenden.</li>
+  </ul>
+
+  <p style="margin:28px 0">
+    <a href="{{app_url}}" style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600">
+      Jetzt zur App
+    </a>
+  </p>
+
+  <p style="color:#64748B;font-size:0.85rem;margin-top:32px;border-top:1px solid #E2E8F0;padding-top:16px">
+    Fragen? Antworte einfach auf diese E-Mail oder nutze den Support in der App.<br>
+    Diese Nachricht wurde automatisch versendet — bitte nicht weiterleiten.
+  </p>
 </body>
 </html>

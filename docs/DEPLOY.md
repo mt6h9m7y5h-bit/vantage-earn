@@ -143,7 +143,7 @@ Ohne SMTP werden E-Mails in Production nur geloggt (nicht zugestellt). Für Rese
 | `SMTP_PORT` | `587` |
 | `SMTP_USER` | `resend` |
 | `SMTP_PASS` | dein Resend API-Key (`re_…`) — **Secret**, nicht ins Repo |
-| `SMTP_FROM` | `VANTAGE-EARN <onboarding@deine-domain.de>` (verifizierte Absender-Domain) |
+| `SMTP_FROM` | `VANTAGE-EARN <noreply@deine-domain.de>` (no-reply, verifizierte Absender-Domain) |
 
 3. Service neu deployen (oder „Save“ triggert Redeploy)
 4. Test: Auf `/demo` Konto registrieren (Willkommens-Mail) oder „Passwort vergessen“ — Reset-Link: `https://vantage-earn.onrender.com/demo?reset=TOKEN`

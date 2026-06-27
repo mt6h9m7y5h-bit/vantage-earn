@@ -47,4 +47,4 @@ services:
       - key: SMTP_PASS
         sync: false
       - key: SMTP_FROM
-        value: VANTAGE-EARN <onboarding@deine-domain.de>
+        value: VANTAGE-EARN <noreply@deine-domain.de>

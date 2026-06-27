@@ -9,7 +9,7 @@ use shared::AppResult;
 /// - `SMTP_HOST` — e.g. `smtp.resend.com`
 /// - `SMTP_PORT` — e.g. `587` (default `587`; use `465` for implicit TLS)
 /// - `SMTP_USER` / `SMTP_PASS` — credentials (`resend` + API key for Resend)
-/// - `SMTP_FROM` — sender, e.g. `VANTAGE-EARN <onboarding@deine-domain.de>`
+/// - `SMTP_FROM` — sender (no-reply), e.g. `VANTAGE-EARN <noreply@deine-domain.de>`
 /// - `APP_URL` — origin for reset links (default `https://vantage-earn.onrender.com`)
 /// - `EMAIL_TEMPLATES_DIR` — override template folder (default `templates/email`)
 #[derive(Clone)]
@@ -274,6 +274,7 @@ mod tests {
         assert!(html.contains("Willkommen bei VANTAGE-EARN"));
         assert!(html.contains("https://example.com/demo"));
         assert!(html.contains("bonus"));
+        assert!(html.contains("Diese E-Mail kann nicht beantwortet werden"));
     }
 
     #[test]
@@ -286,6 +287,7 @@ mod tests {
         let html = svc.render_template("password_reset.html", &vars).unwrap();
         assert!(html.contains(&reset_url));
         assert!(html.contains("Passwort zurücksetzen"));
+        assert!(html.contains("Diese E-Mail kann nicht beantwortet werden"));
     }
 
     #[test]

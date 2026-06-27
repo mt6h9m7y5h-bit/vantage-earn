@@ -1,9 +1,8 @@
-//! Offerwall-style top offers (Bitlabs / CPX) — mock catalog until live API keys.
-//!
-//! Display rewards are fixed EUR estimates (30–80 ct) for UI; real payouts come from
-//! provider postbacks once integrated.
+//! Offerwall-style top offers (Bitlabs / CPX).
 
 use serde::{Deserialize, Serialize};
+
+use crate::bitlabs::BitlabsConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +26,7 @@ pub enum TopOfferProvider {
 pub enum TopOfferStatus {
     ComingSoon,
     Mock,
+    Live,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -117,7 +117,16 @@ pub fn build_offers() -> Vec<TopOffer> {
 }
 
 pub fn offers_for_user() -> Vec<TopOffer> {
+    let cfg = BitlabsConfig::from_env();
     build_offers()
+        .into_iter()
+        .map(|mut offer| {
+            if cfg.enabled && offer.provider == TopOfferProvider::Bitlabs {
+                offer.status = TopOfferStatus::Live;
+            }
+            offer
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -148,7 +157,14 @@ mod tests {
         let offers = build_offers();
         assert!(offers
             .iter()
-            .all(|o| o.status == TopOfferStatus::Mock || o.status == TopOfferStatus::ComingSoon));
+            .all(|o| {
+                matches!(
+                    o.status,
+                    TopOfferStatus::Mock
+                        | TopOfferStatus::ComingSoon
+                        | TopOfferStatus::Live
+                )
+            }));
         assert!(offers.iter().any(|o| o.status == TopOfferStatus::Mock));
         assert!(offers
             .iter()

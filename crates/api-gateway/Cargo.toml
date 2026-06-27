@@ -41,6 +41,8 @@ tracing-subscriber.workspace = true
 trust-score-engine = { path = "../trust-score-engine" }
 uuid.workspace = true
 wallet-engine = { path = "../wallet-engine" }
+hmac = "0.12"
+sha1 = "0.10"
 
 [dev-dependencies]
 http-body-util = "0.1"

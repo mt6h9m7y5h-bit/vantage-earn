@@ -22,6 +22,7 @@ use shared::{
 use uuid::Uuid;
 
 use crate::ad_config::AdConfig;
+use crate::bitlabs::{self, BitlabsConfig};
 use crate::error::{map_ai_error, ApiError};
 use std::collections::HashMap;
 
@@ -54,6 +55,7 @@ pub fn router() -> Router<AppState> {
         .route("/icons/icon-512.png", get(pwa::icon_512))
         .route("/auth/register", post(register))
         .route("/auth/login", post(login))
+        .route("/webhooks/bitlabs", get(bitlabs::webhook))
         .route("/leaderboard/weekly", get(weekly_leaderboard))
         .route("/admin", get(pwa::admin_page))
         .merge(crate::admin::router())
@@ -123,6 +125,7 @@ async fn public_config(State(state): State<AppState>) -> Result<Json<serde_json:
             "maintenance_message".to_string(),
             serde_json::json!(flags.maintenance_message),
         );
+        obj.insert("offerwall".to_string(), BitlabsConfig::from_env().public_json());
     }
     Ok(Json(json))
 }
@@ -264,6 +267,7 @@ async fn get_referral(
 
 #[derive(Serialize)]
 struct UserStatsResponse {
+    user_id: Uuid,
     streak_days: i32,
     streak_bonus_percent: u32,
     referral_count: i32,
@@ -317,6 +321,7 @@ async fn build_user_stats(
     let top_offers = top_offers::offers_for_user();
 
     UserStatsResponse {
+        user_id,
         streak_days: profile.streak_days,
         streak_bonus_percent,
         referral_count: profile.referral_count,

@@ -1,3 +1,4 @@
+pub mod bitlabs;
 pub mod admin;
 pub mod ad_config;
 pub mod announcements;

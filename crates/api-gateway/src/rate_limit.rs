@@ -104,6 +104,7 @@ pub(crate) fn is_exempt(path: &str) -> bool {
     ) || path.starts_with("/icons/")
         || is_admin_path(path)
         || path.starts_with("/announcements/")
+        || path.starts_with("/webhooks/")
         || (!release_info::is_production() && path.starts_with("/dev/"))
 }
 

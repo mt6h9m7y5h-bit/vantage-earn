@@ -10,12 +10,15 @@ use std::str::FromStr;
 /// - `EARLY_ADOPTER_DAYS` — campaign length in days from start (default `30`)
 /// - `EARLY_ADOPTER_START` — optional campaign start (`YYYY-MM-DD` or RFC3339). When unset,
 ///   the campaign starts at the first email registration timestamp.
+/// - `EARLY_ADOPTER_UNTIL` — optional hard deadline (`YYYY-MM-DD`, e.g. `2026-07-31`). Overrides
+///   the days-based end when set (recommended on Render).
 #[derive(Debug, Clone)]
 pub struct EarlyAdopterConfig {
     pub bonus_usdt: Decimal,
     pub max_users: u32,
     pub days: u32,
     pub start_override: Option<DateTime<Utc>>,
+    pub until_override: Option<DateTime<Utc>>,
 }
 
 impl EarlyAdopterConfig {
@@ -35,11 +38,15 @@ impl EarlyAdopterConfig {
         let start_override = std::env::var("EARLY_ADOPTER_START")
             .ok()
             .and_then(|s| parse_start(&s));
+        let until_override = std::env::var("EARLY_ADOPTER_UNTIL")
+            .ok()
+            .and_then(|s| parse_until(&s));
         Self {
             bonus_usdt,
             max_users,
             days,
             start_override,
+            until_override,
         }
     }
 
@@ -52,7 +59,13 @@ impl EarlyAdopterConfig {
     }
 
     pub fn is_campaign_active(&self, now: DateTime<Utc>, start: DateTime<Utc>) -> bool {
-        self.enabled() && now <= self.campaign_end(start)
+        if !self.enabled() {
+            return false;
+        }
+        if let Some(until) = self.until_override {
+            return now <= until;
+        }
+        now <= self.campaign_end(start)
     }
 
     pub fn registration_in_window(
@@ -62,6 +75,13 @@ impl EarlyAdopterConfig {
     ) -> bool {
         registered_at >= start && registered_at <= self.campaign_end(start)
     }
+}
+
+fn parse_until(raw: &str) -> Option<DateTime<Utc>> {
+    NaiveDate::parse_from_str(raw, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.and_hms_opt(23, 59, 59))
+        .map(|t| t.and_utc())
 }
 
 fn parse_start(raw: &str) -> Option<DateTime<Utc>> {
@@ -85,6 +105,7 @@ mod tests {
             max_users: 40,
             days: 30,
             start_override: None,
+            until_override: None,
         };
         let start = Utc::now();
         let end = config.campaign_end(start);
@@ -98,6 +119,7 @@ mod tests {
             max_users: 40,
             days: 7,
             start_override: None,
+            until_override: None,
         };
         let start = Utc::now();
         let end = config.campaign_end(start);
@@ -105,6 +127,24 @@ mod tests {
         assert!(config.registration_in_window(end, start));
         assert!(!config.registration_in_window(start - chrono::Duration::seconds(1), start));
         assert!(!config.registration_in_window(end + chrono::Duration::seconds(1), start));
+    }
+
+    #[test]
+    fn until_deadline_overrides_days_window() {
+        let config = EarlyAdopterConfig {
+            bonus_usdt: Decimal::ONE,
+            max_users: 40,
+            days: 30,
+            start_override: None,
+            until_override: Some(
+                NaiveDate::from_ymd_opt(2020, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(23, 59, 59)
+                    .unwrap()
+                    .and_utc(),
+            ),
+        };
+        assert!(!config.is_campaign_active(Utc::now(), Utc::now()));
     }
 
     #[test]
@@ -120,6 +160,7 @@ mod tests {
                     .unwrap()
                     .and_utc(),
             ),
+            until_override: None,
         };
         let start = config.start_override.unwrap();
         assert!(!config.is_campaign_active(Utc::now(), start));

@@ -21,8 +21,9 @@ fn early_adopter_env_lock() -> std::sync::MutexGuard<'static, ()> {
 fn set_early_adopter_active(bonus: &str, max_users: &str) {
     std::env::set_var("EARLY_ADOPTER_BONUS_USDT", bonus);
     std::env::set_var("EARLY_ADOPTER_MAX_USERS", max_users);
-    std::env::set_var("EARLY_ADOPTER_DAYS", "30");
+    std::env::set_var("EARLY_ADOPTER_UNTIL", "2026-07-31");
     std::env::remove_var("EARLY_ADOPTER_START");
+    std::env::remove_var("EARLY_ADOPTER_DAYS");
 }
 
 fn init_integration_test_env() {
@@ -599,8 +600,9 @@ async fn early_adopter_bonus_expires_after_window() {
     let _guard = early_adopter_env_lock();
     std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0.5");
     std::env::set_var("EARLY_ADOPTER_MAX_USERS", "40");
-    std::env::set_var("EARLY_ADOPTER_DAYS", "7");
-    std::env::set_var("EARLY_ADOPTER_START", "2020-01-01");
+    std::env::set_var("EARLY_ADOPTER_UNTIL", "2020-01-01");
+    std::env::remove_var("EARLY_ADOPTER_START");
+    std::env::remove_var("EARLY_ADOPTER_DAYS");
 
     let app = app(AppState::new());
     let email = format!("late-{}@example.com", Uuid::new_v4());

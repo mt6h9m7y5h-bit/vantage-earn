@@ -131,24 +131,25 @@ Vor dem Internet brauchst du **Caddy/nginx + Let's Encrypt** für HTTPS. Ohne HT
 
 ## E-Mail (Willkommen & Passwort-Reset)
 
-Ohne SMTP werden E-Mails in Production nur geloggt (nicht zugestellt). Für Resend:
+Ohne Resend-API-Key werden E-Mails in Production nur geloggt (nicht zugestellt). Render blockiert oft ausgehende SMTP-Ports (587/465) — daher **HTTPS API** statt SMTP:
 
-1. [resend.com](https://resend.com) — Domain verifizieren, API-Key erzeugen
+1. [resend.com](https://resend.com) — Domain verifizieren, API-Key erzeugen (`re_…`)
 2. Render Dashboard → **vantage-earn** → **Environment**:
 
 | Variable | Wert |
 |----------|------|
 | `APP_URL` | `https://vantage-earn.onrender.com` |
-| `SMTP_HOST` | `smtp.resend.com` |
-| `SMTP_PORT` | `587` |
-| `SMTP_USER` | `resend` |
-| `SMTP_PASS` | dein Resend API-Key (`re_…`) — **Secret**, nicht ins Repo |
+| `SMTP_PASS` | dein Resend API-Key (`re_…`) — **Secret**, nicht ins Repo (Name bleibt aus Kompatibilität) |
 | `SMTP_FROM` | `VANTAGE-EARN <noreply@deine-domain.de>` (no-reply, verifizierte Absender-Domain) |
+
+Optional: `RESEND_API_KEY` statt `SMTP_PASS` (gleicher `re_…`-Wert).
+
+`SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` sind auf Render **nicht** nötig.
 
 3. Service neu deployen (oder „Save“ triggert Redeploy)
 4. Test: Auf `/demo` Konto registrieren (Willkommens-Mail) oder „Passwort vergessen“ — Reset-Link: `https://vantage-earn.onrender.com/demo?reset=TOKEN`
 
-Logs: Render → Logs → `transactional email sent` oder `SMTP send failed`.
+Logs: Render → Logs → `transactional email sent (Resend API)` oder `Resend API error`.
 
 ---
 

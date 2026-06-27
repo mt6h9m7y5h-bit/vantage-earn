@@ -5,18 +5,29 @@ use shared::AppResult;
 
 /// Transactional email (welcome, password reset, …).
 ///
-/// SMTP (optional — all of host, user, pass required; port defaults to 587):
-/// - `SMTP_HOST` — e.g. `smtp.resend.com`
-/// - `SMTP_PORT` — e.g. `587` (default `587`; use `465` for implicit TLS)
-/// - `SMTP_USER` / `SMTP_PASS` — credentials (`resend` + API key for Resend)
+/// Production (Render): Resend HTTP API — no outbound SMTP ports required.
+/// - `RESEND_API_KEY` or `SMTP_PASS` — Resend API key (`re_…`); `SMTP_PASS` is kept for
+///   backward compatibility with existing Render secrets.
 /// - `SMTP_FROM` — sender (no-reply), e.g. `VANTAGE-EARN <noreply@deine-domain.de>`
+///
+/// Local dev fallback: classic SMTP when `SMTP_HOST` + `SMTP_USER` + non-`re_` `SMTP_PASS` are set.
+/// - `SMTP_HOST`, `SMTP_PORT` (default `587`), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+///
+/// Other:
 /// - `APP_URL` — origin for reset links (default `https://vantage-earn.onrender.com`)
 /// - `EMAIL_TEMPLATES_DIR` — override template folder (default `templates/email`)
 #[derive(Clone)]
 pub struct EmailService {
     templates_dir: PathBuf,
     app_url: String,
+    resend: Option<ResendConfig>,
     smtp: Option<SmtpConfig>,
+}
+
+#[derive(Clone)]
+struct ResendConfig {
+    api_key: String,
+    from: String,
 }
 
 #[derive(Clone)]
@@ -35,20 +46,50 @@ fn non_empty_env(key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+fn looks_like_resend_api_key(value: &str) -> bool {
+    value.starts_with("re_")
+}
+
+fn smtp_from_address() -> String {
+    non_empty_env("SMTP_FROM")
+        .unwrap_or_else(|| "VANTAGE-EARN <noreply@vantage-earn.onrender.com>".into())
+}
+
+fn resolve_resend_api_key() -> Option<String> {
+    if let Some(key) = non_empty_env("RESEND_API_KEY") {
+        if looks_like_resend_api_key(&key) {
+            return Some(key);
+        }
+        tracing::warn!("RESEND_API_KEY set but does not start with re_ — ignoring");
+    }
+    non_empty_env("SMTP_PASS").filter(|pass| looks_like_resend_api_key(pass))
+}
+
+fn resend_from_env() -> Option<ResendConfig> {
+    let api_key = resolve_resend_api_key()?;
+    Some(ResendConfig {
+        api_key,
+        from: smtp_from_address(),
+    })
+}
+
 fn smtp_from_env() -> Option<SmtpConfig> {
+    if resolve_resend_api_key().is_some() {
+        return None;
+    }
+
     let host = non_empty_env("SMTP_HOST")?;
     let port = non_empty_env("SMTP_PORT")
         .and_then(|p| p.parse().ok())
         .unwrap_or(587);
     let user = non_empty_env("SMTP_USER");
     let pass = non_empty_env("SMTP_PASS");
-    let from = non_empty_env("SMTP_FROM")
-        .unwrap_or_else(|| "VANTAGE-EARN <noreply@vantage-earn.onrender.com>".into());
+    let from = smtp_from_address();
 
     if user.is_none() || pass.is_none() {
         tracing::warn!(
             host = %host,
-            "SMTP_HOST set but SMTP_USER/SMTP_PASS missing — transactional email disabled"
+            "SMTP_HOST set but SMTP_USER/SMTP_PASS missing — SMTP relay disabled"
         );
         return None;
     }
@@ -69,13 +110,21 @@ impl EmailService {
             .unwrap_or_else(|_| PathBuf::from("templates/email"));
         let app_url = std::env::var("APP_URL")
             .unwrap_or_else(|_| "https://vantage-earn.onrender.com".into());
-        let smtp = smtp_from_env();
-        if smtp.is_some() {
-            tracing::info!("transactional email: SMTP relay configured");
+        let resend = resend_from_env();
+        let smtp = if resend.is_some() {
+            None
+        } else {
+            smtp_from_env()
+        };
+        if resend.is_some() {
+            tracing::info!("transactional email: Resend HTTP API configured");
+        } else if smtp.is_some() {
+            tracing::info!("transactional email: SMTP relay configured (local dev fallback)");
         }
         Self {
             templates_dir,
             app_url,
+            resend,
             smtp,
         }
     }
@@ -158,18 +207,27 @@ impl EmailService {
     }
 
     async fn deliver(&self, to: &str, subject: &str, html: &str) -> AppResult<()> {
+        let log_to = to.to_string();
+        let log_subject = subject.to_string();
+
+        if let Some(resend) = &self.resend {
+            send_via_resend_api(resend, to, subject, html).await?;
+            tracing::info!(to = %log_to, subject = %log_subject, "transactional email sent (Resend API)");
+            return Ok(());
+        }
+
         let Some(smtp) = &self.smtp else {
             if crate::release_info::is_production() {
                 tracing::info!(
                     to = %to,
                     subject = %subject,
-                    "email skipped (SMTP not configured in production)"
+                    "email skipped (no Resend API key or SMTP configured in production)"
                 );
             } else {
                 tracing::info!(
                     to = %to,
                     subject = %subject,
-                    "email (SMTP not configured — dev log only)\n{html}"
+                    "email (not configured — dev log only)\n{html}"
                 );
             }
             return Ok(());
@@ -179,15 +237,48 @@ impl EmailService {
         let to = to.to_string();
         let subject = subject.to_string();
         let html = html.to_string();
-        let log_to = to.clone();
-        let log_subject = subject.clone();
 
         tokio::task::spawn_blocking(move || send_smtp(&smtp, &to, &subject, &html))
             .await
             .map_err(|e| shared::AppError::InvalidInput(e.to_string()))??;
-        tracing::info!(to = %log_to, subject = %log_subject, "transactional email sent");
+        tracing::info!(to = %log_to, subject = %log_subject, "transactional email sent (SMTP)");
         Ok(())
     }
+}
+
+async fn send_via_resend_api(cfg: &ResendConfig, to: &str, subject: &str, html: &str) -> AppResult<()> {
+    #[derive(serde::Serialize)]
+    struct ResendEmail<'a> {
+        from: &'a str,
+        to: Vec<&'a str>,
+        subject: &'a str,
+        html: &'a str,
+    }
+
+    let body = ResendEmail {
+        from: &cfg.from,
+        to: vec![to],
+        subject,
+        html,
+    };
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://api.resend.com/emails")
+        .bearer_auth(&cfg.api_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| shared::AppError::InvalidInput(format!("Resend API request failed: {e}")))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(shared::AppError::InvalidInput(format!(
+            "Resend API error {status}: {text}"
+        )));
+    }
+    Ok(())
 }
 
 fn send_smtp(cfg: &SmtpConfig, to: &str, subject: &str, html: &str) -> AppResult<()> {
@@ -234,6 +325,7 @@ mod tests {
         EmailService {
             templates_dir,
             app_url: app_url.into(),
+            resend: None,
             smtp: None,
         }
     }
@@ -291,10 +383,49 @@ mod tests {
     }
 
     #[test]
+    fn looks_like_resend_api_key_requires_re_prefix() {
+        assert!(looks_like_resend_api_key("re_abc123"));
+        assert!(looks_like_resend_api_key("re_live_xyz"));
+        assert!(!looks_like_resend_api_key("password"));
+        assert!(!looks_like_resend_api_key("smtp-secret"));
+        assert!(!looks_like_resend_api_key(""));
+    }
+
+    #[test]
+    fn resend_key_from_smtp_pass_when_re_prefix() {
+        let prev_resend = std::env::var("RESEND_API_KEY").ok();
+        let prev_pass = std::env::var("SMTP_PASS").ok();
+        std::env::remove_var("RESEND_API_KEY");
+        std::env::set_var("SMTP_PASS", "re_test_key_from_smtp_pass");
+        assert_eq!(
+            resolve_resend_api_key().as_deref(),
+            Some("re_test_key_from_smtp_pass")
+        );
+        restore_env("RESEND_API_KEY", prev_resend);
+        restore_env("SMTP_PASS", prev_pass);
+    }
+
+    #[test]
+    fn resend_key_prefers_resend_api_key_env() {
+        let prev_resend = std::env::var("RESEND_API_KEY").ok();
+        let prev_pass = std::env::var("SMTP_PASS").ok();
+        std::env::set_var("RESEND_API_KEY", "re_from_dedicated_env");
+        std::env::set_var("SMTP_PASS", "re_from_smtp_pass");
+        assert_eq!(
+            resolve_resend_api_key().as_deref(),
+            Some("re_from_dedicated_env")
+        );
+        restore_env("RESEND_API_KEY", prev_resend);
+        restore_env("SMTP_PASS", prev_pass);
+    }
+
+    #[test]
     fn smtp_disabled_when_only_host_set() {
         let prev_host = std::env::var("SMTP_HOST").ok();
         let prev_user = std::env::var("SMTP_USER").ok();
         let prev_pass = std::env::var("SMTP_PASS").ok();
+        let prev_resend = std::env::var("RESEND_API_KEY").ok();
+        std::env::remove_var("RESEND_API_KEY");
         std::env::set_var("SMTP_HOST", "smtp.resend.com");
         std::env::remove_var("SMTP_USER");
         std::env::remove_var("SMTP_PASS");
@@ -302,6 +433,25 @@ mod tests {
         restore_env("SMTP_HOST", prev_host);
         restore_env("SMTP_USER", prev_user);
         restore_env("SMTP_PASS", prev_pass);
+        restore_env("RESEND_API_KEY", prev_resend);
+    }
+
+    #[test]
+    fn smtp_skipped_when_pass_is_resend_api_key() {
+        let prev_host = std::env::var("SMTP_HOST").ok();
+        let prev_user = std::env::var("SMTP_USER").ok();
+        let prev_pass = std::env::var("SMTP_PASS").ok();
+        let prev_resend = std::env::var("RESEND_API_KEY").ok();
+        std::env::remove_var("RESEND_API_KEY");
+        std::env::set_var("SMTP_HOST", "smtp.resend.com");
+        std::env::set_var("SMTP_USER", "resend");
+        std::env::set_var("SMTP_PASS", "re_api_key_not_smtp");
+        assert!(smtp_from_env().is_none());
+        assert!(resend_from_env().is_some());
+        restore_env("SMTP_HOST", prev_host);
+        restore_env("SMTP_USER", prev_user);
+        restore_env("SMTP_PASS", prev_pass);
+        restore_env("RESEND_API_KEY", prev_resend);
     }
 
     fn restore_env(key: &str, value: Option<String>) {

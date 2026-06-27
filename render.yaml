@@ -36,14 +36,9 @@ services:
       # Optional: set to go-live date (YYYY-MM-DD). If omitted, campaign starts at first email signup.
       # - key: EARLY_ADOPTER_START
       #   value: "2026-06-27"
-      # Transactional email (Resend SMTP) — SMTP_PASS manuell im Render Dashboard setzen (API-Key)
-      # Domain in Resend verifizieren, dann SMTP_FROM anpassen.
-      - key: SMTP_HOST
-        value: smtp.resend.com
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_USER
-        value: resend
+      # Transactional email (Resend HTTP API — no SMTP ports on Render)
+      # Set SMTP_PASS in Render Dashboard to your Resend API key (re_…), or use RESEND_API_KEY.
+      # Verify domain in Resend, then set SMTP_FROM to your no-reply address.
       - key: SMTP_PASS
         sync: false
       - key: SMTP_FROM

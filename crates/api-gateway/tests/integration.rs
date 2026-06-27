@@ -1954,6 +1954,51 @@ async fn admin_user_lookup_by_email() {
         ))
         .await
         .unwrap();
+    assert_eq!(detail.status(), StatusCode::OK);
+    let detail_json = body_json(detail).await;
+    assert_eq!(detail_json["email"], email);
+}
+
+#[tokio::test]
+async fn admin_email_search_opens_credential_only_user() {
+    use api_gateway::auth::hash_password;
+
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let state = AppState::new();
+    let user_id = Uuid::new_v4();
+    let email = format!("orphan-{}@example.com", Uuid::new_v4());
+    let password_hash = hash_password("securepass1").unwrap();
+    state
+        .set_user_credentials(user_id, &email, &password_hash)
+        .await
+        .unwrap();
+    assert!(state.admin_user_known(user_id).await);
+
+    let app = app(state);
+    let email_q = email.replace('@', "%40");
+
+    let lookup = app
+        .clone()
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/users/lookup?q={email_q}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(lookup.status(), StatusCode::OK);
+    let lookup_json = body_json(lookup).await;
+    assert_eq!(lookup_json["users"][0]["user_id"], user_id.to_string());
+
+    let detail = app
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/users/{user_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(detail.status(), StatusCode::OK);
     let detail_json = body_json(detail).await;
     assert_eq!(detail_json["email"], email);
 }

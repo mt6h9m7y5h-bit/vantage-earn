@@ -236,7 +236,10 @@ impl MemoryStore {
     }
 
     pub async fn user_exists(&self, user_id: Uuid) -> AppResult<bool> {
-        Ok(self.users.read().await.contains_key(&user_id))
+        if self.users.read().await.contains_key(&user_id) {
+            return Ok(true);
+        }
+        Ok(self.user_credentials.read().await.contains_key(&user_id))
     }
 
     pub async fn user_email(&self, user_id: Uuid) -> AppResult<Option<String>> {

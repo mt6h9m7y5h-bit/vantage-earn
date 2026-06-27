@@ -434,9 +434,7 @@ async fn admin_user_detail(
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<AdminUserProfile>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     let profile = state.profile(user_id).await;
     let balance = state.balance(user_id).await?;
     let trust_score = state.trust_score(user_id).await;
@@ -499,9 +497,7 @@ async fn admin_credit(
     Json(body): Json<AmountReasonBody>,
 ) -> Result<Json<BalanceActionResponse>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     if body.amount_usdt <= Decimal::ZERO {
         return Err(AppError::InvalidInput("amount must be positive".into()).into());
     }
@@ -534,9 +530,7 @@ async fn admin_debit(
     Json(body): Json<AmountReasonBody>,
 ) -> Result<Json<BalanceActionResponse>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     if body.amount_usdt <= Decimal::ZERO {
         return Err(AppError::InvalidInput("amount must be positive".into()).into());
     }
@@ -581,9 +575,7 @@ async fn admin_trust_score(
     Json(body): Json<TrustScoreBody>,
 ) -> Result<Json<TrustScoreResponse>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     let score = body.score.clamp(0, 100);
     let previous = state.trust_score(user_id).await;
     state.set_trust_score(user_id, score).await?;
@@ -624,9 +616,7 @@ async fn admin_ban(
     Json(body): Json<BanBody>,
 ) -> Result<Json<BanResponse>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     let mut profile = state.profile(user_id).await;
     let was_banned = profile.banned;
     profile.banned = body.banned;
@@ -793,9 +783,7 @@ async fn admin_user_notes(
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<NotesResponse>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     let notes = state.admin_user_notes(user_id).await?;
     Ok(Json(NotesResponse { notes }))
 }
@@ -814,9 +802,7 @@ async fn admin_add_user_note(
     Json(body): Json<AddNoteBody>,
 ) -> Result<Json<AdminUserNote>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     let note = body.note.trim();
     if note.is_empty() {
         return Err(AppError::InvalidInput("note is required".into()).into());
@@ -850,9 +836,7 @@ async fn admin_user_timeline(
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<TimelineResponse>, ApiError> {
     verify_admin(&headers)?;
-    if !state.user_exists(user_id).await {
-        return Err(AppError::UserNotFound(user_id).into());
-    }
+    state.prepare_admin_user(user_id).await?;
     let events = state.admin_user_timeline(user_id, 100).await?;
     Ok(Json(TimelineResponse { events }))
 }

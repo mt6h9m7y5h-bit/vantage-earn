@@ -684,6 +684,23 @@ impl AppState {
         self.store.user_exists(user_id).await.unwrap_or(false)
     }
 
+    /// True when admin search may return this user (profile row, users row, or credentials).
+    pub async fn admin_user_known(&self, user_id: Uuid) -> bool {
+        if self.user_exists(user_id).await {
+            return true;
+        }
+        self.user_email(user_id).await.is_some()
+    }
+
+    /// Resolve an admin user hit: verify existence and heal missing wallet/profile rows.
+    pub async fn prepare_admin_user(&self, user_id: Uuid) -> Result<(), shared::AppError> {
+        if !self.admin_user_known(user_id).await {
+            return Err(shared::AppError::UserNotFound(user_id));
+        }
+        self.ensure_user(user_id).await;
+        Ok(())
+    }
+
     pub async fn user_email(&self, user_id: Uuid) -> Option<String> {
         self.store.user_email(user_id).await.ok().flatten()
     }

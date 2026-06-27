@@ -55,7 +55,10 @@ pub fn router() -> Router<AppState> {
         .route("/icons/icon-512.png", get(pwa::icon_512))
         .route("/auth/register", post(register))
         .route("/auth/login", post(login))
-        .route("/webhooks/bitlabs", get(bitlabs::webhook))
+        .route(
+            "/webhooks/bitlabs",
+            get(bitlabs::webhook).post(bitlabs::webhook),
+        )
         .route("/leaderboard/weekly", get(weekly_leaderboard))
         .route("/admin", get(pwa::admin_page))
         .merge(crate::admin::router())

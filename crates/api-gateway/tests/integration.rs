@@ -1744,6 +1744,41 @@ async fn achievements_list_and_notifications() {
 }
 
 #[tokio::test]
+async fn bitlabs_webhook_accepts_get_and_post() {
+    std::env::set_var("BITLABS_SECRET_KEY", "test-bitlabs-secret");
+    std::env::set_var("BITLABS_APP_TOKEN", "tok");
+    std::env::remove_var("OFFERWALL_ENABLED");
+
+    let app = app(AppState::new());
+    let (user_id, _token) = register(&app).await;
+    let secret = "test-bitlabs-secret";
+
+    for (method, tx) in [("GET", "bitlabs-tx-get"), ("POST", "bitlabs-tx-post")] {
+        let base = format!("https://localhost/webhooks/bitlabs?uid={user_id}&val=100&tx={tx}");
+        let signed = api_gateway::bitlabs::sign_callback_url(&base, secret);
+        let path_query = signed.strip_prefix("https://localhost").unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path_query)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "bitlabs webhook {method} should return 200"
+        );
+    }
+}
+
+#[tokio::test]
 async fn admin_insights_endpoint() {
     std::env::set_var("ADMIN_SECRET", "test-admin-secret");
     let app = app(AppState::new());

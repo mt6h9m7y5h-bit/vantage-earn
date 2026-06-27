@@ -66,6 +66,26 @@ fn non_empty_env(key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+fn callback_hash_hex(url_without_hash: &str, secret_key: &str) -> Option<String> {
+    let Ok(mut mac) = HmacSha1::new_from_slice(secret_key.as_bytes()) else {
+        return None;
+    };
+    mac.update(url_without_hash.as_bytes());
+    Some(
+        mac.finalize()
+            .into_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>(),
+    )
+}
+
+/// Append `&hash=` for BitLabs S2S callbacks (URL must not already include hash).
+pub fn sign_callback_url(url_without_hash: &str, secret_key: &str) -> String {
+    let hash = callback_hash_hex(url_without_hash, secret_key).unwrap_or_default();
+    format!("{url_without_hash}&hash={hash}")
+}
+
 /// Verify BitLabs callback hash (HEX SHA1-HMAC of URL without `&hash=` suffix).
 pub fn verify_callback_hash(callback_url: &str, secret_key: &str) -> bool {
     let Some((url_without_hash, received)) = callback_url.rsplit_once("&hash=") else {
@@ -75,16 +95,9 @@ pub fn verify_callback_hash(callback_url: &str, secret_key: &str) -> bool {
     if received.is_empty() {
         return false;
     }
-    let Ok(mut mac) = HmacSha1::new_from_slice(secret_key.as_bytes()) else {
+    let Some(expected) = callback_hash_hex(url_without_hash, secret_key) else {
         return false;
     };
-    mac.update(url_without_hash.as_bytes());
-    let expected = mac
-        .finalize()
-        .into_bytes()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
     constant_time_eq(received.as_bytes(), expected.as_bytes())
 }
 

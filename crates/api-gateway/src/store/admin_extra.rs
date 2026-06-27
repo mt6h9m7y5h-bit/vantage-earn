@@ -7,6 +7,7 @@ use uuid::Uuid;
 pub struct AdminUserListRow {
     pub user_id: Uuid,
     pub referral_code: String,
+    pub email: Option<String>,
     pub balance_usdt: Decimal,
     pub trust_score: i32,
     pub banned: bool,

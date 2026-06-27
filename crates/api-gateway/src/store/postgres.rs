@@ -830,6 +830,31 @@ impl PgStore {
             return Ok(vec![id]);
         }
 
+        if let Some(email) = crate::auth::normalize_email(q) {
+            if let Some((id, _)) = self.find_user_by_email(&email).await? {
+                return Ok(vec![id]);
+            }
+        }
+
+        if q.len() >= 3 && (q.contains('@') || q.contains('.')) {
+            let pattern = format!("%{}%", q.to_lowercase());
+            let rows = sqlx::query_as::<_, (Uuid,)>(
+                r#"
+                SELECT id FROM users
+                WHERE email ILIKE $1
+                ORDER BY email
+                LIMIT 20
+                "#,
+            )
+            .bind(&pattern)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(db_err)?;
+            if !rows.is_empty() {
+                return Ok(rows.into_iter().map(|(id,)| id).collect());
+            }
+        }
+
         let normalized = q.replace('-', "").to_uppercase();
         if normalized.len() >= 4 {
             let pattern = format!("{normalized}%");
@@ -1198,6 +1223,7 @@ impl PgStore {
         let rows = sqlx::query_as::<_, UserListRow>(
             r#"
             SELECT u.id AS user_id,
+                   u.email,
                    COALESCE(w.balance_usdt, 0) AS balance_usdt,
                    COALESCE(t.score, 50) AS trust_score,
                    u.banned,
@@ -1220,6 +1246,7 @@ impl PgStore {
             .map(|r| AdminUserListRow {
                 user_id: r.user_id,
                 referral_code: ReferralEngine::code_for_user(r.user_id),
+                email: r.email,
                 balance_usdt: r.balance_usdt,
                 trust_score: r.trust_score,
                 banned: r.banned,
@@ -1243,12 +1270,13 @@ impl PgStore {
         let pattern = format!("%{q}%");
         let lim = limit.clamp(1, 50) as i64;
 
-        let user_rows = sqlx::query_as::<_, (Uuid,)>(
+        let user_rows = sqlx::query_as::<_, (Uuid, Option<String>)>(
             r#"
-            SELECT u.id FROM users u
+            SELECT u.id, u.email FROM users u
             LEFT JOIN wallets w ON w.user_id = u.id
             WHERE u.id::text ILIKE $1
                OR w.balance_usdt::text ILIKE $1
+               OR u.email ILIKE $1
             ORDER BY u.created_at DESC
             LIMIT $2
             "#,
@@ -1261,10 +1289,17 @@ impl PgStore {
 
         let mut users: Vec<AdminSearchUserHit> = user_rows
             .into_iter()
-            .map(|(id,)| AdminSearchUserHit {
-                user_id: id,
-                referral_code: ReferralEngine::code_for_user(id),
-                label: format!("Nutzer {id}"),
+            .map(|(id, email)| {
+                let referral_code = ReferralEngine::code_for_user(id);
+                let label = match email {
+                    Some(ref e) => format!("{e} — {referral_code}"),
+                    None => format!("Nutzer {id}"),
+                };
+                AdminSearchUserHit {
+                    user_id: id,
+                    referral_code,
+                    label,
+                }
             })
             .collect();
 
@@ -1273,10 +1308,13 @@ impl PgStore {
                 .search_users(q)
                 .await?
                 .into_iter()
-                .map(|id| AdminSearchUserHit {
-                    user_id: id,
-                    referral_code: ReferralEngine::code_for_user(id),
-                    label: format!("Nutzer {id}"),
+                .map(|id| {
+                    let referral_code = ReferralEngine::code_for_user(id);
+                    AdminSearchUserHit {
+                        user_id: id,
+                        referral_code: referral_code.clone(),
+                        label: format!("Nutzer {id}"),
+                    }
                 })
                 .collect();
         }
@@ -1669,6 +1707,7 @@ impl PgStore {
 #[derive(sqlx::FromRow)]
 struct UserListRow {
     user_id: Uuid,
+    email: Option<String>,
     balance_usdt: Decimal,
     trust_score: i32,
     banned: bool,

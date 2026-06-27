@@ -1909,6 +1909,56 @@ async fn admin_search_live_notes_timeline_export() {
 }
 
 #[tokio::test]
+async fn admin_user_lookup_by_email() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let email = format!("admin-search-{}@example.com", Uuid::new_v4());
+    let (user_id, _) = register_with_email(&app, &email, "securepass1").await;
+
+    let email_q = email.replace('@', "%40");
+
+    let lookup = app
+        .clone()
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/users/lookup?q={email_q}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(lookup.status(), StatusCode::OK);
+    let lookup_json = body_json(lookup).await;
+    let users = lookup_json["users"].as_array().unwrap();
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0]["user_id"], user_id.to_string());
+    assert_eq!(users[0]["email"], email);
+
+    let search = app
+        .clone()
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/search?q={email_q}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(search.status(), StatusCode::OK);
+    let search_json = body_json(search).await;
+    assert!(!search_json["users"].as_array().unwrap().is_empty());
+
+    let detail = app
+        .oneshot(admin_req(
+            "GET",
+            &format!("/admin/users/{user_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    let detail_json = body_json(detail).await;
+    assert_eq!(detail_json["email"], email);
+}
+
+#[tokio::test]
 async fn admin_stats_includes_premium_kpis() {
     std::env::set_var("ADMIN_SECRET", "test-admin-secret");
     let app = app(AppState::new());

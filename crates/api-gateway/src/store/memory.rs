@@ -627,6 +627,28 @@ impl MemoryStore {
             return Ok(vec![id]);
         }
 
+        if let Some(email) = crate::auth::normalize_email(q) {
+            if let Some(id) = self.email_index.read().await.get(&email).copied() {
+                return Ok(vec![id]);
+            }
+        }
+
+        if q.len() >= 3 && (q.contains('@') || q.contains('.')) {
+            let needle = q.to_lowercase();
+            let index = self.email_index.read().await;
+            let mut matches: Vec<Uuid> = index
+                .iter()
+                .filter(|(email, _)| email.contains(&needle))
+                .map(|(_, id)| *id)
+                .collect();
+            matches.sort();
+            matches.dedup();
+            matches.truncate(20);
+            if !matches.is_empty() {
+                return Ok(matches);
+            }
+        }
+
         let normalized = q.replace('-', "").to_uppercase();
         if normalized.len() >= 4 {
             let users = self.users.read().await;
@@ -850,9 +872,11 @@ impl MemoryStore {
         let mut rows = Vec::new();
         for (user_id, profile) in users.iter() {
             let balance = self.wallet.balance(*user_id).await?;
+            let email = self.user_credentials.read().await.get(user_id).map(|c| c.email.clone());
             rows.push(AdminUserListRow {
                 user_id: *user_id,
                 referral_code: ReferralEngine::code_for_user(*user_id),
+                email,
                 balance_usdt: balance,
                 trust_score: *scores.get(user_id).unwrap_or(&50),
                 banned: profile.banned,
@@ -877,10 +901,16 @@ impl MemoryStore {
 
         if !q.is_empty() {
             for id in self.search_users(q).await? {
+                let email = self.user_email(id).await.ok().flatten();
+                let referral_code = ReferralEngine::code_for_user(id);
+                let label = match email {
+                    Some(ref e) => format!("{e} — {referral_code}"),
+                    None => format!("Nutzer {id}"),
+                };
                 users.push(AdminSearchUserHit {
                     user_id: id,
-                    referral_code: ReferralEngine::code_for_user(id),
-                    label: format!("Nutzer {}", id),
+                    referral_code,
+                    label,
                 });
             }
 

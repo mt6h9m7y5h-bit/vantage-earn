@@ -386,7 +386,7 @@
       <h1>Admin <span>Control Center</span></h1>
       <div class="header-main">
         <div class="global-search-wrap">
-          <input id="global-search" type="search" placeholder="Globale Suche (UUID, Referral, Auszahlung…)" autocomplete="off" />
+          <input id="global-search" type="search" placeholder="Globale Suche (E-Mail, UUID, Referral, Auszahlung…)" autocomplete="off" />
           <div id="search-dropdown" class="search-dropdown hidden"></div>
         </div>
         <div class="live-badges" id="live-badges" title="Live-Updates alle 8s (Polling statt SSE — siehe README)">
@@ -498,7 +498,7 @@
       <div class="card">
         <h2>Nutzerverwaltung</h2>
         <div class="table-toolbar">
-          <input id="search-q" type="text" placeholder="UUID, Referral-Code…" />
+          <input id="search-q" type="text" placeholder="E-Mail, UUID, Referral-Code…" />
           <button class="btn-primary" onclick="searchUsers()">Suchen</button>
           <input id="users-filter" type="text" placeholder="Tabellenfilter…" oninput="usersTable.applyFilter(this.value)" />
           <button class="btn-ghost" onclick="exportCsv('users')">CSV Export</button>
@@ -509,6 +509,7 @@
           <table>
             <thead>
               <tr>
+                <th data-sort="email" onclick="usersTable.sort('email')">E-Mail</th>
                 <th data-sort="referral_code" onclick="usersTable.sort('referral_code')">Referral</th>
                 <th data-sort="user_id" onclick="usersTable.sort('user_id')">UUID</th>
                 <th data-sort="balance_usdt" onclick="usersTable.sort('balance_usdt')">Guthaben</th>
@@ -1046,6 +1047,7 @@
       paginationId: 'users-pagination',
       tableRef: usersTableRef,
       rowRenderer: (u) => `<tr>
+        <td>${u.email ? `<span>${u.email}</span>` : '<span class="muted">—</span>'}</td>
         <td><code>${u.referral_code}</code></td>
         <td><code class="link-user" onclick="openUserDrawer('${u.user_id}')">${u.user_id}</code></td>
         <td>${fmtUsdt(u.balance_usdt)}</td>
@@ -1300,11 +1302,12 @@
         const u = await api(`/admin/users/${userId}`);
         drawerUser = u;
         selectedUserBanned = u.banned;
-        document.getElementById('drawer-title').textContent = u.referral_code;
-        document.getElementById('drawer-subtitle').textContent = u.user_id;
+        document.getElementById('drawer-title').textContent = u.email || u.referral_code;
+        document.getElementById('drawer-subtitle').textContent = u.email ? `${u.referral_code} · ${u.user_id}` : u.user_id;
         const riskClass = `risk-${(u.risk_level || 'low').toLowerCase()}`;
         document.getElementById('drawer-pane-overview').innerHTML = `
           <div class="detail-grid">
+            <div class="detail-item"><div class="k">E-Mail</div><div class="v">${u.email || '—'}</div></div>
             <div class="detail-item"><div class="k">Risiko</div><div class="v ${riskClass}">${u.risk_level} (${u.risk_score})</div></div>
             <div class="detail-item"><div class="k">Guthaben</div><div class="v">${fmtUsdt(u.balance_usdt)}</div></div>
             <div class="detail-item"><div class="k">Verdienst gesamt</div><div class="v">${fmtUsdt(u.total_earnings_usdt)}</div></div>
@@ -1678,7 +1681,8 @@
         }
         d.users.forEach(u => {
           const li = document.createElement('li');
-          li.innerHTML = `<span><code>${u.referral_code}</code> · ${u.user_id}</span><span class="muted">→</span>`;
+          const emailPart = u.email ? `<span>${u.email}</span> · ` : '';
+          li.innerHTML = `<span>${emailPart}<code>${u.referral_code}</code> · ${u.user_id}</span><span class="muted">→</span>`;
           li.onclick = () => openUserDrawer(u.user_id);
           ul.appendChild(li);
         });
@@ -1699,6 +1703,7 @@
         banBtn.className = u.banned ? 'btn-primary' : 'btn-danger';
         document.getElementById('detail-grid').innerHTML = `
           <div class="detail-item"><div class="k">UUID</div><div class="v"><code>${u.user_id}</code></div></div>
+          <div class="detail-item"><div class="k">E-Mail</div><div class="v">${u.email || '—'}</div></div>
           <div class="detail-item"><div class="k">Referral-Code</div><div class="v"><code>${u.referral_code}</code></div></div>
           <div class="detail-item"><div class="k">Guthaben</div><div class="v">${fmtUsdt(u.balance_usdt)}</div></div>
           <div class="detail-item"><div class="k">Trust-Score</div><div class="v">${u.trust_score}</div></div>

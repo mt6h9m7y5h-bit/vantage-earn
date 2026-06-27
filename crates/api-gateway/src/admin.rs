@@ -376,6 +376,7 @@ struct LookupQuery {
 struct LookupUserHit {
     user_id: Uuid,
     referral_code: String,
+    email: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -390,19 +391,22 @@ async fn admin_user_lookup(
 ) -> Result<Json<LookupResponse>, ApiError> {
     verify_admin(&headers)?;
     let ids = state.admin_lookup_users(&query.q).await?;
-    let users = ids
-        .into_iter()
-        .map(|user_id| LookupUserHit {
+    let mut users = Vec::with_capacity(ids.len());
+    for user_id in ids {
+        let email = state.user_email(user_id).await;
+        users.push(LookupUserHit {
             referral_code: ReferralEngine::code_for_user(user_id),
             user_id,
-        })
-        .collect();
+            email,
+        });
+    }
     Ok(Json(LookupResponse { users }))
 }
 
 #[derive(Serialize)]
 struct AdminUserProfile {
     user_id: Uuid,
+    email: Option<String>,
     balance_usdt: Decimal,
     trust_score: i32,
     referral_code: String,
@@ -449,8 +453,10 @@ async fn admin_user_detail(
         sessions_last_hour,
         watches_today,
     );
+    let email = state.user_email(user_id).await;
     Ok(Json(AdminUserProfile {
         user_id,
+        email,
         balance_usdt: balance,
         trust_score,
         referral_code: ReferralEngine::code_for_user(user_id),

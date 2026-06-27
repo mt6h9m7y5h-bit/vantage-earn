@@ -27,6 +27,12 @@
         if (!isFinite(n)) return fractionDigits === 2 ? '0,00' : '0';
         return n.toFixed(fractionDigits).replace('.', ',');
       };
+      /** 4 decimals below 0.02 USDT so +0.001 watch rewards stay visible (2dp rounds 0.010→0.011 as 0,01). */
+      window.veBalanceFractionDigits = function (num) {
+        var n = parseFloat(num);
+        if (!isFinite(n) || n === 0) return 2;
+        return Math.abs(n) < 0.02 ? 4 : 2;
+      };
     })();
   </script>
   <style>
@@ -2212,7 +2218,7 @@
                 function veFmtBal(v) {
                   var n = parseFloat(v);
                   if (!isFinite(n) || n === 0) return '0';
-                  return window.veForceDeDecimal(n, 2);
+                  return window.veForceDeDecimal(n, window.veBalanceFractionDigits(n));
                 }
                 var balHtml = veFmtBal(bal) + '<span class="currency-suffix">USDT</span>';
                 var b = document.getElementById('balance');
@@ -2864,7 +2870,7 @@
       const n = parseFloat(value);
       if (!Number.isFinite(n)) return '0';
       if (n === 0) return '0';
-      return window.veForceDeDecimal(n, 2);
+      return window.veForceDeDecimal(n, window.veBalanceFractionDigits(n));
     }
 
     function formatLocalizedAmount(val) {

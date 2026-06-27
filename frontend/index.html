@@ -1468,6 +1468,25 @@
       color: var(--accent);
       border-color: var(--accent);
     }
+    .auth-forgot-wrap {
+      margin: -0.25rem 0 0.75rem;
+      text-align: right;
+    }
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 0.875rem;
+      padding: 0;
+      text-decoration: underline;
+    }
+    .link-btn:hover { opacity: 0.85; }
+    .auth-back-link {
+      display: block;
+      margin: 0.75rem auto 0;
+      text-align: center;
+    }
     .auth-card input[type="email"],
     .auth-card input[type="password"] {
       width: 100%;
@@ -2090,14 +2109,31 @@
     <div class="brand-mark" aria-hidden="true">V</div>
     <p class="card-title">Willkommen bei VANTAGE</p>
     <p class="auth-hint" id="auth-hint">Melde dich an oder erstelle ein Konto — dein Guthaben bleibt auf allen Geräten gespeichert.</p>
-    <div class="auth-tabs" role="tablist" aria-label="Anmeldung">
+    <div class="auth-tabs" id="auth-tabs" role="tablist" aria-label="Anmeldung">
       <button type="button" class="auth-tab active" id="auth-tab-login" role="tab" aria-selected="true" onclick="setAuthMode('login')">Anmelden</button>
       <button type="button" class="auth-tab" id="auth-tab-register" role="tab" aria-selected="false" onclick="setAuthMode('register')">Registrieren</button>
     </div>
+    <div id="auth-login-register-fields">
     <input id="auth-email" type="email" placeholder="E-Mail" autocomplete="email" inputmode="email" aria-describedby="auth-email-error" />
     <span id="auth-email-error" class="field-error" role="alert"></span>
     <input id="auth-password" type="password" placeholder="Passwort (mind. 8 Zeichen)" autocomplete="current-password" aria-describedby="auth-password-error" />
     <span id="auth-password-error" class="field-error" role="alert"></span>
+    <p id="auth-forgot-wrap" class="auth-forgot-wrap">
+      <button type="button" class="link-btn" id="auth-forgot-btn">Passwort vergessen?</button>
+    </p>
+    </div>
+    <div id="auth-forgot-panel" class="hidden">
+      <p class="auth-hint">Gib deine E-Mail ein — falls ein Konto existiert, senden wir dir einen Link zum Zurücksetzen (1 Stunde gültig).</p>
+      <input id="forgot-email" type="email" placeholder="E-Mail" autocomplete="email" inputmode="email" aria-describedby="forgot-email-error" />
+      <span id="forgot-email-error" class="field-error" role="alert"></span>
+      <button type="button" class="link-btn auth-back-link" id="auth-forgot-back">← Zurück zur Anmeldung</button>
+    </div>
+    <div id="auth-reset-panel" class="hidden">
+      <p class="auth-hint">Wähle ein neues Passwort für dein Konto.</p>
+      <input id="reset-password" type="password" placeholder="Neues Passwort (mind. 8 Zeichen)" autocomplete="new-password" aria-describedby="reset-password-error" />
+      <span id="reset-password-error" class="field-error" role="alert"></span>
+      <input id="reset-password-confirm" type="password" placeholder="Passwort bestätigen" autocomplete="new-password" />
+    </div>
     <div id="auth-register-extras">
       <input id="referral" placeholder="Empfehlungscode (optional)" autocomplete="off" aria-describedby="referral-error" />
       <span id="referral-error" class="field-error" role="alert"></span>
@@ -4830,18 +4866,50 @@
 
     let authMode = 'login';
     let authInFlight = false;
+    let pendingResetToken = null;
 
     function setAuthMode(mode) {
-      authMode = mode === 'register' ? 'register' : 'login';
-      document.getElementById('auth-tab-login')?.classList.toggle('active', authMode === 'login');
-      document.getElementById('auth-tab-register')?.classList.toggle('active', authMode === 'register');
-      document.getElementById('auth-tab-login')?.setAttribute('aria-selected', authMode === 'login' ? 'true' : 'false');
-      document.getElementById('auth-tab-register')?.setAttribute('aria-selected', authMode === 'register' ? 'true' : 'false');
-      document.getElementById('auth-register-extras')?.classList.toggle('hidden', authMode !== 'register');
+      if (mode === 'register') authMode = 'register';
+      else if (mode === 'forgot') authMode = 'forgot';
+      else if (mode === 'reset') authMode = 'reset';
+      else authMode = 'login';
+
+      const isLogin = authMode === 'login';
+      const isRegister = authMode === 'register';
+      const isForgot = authMode === 'forgot';
+      const isReset = authMode === 'reset';
+
+      document.getElementById('auth-tabs')?.classList.toggle('hidden', isForgot || isReset);
+      document.getElementById('auth-tab-login')?.classList.toggle('active', isLogin);
+      document.getElementById('auth-tab-register')?.classList.toggle('active', isRegister);
+      document.getElementById('auth-tab-login')?.setAttribute('aria-selected', isLogin ? 'true' : 'false');
+      document.getElementById('auth-tab-register')?.setAttribute('aria-selected', isRegister ? 'true' : 'false');
+      document.getElementById('auth-login-register-fields')?.classList.toggle('hidden', isForgot || isReset);
+      document.getElementById('auth-register-extras')?.classList.toggle('hidden', !isRegister);
+      document.getElementById('auth-forgot-wrap')?.classList.toggle('hidden', !isLogin);
+      document.getElementById('auth-forgot-panel')?.classList.toggle('hidden', !isForgot);
+      document.getElementById('auth-reset-panel')?.classList.toggle('hidden', !isReset);
+
+      const hint = document.getElementById('auth-hint');
+      if (hint) {
+        if (isForgot) hint.textContent = 'Passwort vergessen? Kein Problem.';
+        else if (isReset) hint.textContent = 'Setze ein neues Passwort für dein Konto.';
+        else hint.textContent = 'Melde dich an oder erstelle ein Konto — dein Guthaben bleibt auf allen Geräten gespeichert.';
+      }
+
       const btn = document.getElementById('auth-submit-btn');
-      if (btn) btn.textContent = authMode === 'login' ? 'Anmelden' : 'Kostenlos starten';
+      if (btn) {
+        if (isForgot) btn.textContent = 'Link senden';
+        else if (isReset) btn.textContent = 'Passwort speichern';
+        else btn.textContent = isLogin ? 'Anmelden' : 'Kostenlos starten';
+      }
       const pwd = document.getElementById('auth-password');
-      if (pwd) pwd.autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+      if (pwd) pwd.autocomplete = isLogin ? 'current-password' : 'new-password';
+      if (isForgot) {
+        const forgotEmail = document.getElementById('forgot-email');
+        const authEmail = document.getElementById('auth-email');
+        if (forgotEmail && authEmail?.value) forgotEmail.value = authEmail.value;
+      }
       syncAuthButtonState();
     }
 
@@ -4893,7 +4961,9 @@
       if (now - (window._registerTapAt || 0) < 450) return;
       window._registerTapAt = now;
       if (authMode === 'login') void doLoginAccount();
-      else void doRegisterAccount();
+      else if (authMode === 'register') void doRegisterAccount();
+      else if (authMode === 'forgot') void doForgotPassword();
+      else if (authMode === 'reset') void doResetPassword();
     }
 
     function initAuthSubmitBtn() {
@@ -4907,6 +4977,75 @@
       btn.addEventListener('click', () => {
         onAuthSubmitTap({ type: 'click' });
       });
+      document.getElementById('auth-forgot-btn')?.addEventListener('click', () => setAuthMode('forgot'));
+      document.getElementById('auth-forgot-back')?.addEventListener('click', () => setAuthMode('login'));
+    }
+
+    async function doForgotPassword() {
+      if (authInFlight) return;
+      const email = document.getElementById('forgot-email')?.value.trim() || '';
+      const emailErr = document.getElementById('forgot-email-error');
+      if (emailErr) emailErr.textContent = '';
+      document.getElementById('forgot-email')?.classList.remove('field-invalid');
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (emailErr) emailErr.textContent = 'Bitte eine gültige E-Mail eingeben.';
+        document.getElementById('forgot-email')?.classList.add('field-invalid');
+        return;
+      }
+      authInFlight = true;
+      const btn = document.getElementById('auth-submit-btn');
+      setButtonLoading(btn, true);
+      try {
+        await api('/auth/forgot-password', {
+          method: 'POST',
+          body: JSON.stringify({ email }),
+        });
+        showSuccess('Falls ein Konto existiert, haben wir dir einen Link gesendet. Prüfe dein Postfach.');
+        setAuthMode('login');
+      } catch (e) {
+        showError(e.message || 'Anfrage fehlgeschlagen');
+      } finally {
+        authInFlight = false;
+        setButtonLoading(btn, false);
+        syncAuthButtonState();
+      }
+    }
+
+    async function doResetPassword() {
+      if (authInFlight || !pendingResetToken) return;
+      const password = document.getElementById('reset-password')?.value || '';
+      const confirm = document.getElementById('reset-password-confirm')?.value || '';
+      const pwdErr = document.getElementById('reset-password-error');
+      if (pwdErr) pwdErr.textContent = '';
+      document.getElementById('reset-password')?.classList.remove('field-invalid');
+      if (password.length < 8) {
+        if (pwdErr) pwdErr.textContent = 'Passwort muss mindestens 8 Zeichen haben.';
+        document.getElementById('reset-password')?.classList.add('field-invalid');
+        return;
+      }
+      if (password !== confirm) {
+        if (pwdErr) pwdErr.textContent = 'Passwörter stimmen nicht überein.';
+        document.getElementById('reset-password')?.classList.add('field-invalid');
+        return;
+      }
+      authInFlight = true;
+      const btn = document.getElementById('auth-submit-btn');
+      setButtonLoading(btn, true);
+      try {
+        await api('/auth/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({ token: pendingResetToken, password }),
+        });
+        pendingResetToken = null;
+        showSuccess('Passwort aktualisiert — du kannst dich jetzt anmelden.');
+        setAuthMode('login');
+      } catch (e) {
+        showError(e.message || 'Link ungültig oder abgelaufen.');
+      } finally {
+        authInFlight = false;
+        setButtonLoading(btn, false);
+        syncAuthButtonState();
+      }
     }
 
     async function doLoginAccount() {
@@ -5071,7 +5210,7 @@
       const age = document.getElementById('accept-age');
       const btn = document.getElementById('auth-submit-btn');
       const hint = document.getElementById('register-terms-hint');
-      if (authMode === 'login') {
+      if (authMode === 'login' || authMode === 'forgot' || authMode === 'reset') {
         if (btn && !authInFlight) {
           btn.disabled = false;
           btn.removeAttribute('aria-disabled');
@@ -5580,9 +5719,11 @@
       });
 
       const params = new URLSearchParams(location.search);
-      if (params.has('reset')) {
+      const resetParam = params.get('reset');
+      if (resetParam) {
         token = null;
         localStorage.removeItem('ve_token');
+        pendingResetToken = resetParam;
         params.delete('reset');
         const clean = params.toString();
         history.replaceState(null, '', location.pathname + (clean ? '?' + clean : ''));
@@ -5635,7 +5776,7 @@
         const ref = params.get('ref');
         if (ref) document.getElementById('referral').value = ref;
         syncAuthButtonState();
-        setAuthMode('login');
+        setAuthMode(pendingResetToken ? 'reset' : 'login');
         void loadAdConfig();
       }
       requestAnimationFrame(forceLayoutFix);

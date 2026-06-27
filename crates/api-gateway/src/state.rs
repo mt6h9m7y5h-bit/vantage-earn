@@ -730,6 +730,38 @@ impl AppState {
         });
     }
 
+    pub async fn create_password_reset_token(&self, user_id: Uuid) -> AppResult<String> {
+        self.store.create_password_reset_token(user_id).await
+    }
+
+    pub fn send_password_reset_email(&self, to: &str, reset_token: &str) {
+        let email = self.email.clone();
+        let to = to.to_string();
+        let reset_token = reset_token.to_string();
+        tokio::spawn(async move {
+            if let Err(e) = email.send_password_reset(&to, &reset_token).await {
+                tracing::warn!(to = %to, error = %e, "password reset email failed");
+            }
+        });
+    }
+
+    pub async fn reset_password_with_token(
+        &self,
+        token: &str,
+        new_password: &str,
+    ) -> AppResult<()> {
+        let password_hash = crate::auth::hash_password(new_password)?;
+        let Some(user_id) = self.store.consume_password_reset_token(token).await? else {
+            return Err(shared::AppError::InvalidInput(
+                "invalid or expired reset token".into(),
+            ));
+        };
+        if !self.store.update_password_hash(user_id, &password_hash).await? {
+            return Err(shared::AppError::UserNotFound(user_id));
+        }
+        Ok(())
+    }
+
     pub async fn local_currency_for_user(&self, user_id: Uuid) -> Currency {
         let profile = self.profile(user_id).await;
         localization_engine::LocalizationEngine::default_currency_for_locale(&profile.locale)

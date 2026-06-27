@@ -203,6 +203,70 @@ impl PgStore {
         }
     }
 
+    pub async fn create_password_reset_token(&self, user_id: Uuid) -> AppResult<String> {
+        use crate::auth::{generate_password_reset_token, hash_password_reset_token};
+
+        let token = generate_password_reset_token();
+        let token_hash = hash_password_reset_token(&token);
+        let expires_at = Utc::now() + chrono::Duration::hours(1);
+
+        sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(db_err)?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO password_reset_tokens (token_hash, user_id, expires_at)
+            VALUES ($1, $2, $3)
+            "#,
+        )
+        .bind(&token_hash)
+        .bind(user_id)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        Ok(token)
+    }
+
+    pub async fn consume_password_reset_token(&self, token: &str) -> AppResult<Option<Uuid>> {
+        use crate::auth::hash_password_reset_token;
+
+        let token_hash = hash_password_reset_token(token);
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            DELETE FROM password_reset_tokens
+            WHERE token_hash = $1 AND expires_at > NOW()
+            RETURNING user_id
+            "#,
+        )
+        .bind(&token_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(db_err)?;
+
+        Ok(row.map(|(id,)| id))
+    }
+
+    pub async fn update_password_hash(&self, user_id: Uuid, password_hash: &str) -> AppResult<bool> {
+        let result = sqlx::query(
+            r#"
+            UPDATE users
+            SET password_hash = $2
+            WHERE id = $1 AND email IS NOT NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(password_hash)
+        .execute(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(result.rows_affected() == 1)
+    }
+
     pub async fn first_email_registration_at(&self) -> AppResult<Option<DateTime<Utc>>> {
         let row: Option<(DateTime<Utc>,)> = sqlx::query_as(
             "SELECT MIN(created_at) FROM users WHERE email IS NOT NULL",

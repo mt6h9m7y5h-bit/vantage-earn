@@ -183,6 +183,27 @@ impl Store {
         }
     }
 
+    pub async fn create_password_reset_token(&self, user_id: Uuid) -> AppResult<String> {
+        match self {
+            Self::Memory(s) => s.create_password_reset_token(user_id).await,
+            Self::Postgres(s) => s.create_password_reset_token(user_id).await,
+        }
+    }
+
+    pub async fn consume_password_reset_token(&self, token: &str) -> AppResult<Option<Uuid>> {
+        match self {
+            Self::Memory(s) => s.consume_password_reset_token(token).await,
+            Self::Postgres(s) => s.consume_password_reset_token(token).await,
+        }
+    }
+
+    pub async fn update_password_hash(&self, user_id: Uuid, password_hash: &str) -> AppResult<bool> {
+        match self {
+            Self::Memory(s) => s.update_password_hash(user_id, password_hash).await,
+            Self::Postgres(s) => s.update_password_hash(user_id, password_hash).await,
+        }
+    }
+
     pub async fn first_email_registration_at(&self) -> AppResult<Option<DateTime<Utc>>> {
         match self {
             Self::Memory(s) => s.first_email_registration_at().await,

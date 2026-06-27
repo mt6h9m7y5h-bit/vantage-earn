@@ -56,6 +56,8 @@ pub fn router() -> Router<AppState> {
         .route("/icons/icon-512.png", get(pwa::icon_512))
         .route("/auth/register", post(register))
         .route("/auth/login", post(login))
+        .route("/auth/forgot-password", post(forgot_password))
+        .route("/auth/reset-password", post(reset_password))
         .route(
             "/webhooks/bitlabs",
             get(bitlabs::webhook).post(bitlabs::webhook),
@@ -320,6 +322,57 @@ async fn login(
         token,
         email: Some(email),
         welcome_bonus_usdt: None,
+    }))
+}
+
+#[derive(Deserialize)]
+struct ForgotPasswordRequest {
+    email: String,
+}
+
+#[derive(Serialize)]
+struct MessageResponse {
+    message: &'static str,
+}
+
+const FORGOT_PASSWORD_MESSAGE: &str =
+    "Falls ein Konto mit dieser E-Mail existiert, senden wir dir einen Link zum Zurücksetzen.";
+
+async fn forgot_password(
+    State(state): State<AppState>,
+    Json(body): Json<ForgotPasswordRequest>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    if let Some(email) = normalize_email(&body.email) {
+        if let Some((user_id, _)) = state.find_user_by_email(&email).await? {
+            if let Ok(reset_token) = state.create_password_reset_token(user_id).await {
+                state.send_password_reset_email(&email, &reset_token);
+            }
+        }
+    }
+    Ok(Json(MessageResponse {
+        message: FORGOT_PASSWORD_MESSAGE,
+    }))
+}
+
+#[derive(Deserialize)]
+struct ResetPasswordRequest {
+    token: String,
+    password: String,
+}
+
+async fn reset_password(
+    State(state): State<AppState>,
+    Json(body): Json<ResetPasswordRequest>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    validate_password(&body.password)?;
+    if body.token.trim().is_empty() {
+        return Err(shared::AppError::InvalidInput("token is required".into()).into());
+    }
+    state
+        .reset_password_with_token(body.token.trim(), &body.password)
+        .await?;
+    Ok(Json(MessageResponse {
+        message: "Passwort wurde aktualisiert. Du kannst dich jetzt anmelden.",
     }))
 }
 

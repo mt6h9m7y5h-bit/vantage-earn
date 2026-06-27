@@ -76,6 +76,22 @@ impl EmailService {
         self.deliver(to, subject, &html).await
     }
 
+    pub async fn send_password_reset(&self, to: &str, reset_token: &str) -> AppResult<()> {
+        let name = to.split('@').next().unwrap_or("Nutzer");
+        let reset_url = format!(
+            "{}/demo?reset={}",
+            self.app_url.trim_end_matches('/'),
+            reset_token
+        );
+        let mut vars = HashMap::new();
+        vars.insert("name".into(), name.into());
+        vars.insert("reset_url".into(), reset_url);
+
+        let subject = "VANTAGE-EARN — Passwort zurücksetzen";
+        let html = self.render_template("password_reset.html", &vars)?;
+        self.deliver(to, subject, &html).await
+    }
+
     fn render_template(&self, file: &str, vars: &HashMap<String, String>) -> AppResult<String> {
         let path = self.resolve_template(file)?;
         let raw = std::fs::read_to_string(&path).map_err(|e| {
@@ -132,7 +148,7 @@ impl EmailService {
         tokio::task::spawn_blocking(move || send_smtp(&smtp, &to, &subject, &html))
             .await
             .map_err(|e| shared::AppError::InvalidInput(e.to_string()))??;
-        tracing::info!(to = %log_to, subject = %log_subject, "registration email sent");
+        tracing::info!(to = %log_to, subject = %log_subject, "transactional email sent");
         Ok(())
     }
 }

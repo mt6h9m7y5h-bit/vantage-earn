@@ -625,6 +625,61 @@ async fn early_adopter_bonus_expires_after_window() {
 }
 
 #[tokio::test]
+async fn password_reset_flow() {
+    std::env::set_var("EARLY_ADOPTER_BONUS_USDT", "0");
+    let state = AppState::new();
+    let app = app(state.clone());
+    let email = format!("reset-{}@example.com", Uuid::new_v4());
+    register_with_email(&app, &email, "oldpass123").await;
+
+    let forgot = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/forgot-password")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(r#"{{"email":"{email}"}}"#)))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(forgot.status(), StatusCode::OK);
+
+    let reset_token = state
+        .create_password_reset_token(
+            state
+                .find_user_by_email(&email)
+                .await
+                .unwrap()
+                .unwrap()
+                .0,
+        )
+        .await
+        .unwrap();
+
+    let reset = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/reset-password")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"token":"{reset_token}","password":"newpass456"}}"#
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reset.status(), StatusCode::OK);
+
+    let (_, password_hash) = state.find_user_by_email(&email).await.unwrap().unwrap();
+    assert!(api_gateway::auth::verify_password("newpass456", &password_hash));
+    assert!(!api_gateway::auth::verify_password("oldpass123", &password_hash));
+}
+
+#[tokio::test]
 async fn wallet_requires_auth() {
     let app = app(AppState::new());
     let response = app

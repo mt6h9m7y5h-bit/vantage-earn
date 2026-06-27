@@ -62,6 +62,16 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
         })
 }
 
+pub fn generate_password_reset_token() -> String {
+    Uuid::new_v4().to_string()
+}
+
+pub fn hash_password_reset_token(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(token.as_bytes());
+    format!("{digest:x}")
+}
+
 fn non_empty_env(key: &str) -> Option<String> {
     std::env::var(key)
         .ok()

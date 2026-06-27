@@ -26,6 +26,7 @@ pub struct MemoryStore {
     user_credentials: Arc<RwLock<HashMap<Uuid, UserCredentialRecord>>>,
     email_index: Arc<RwLock<HashMap<String, Uuid>>>,
     early_bonus_granted: Arc<RwLock<HashSet<Uuid>>>,
+    password_reset_tokens: Arc<RwLock<HashMap<String, (Uuid, DateTime<Utc>)>>>,
     gamification: GamificationMemStore,
     trust_scores: Arc<RwLock<HashMap<Uuid, i32>>>,
     total_revenue: Arc<RwLock<Decimal>>,
@@ -67,6 +68,7 @@ impl MemoryStore {
             user_credentials: Arc::new(RwLock::new(HashMap::new())),
             email_index: Arc::new(RwLock::new(HashMap::new())),
             early_bonus_granted: Arc::new(RwLock::new(HashSet::new())),
+            password_reset_tokens: Arc::new(RwLock::new(HashMap::new())),
             gamification: GamificationMemStore::new(users),
             trust_scores: Arc::new(RwLock::new(HashMap::new())),
             total_revenue: Arc::new(RwLock::new(Decimal::ZERO)),
@@ -87,6 +89,7 @@ impl MemoryStore {
         *self.user_credentials.write().await = HashMap::new();
         *self.email_index.write().await = HashMap::new();
         *self.early_bonus_granted.write().await = HashSet::new();
+        *self.password_reset_tokens.write().await = HashMap::new();
         *self.trust_scores.write().await = HashMap::new();
         *self.total_revenue.write().await = Decimal::ZERO;
         *self.pending_payouts.write().await = Decimal::ZERO;
@@ -280,6 +283,41 @@ impl MemoryStore {
             .await
             .insert(email.to_string(), user_id);
         Ok(())
+    }
+
+    pub async fn create_password_reset_token(&self, user_id: Uuid) -> AppResult<String> {
+        use crate::auth::{generate_password_reset_token, hash_password_reset_token};
+
+        let token = generate_password_reset_token();
+        let token_hash = hash_password_reset_token(&token);
+        let expires_at = Utc::now() + Duration::hours(1);
+        let mut map = self.password_reset_tokens.write().await;
+        map.retain(|_, (uid, _)| *uid != user_id);
+        map.insert(token_hash, (user_id, expires_at));
+        Ok(token)
+    }
+
+    pub async fn consume_password_reset_token(&self, token: &str) -> AppResult<Option<Uuid>> {
+        use crate::auth::hash_password_reset_token;
+
+        let token_hash = hash_password_reset_token(token);
+        let mut map = self.password_reset_tokens.write().await;
+        let Some((user_id, expires_at)) = map.remove(&token_hash) else {
+            return Ok(None);
+        };
+        if Utc::now() > expires_at {
+            return Ok(None);
+        }
+        Ok(Some(user_id))
+    }
+
+    pub async fn update_password_hash(&self, user_id: Uuid, password_hash: &str) -> AppResult<bool> {
+        let mut creds = self.user_credentials.write().await;
+        let Some(record) = creds.get_mut(&user_id) else {
+            return Ok(false);
+        };
+        record.password_hash = password_hash.to_string();
+        Ok(true)
     }
 
     pub async fn first_email_registration_at(&self) -> AppResult<Option<DateTime<Utc>>> {

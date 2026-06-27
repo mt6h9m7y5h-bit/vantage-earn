@@ -35,7 +35,12 @@ impl EarlyAdopterConfig {
         let start_override = std::env::var("EARLY_ADOPTER_START")
             .ok()
             .and_then(|s| parse_start(&s));
-        Self { bonus_usdt, max_users, days, start_override }
+        Self {
+            bonus_usdt,
+            max_users,
+            days,
+            start_override,
+        }
     }
 
     pub fn enabled(&self) -> bool {
@@ -50,7 +55,11 @@ impl EarlyAdopterConfig {
         self.enabled() && now <= self.campaign_end(start)
     }
 
-    pub fn registration_in_window(&self, registered_at: DateTime<Utc>, start: DateTime<Utc>) -> bool {
+    pub fn registration_in_window(
+        &self,
+        registered_at: DateTime<Utc>,
+        start: DateTime<Utc>,
+    ) -> bool {
         registered_at >= start && registered_at <= self.campaign_end(start)
     }
 }
@@ -63,4 +72,56 @@ fn parse_start(raw: &str) -> Option<DateTime<Utc>> {
         .ok()
         .and_then(|d| d.and_hms_opt(0, 0, 0))
         .map(|t| t.and_utc())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn campaign_end_adds_days() {
+        let config = EarlyAdopterConfig {
+            bonus_usdt: Decimal::ONE,
+            max_users: 40,
+            days: 30,
+            start_override: None,
+        };
+        let start = Utc::now();
+        let end = config.campaign_end(start);
+        assert_eq!((end - start).num_days(), 30);
+    }
+
+    #[test]
+    fn registration_in_window_respects_bounds() {
+        let config = EarlyAdopterConfig {
+            bonus_usdt: Decimal::ONE,
+            max_users: 40,
+            days: 7,
+            start_override: None,
+        };
+        let start = Utc::now();
+        let end = config.campaign_end(start);
+        assert!(config.registration_in_window(start, start));
+        assert!(config.registration_in_window(end, start));
+        assert!(!config.registration_in_window(start - chrono::Duration::seconds(1), start));
+        assert!(!config.registration_in_window(end + chrono::Duration::seconds(1), start));
+    }
+
+    #[test]
+    fn expired_campaign_is_inactive() {
+        let config = EarlyAdopterConfig {
+            bonus_usdt: Decimal::ONE,
+            max_users: 40,
+            days: 7,
+            start_override: Some(
+                NaiveDate::from_ymd_opt(2020, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_utc(),
+            ),
+        };
+        let start = config.start_override.unwrap();
+        assert!(!config.is_campaign_active(Utc::now(), start));
+    }
 }

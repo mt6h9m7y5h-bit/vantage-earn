@@ -506,6 +506,60 @@ impl MemoryStore {
         Ok(self.users.read().await.len() as i64)
     }
 
+    pub async fn users_with_email_count(&self) -> AppResult<i64> {
+        Ok(self.user_credentials.read().await.len() as i64)
+    }
+
+    pub async fn registrations_last_days(&self, days: i64) -> AppResult<i64> {
+        let cutoff = Utc::now() - Duration::days(days);
+        let count = self
+            .users
+            .read()
+            .await
+            .values()
+            .filter(|p| p.created_at >= cutoff)
+            .count();
+        Ok(count as i64)
+    }
+
+    pub async fn total_wallet_balance(&self) -> AppResult<Decimal> {
+        Ok(self.wallet.total_balance().await)
+    }
+
+    pub async fn early_bonus_granted_count(&self) -> AppResult<i64> {
+        Ok(self.early_bonus_granted.read().await.len() as i64)
+    }
+
+    pub async fn delete_user(&self, user_id: Uuid) -> AppResult<bool> {
+        if !self.user_exists(user_id).await? {
+            return Ok(false);
+        }
+        if let Some(creds) = self.user_credentials.write().await.remove(&user_id) {
+            self.email_index.write().await.remove(&creds.email);
+        }
+        self.users.write().await.remove(&user_id);
+        self.early_bonus_granted.write().await.remove(&user_id);
+        self.trust_scores.write().await.remove(&user_id);
+        self
+            .password_reset_tokens
+            .write()
+            .await
+            .retain(|_, (uid, _)| *uid != user_id);
+        self
+            .payout_requests
+            .write()
+            .await
+            .retain(|p| p.user_id != user_id);
+        self
+            .admin_notes
+            .write()
+            .await
+            .retain(|n| n.user_id != user_id);
+        self.gamification.purge_user(user_id).await;
+        self.wallet.remove_user(user_id).await;
+        Ok(true)
+    }
+
     pub async fn recent_payout_count(&self, days: i64) -> AppResult<i64> {
         let cutoff = Utc::now() - Duration::days(days);
         let count = self

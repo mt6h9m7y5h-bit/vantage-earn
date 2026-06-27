@@ -94,6 +94,10 @@ pub struct AdminStatsExtended {
     pub rewards_yesterday_usdt: Decimal,
     pub registrations_yesterday: i64,
     pub pending_sparkline: Vec<i64>,
+    pub users_with_email: i64,
+    pub registrations_7d: i64,
+    pub total_wallet_balance: Decimal,
+    pub early_bonus_granted_count: i64,
 }
 
 async fn admin_fraud_summary(

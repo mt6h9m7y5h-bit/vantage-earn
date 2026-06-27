@@ -125,6 +125,23 @@ impl WalletEngine {
     pub async fn all_ledger(&self) -> Vec<LedgerEntry> {
         self.ledger.read().await.clone()
     }
+
+    pub async fn remove_user(&self, user_id: Uuid) {
+        self.wallets.write().await.remove(&user_id);
+        self.ledger
+            .write()
+            .await
+            .retain(|e| e.user_id != user_id);
+    }
+
+    pub async fn total_balance(&self) -> Decimal {
+        self.wallets
+            .read()
+            .await
+            .values()
+            .map(|w| w.balance_usdt)
+            .sum()
+    }
 }
 
 impl Default for WalletEngine {

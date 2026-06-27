@@ -89,6 +89,7 @@ pub fn router() -> Router<AppState> {
         .route("/users/me/notifications/read-all", patch(mark_all_notifications_read))
         .route("/users/me/notifications/{id}", patch(mark_notification_read))
         .route("/users/me/onboarding/complete", post(complete_onboarding))
+        .route("/users/me/delete-account", post(delete_account))
         .route("/users/me/payouts", get(get_user_payouts))
         .route("/users/me/analytics/summary", get(get_analytics_summary))
         .route("/users/me/watch/complete", post(watch_complete))
@@ -1155,6 +1156,36 @@ async fn complete_onboarding(
     AuthUser(user_id): AuthUser,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     Ok(Json(state.complete_onboarding(user_id).await?))
+}
+
+#[derive(Deserialize)]
+struct DeleteAccountRequest {
+    #[serde(default)]
+    password: Option<String>,
+}
+
+const DELETE_ACCOUNT_MESSAGE: &str = "Konto wurde gelöscht.";
+
+async fn delete_account(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Json(body): Json<DeleteAccountRequest>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    if let Some(email) = state.user_email(user_id).await {
+        let password = body.password.as_deref().ok_or_else(|| {
+            shared::AppError::InvalidInput("Passwort zur Bestätigung erforderlich".into())
+        })?;
+        let Some((_, password_hash)) = state.find_user_by_email(&email).await? else {
+            return Err(AppError::Unauthorized.into());
+        };
+        if !verify_password(password, &password_hash) {
+            return Err(AppError::Unauthorized.into());
+        }
+    }
+    state.delete_user_account(user_id).await?;
+    Ok(Json(MessageResponse {
+        message: DELETE_ACCOUNT_MESSAGE,
+    }))
 }
 
 #[derive(Serialize)]

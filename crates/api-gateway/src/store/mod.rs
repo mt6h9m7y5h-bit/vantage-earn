@@ -362,6 +362,41 @@ impl Store {
         }
     }
 
+    pub async fn users_with_email_count(&self) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.users_with_email_count().await,
+            Self::Postgres(s) => s.users_with_email_count().await,
+        }
+    }
+
+    pub async fn registrations_last_days(&self, days: i64) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.registrations_last_days(days).await,
+            Self::Postgres(s) => s.registrations_last_days(days).await,
+        }
+    }
+
+    pub async fn total_wallet_balance(&self) -> AppResult<Decimal> {
+        match self {
+            Self::Memory(s) => s.total_wallet_balance().await,
+            Self::Postgres(s) => s.total_wallet_balance().await,
+        }
+    }
+
+    pub async fn early_bonus_granted_count(&self) -> AppResult<i64> {
+        match self {
+            Self::Memory(s) => s.early_bonus_granted_count().await,
+            Self::Postgres(s) => s.early_bonus_granted_count().await,
+        }
+    }
+
+    pub async fn delete_user(&self, user_id: Uuid) -> AppResult<bool> {
+        match self {
+            Self::Memory(s) => s.delete_user(user_id).await,
+            Self::Postgres(s) => s.delete_user(user_id).await,
+        }
+    }
+
     pub async fn recent_payout_count(&self, days: i64) -> AppResult<i64> {
         match self {
             Self::Memory(s) => s.recent_payout_count(days).await,

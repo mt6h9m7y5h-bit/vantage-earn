@@ -918,7 +918,25 @@ impl AppState {
             rewards_yesterday_usdt: rewards_yesterday,
             registrations_yesterday: reg_yesterday,
             pending_sparkline: sparkline.iter().map(|d| d.watch_count as i64).collect(),
+            users_with_email: self.store.users_with_email_count().await?,
+            registrations_7d: self.store.registrations_last_days(7).await?,
+            total_wallet_balance: self.store.total_wallet_balance().await?,
+            early_bonus_granted_count: self.store.early_bonus_granted_count().await?,
         })
+    }
+
+    pub async fn delete_user_account(&self, user_id: Uuid) -> AppResult<()> {
+        let pending = self.store.user_pending_payout_count(user_id).await?;
+        if pending > 0 {
+            return Err(shared::AppError::InvalidInput(
+                "offene Auszahlungen müssen zuerst bearbeitet werden".into(),
+            ));
+        }
+        let deleted = self.store.delete_user(user_id).await?;
+        if !deleted {
+            return Err(shared::AppError::UserNotFound(user_id));
+        }
+        Ok(())
     }
 
     pub async fn admin_lookup_users(&self, query: &str) -> AppResult<Vec<Uuid>> {

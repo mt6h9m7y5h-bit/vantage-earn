@@ -70,6 +70,16 @@ impl GamificationMemStore {
         Ok(())
     }
 
+    pub async fn purge_user(&self, user_id: Uuid) {
+        let mut s = self.state.write().await;
+        s.user_xp.remove(&user_id);
+        s.login_streaks.remove(&user_id);
+        s.onboarding_claimed.remove(&user_id);
+        s.user_achievements.retain(|(uid, _), _| *uid != user_id);
+        s.mission_progress.retain(|(uid, _, _), _| *uid != user_id);
+        s.notifications.retain(|n| n.user_id != user_id);
+    }
+
     fn xp_row(total_xp: i32) -> UserXpRow {
         let level = level_from_xp(total_xp);
         let (xp_in_current_level, xp_to_next_level) = xp_progress(total_xp, level);

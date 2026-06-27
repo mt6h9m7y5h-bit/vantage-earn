@@ -2258,3 +2258,103 @@ async fn admin_insights_endpoint() {
     assert!(json["avg_reward_usdt"].is_string());
     assert!(json["active_users_7d"].as_i64().unwrap() >= 1);
 }
+
+#[tokio::test]
+async fn admin_stats_core_metrics() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let app = app(AppState::new());
+    let email = format!("core-{}@example.com", Uuid::new_v4());
+    register_with_email(&app, &email, "password123").await;
+
+    let response = app
+        .oneshot(admin_req("GET", "/admin/stats", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = body_json(response).await;
+    assert!(json["users_with_email"].as_i64().unwrap() >= 1);
+    assert!(json["registrations_7d"].as_i64().unwrap() >= 1);
+    assert!(json["total_wallet_balance"].is_string());
+    assert!(json["early_bonus_granted_count"].is_number());
+}
+
+#[tokio::test]
+async fn delete_account_requires_password_for_email_users() {
+    let app = app(AppState::new());
+    let email = format!("del-{}@example.com", Uuid::new_v4());
+    let (_user_id, token) = register_with_email(&app, &email, "password123").await;
+
+    let no_pwd = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/delete-account",
+            &token,
+            Some(r#"{}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(no_pwd.status(), StatusCode::BAD_REQUEST);
+
+    let wrong_pwd = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/delete-account",
+            &token,
+            Some(r#"{"password":"wrongpass1"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(wrong_pwd.status(), StatusCode::UNAUTHORIZED);
+
+    let ok = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/delete-account",
+            &token,
+            Some(r#"{"password":"password123"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+
+    let login_body = format!(
+        r#"{{"email":"{email}","password":"password123"}}"#
+    );
+    let login = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(login_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(login.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn delete_account_anonymous_user() {
+    let state = AppState::new();
+    let app = app(state.clone());
+    let (user_id, token) = register(&app).await;
+
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/delete-account",
+            &token,
+            Some(r#"{}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    assert!(!state.user_exists(user_id).await);
+}

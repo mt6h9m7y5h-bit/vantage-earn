@@ -2053,6 +2053,46 @@
     }
     .onboarding-check { display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0; font-size: 0.9rem; }
     .onboarding-check.done { color: var(--success); }
+    .onboarding-steps {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    .onboarding-step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border-strong);
+      transition: background var(--transition), transform var(--transition);
+    }
+    .onboarding-step-dot.active {
+      background: var(--primary);
+      transform: scale(1.2);
+    }
+    .onboarding-step-dot.done { background: var(--success); }
+    .onboarding-step-panel { display: none; text-align: center; }
+    .onboarding-step-panel.active { display: block; }
+    .onboarding-step-panel .step-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+    }
+    .onboarding-step-panel h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1.1rem;
+    }
+    .onboarding-step-panel p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    .onboarding-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+    }
     #profile-view.is-loading .stat-value,
     #rewards-view.is-loading .mission-card,
     #wallet-view.is-loading #ledger,
@@ -2608,6 +2648,10 @@
             <h3 class="section-title" style="font-size:0.9rem;margin-top:1rem">Sicherheit</h3>
             <p class="payout-hint">Erweiterte Sicherheitsfunktionen findest du unter „Sicherheit“ in der Navigation.</p>
             <button class="secondary copy-btn" type="button" onclick="navigateToView('security')" aria-label="Sicherheitsbereich öffnen">Sicherheit öffnen</button>
+            <div class="profile-settings-row" style="margin-top:0.75rem">
+              <span>Konto löschen</span>
+              <button class="secondary copy-btn danger" type="button" onclick="confirmDeleteAccount()" aria-label="Konto dauerhaft löschen">Konto löschen</button>
+            </div>
           </section>
           <div id="install-card" class="card install-card hidden">
             <p class="card-title">App installieren</p>
@@ -2670,16 +2714,32 @@
     <iframe id="offerwall-iframe" class="offerwall-frame" title="BitLabs Offerwall" allow="clipboard-write" referrerpolicy="no-referrer-when-downgrade"></iframe>
   </div>
 
-  <div id="onboarding-overlay" class="onboarding-overlay hidden" aria-hidden="true">
+  <div id="onboarding-overlay" class="onboarding-overlay hidden" aria-hidden="true" role="dialog" aria-labelledby="onboarding-title">
     <div class="onboarding-card">
-      <h2 class="section-title">Willkommen bei VANTAGE</h2>
-      <p class="payout-hint">Kurze Checkliste — optional, kleine Startbelohnung am Ende.</p>
-      <div class="onboarding-check" id="ob-watch">○ Erstes Video schauen</div>
-      <div class="onboarding-check" id="ob-earn">○ Erste Belohnung erhalten</div>
-      <div class="onboarding-check" id="ob-invite">○ Freund einladen (optional)</div>
-      <div class="onboarding-check" id="ob-payout">○ Auszahlung ansehen (optional)</div>
-      <button class="primary" type="button" id="onboarding-complete-btn" onclick="completeOnboarding()" disabled>Belohnung abholen</button>
-      <button class="secondary copy-btn" type="button" style="margin-top:0.5rem;width:100%" onclick="dismissOnboarding()">Später</button>
+      <div class="onboarding-steps" aria-hidden="true">
+        <span class="onboarding-step-dot active" id="ob-dot-1"></span>
+        <span class="onboarding-step-dot" id="ob-dot-2"></span>
+        <span class="onboarding-step-dot" id="ob-dot-3"></span>
+      </div>
+      <div class="onboarding-step-panel active" id="onboarding-step-1">
+        <div class="step-icon" aria-hidden="true">✉️</div>
+        <h2 id="onboarding-title">Konto gesichert</h2>
+        <p>Deine E-Mail ist verknüpft — dein Guthaben bleibt auf allen Geräten gespeichert.</p>
+      </div>
+      <div class="onboarding-step-panel" id="onboarding-step-2">
+        <div class="step-icon" aria-hidden="true">▶️</div>
+        <h2>Verdienen starten</h2>
+        <p>Schau Videos unter „Earn“ oder erledige Angebote unter „Top-Angebote“.</p>
+      </div>
+      <div class="onboarding-step-panel" id="onboarding-step-3">
+        <div class="step-icon" aria-hidden="true">💰</div>
+        <h2>Wallet &amp; Auszahlung</h2>
+        <p>Dein Guthaben findest du unter „Wallet“. Ab 10 USDT kannst du eine Auszahlung beantragen.</p>
+      </div>
+      <div class="onboarding-actions">
+        <button class="primary" type="button" id="onboarding-next-btn" onclick="onboardingNext()">Weiter</button>
+        <button class="secondary copy-btn" type="button" onclick="dismissOnboarding()">Überspringen</button>
+      </div>
     </div>
   </div>
 
@@ -4636,7 +4696,6 @@
           return `<span class="badge-chip ${unlocked ? '' : 'locked'}" title="${a.description_de}">${unlocked ? '★' : '○'} ${a.title_de}</span>`;
         }).join('');
       }
-      updateOnboardingFromStats(ps);
       const email = ps.email || null;
       const infoCard = document.getElementById('profile-account-info-card');
       const linkCard = document.getElementById('profile-account-link-card');
@@ -4812,44 +4871,76 @@
       }
     }
 
-    function updateOnboardingFromStats(ps) {
+    let onboardingStep = 1;
+
+    function showOnboardingIfNeeded() {
       if (localStorage.getItem('ve_onboarding_done')) return;
+      if (!localStorage.getItem('ve_email')) return;
       const ob = document.getElementById('onboarding-overlay');
       if (!ob) return;
-      const watchDone = (ps.ads_watched || 0) >= 1;
-      const earnDone = parseFloat(ps.lifetime_earnings_usdt) > 0;
-      const items = [
-        ['ob-watch', 'Erstes Video schauen', watchDone, false],
-        ['ob-earn', 'Erste Belohnung erhalten', earnDone, false],
-        ['ob-invite', 'Freund einladen (optional)', false, true],
-        ['ob-payout', 'Auszahlung ansehen (optional)', false, true],
-      ];
-      items.forEach(([id, label, done]) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.classList.toggle('done', done);
-        el.textContent = (done ? '✓ ' : '○ ') + label;
-      });
-      const btn = document.getElementById('onboarding-complete-btn');
-      if (btn) btn.disabled = !(watchDone && earnDone);
+      onboardingStep = 1;
+      renderOnboardingStep();
       ob.classList.remove('hidden');
       ob.setAttribute('aria-hidden', 'false');
     }
 
-    function dismissOnboarding() {
-      localStorage.setItem('ve_onboarding_done', '1');
-      document.getElementById('onboarding-overlay')?.classList.add('hidden');
+    function renderOnboardingStep() {
+      for (let i = 1; i <= 3; i++) {
+        document.getElementById('onboarding-step-' + i)?.classList.toggle('active', i === onboardingStep);
+        const dot = document.getElementById('ob-dot-' + i);
+        if (dot) {
+          dot.classList.toggle('active', i === onboardingStep);
+          dot.classList.toggle('done', i < onboardingStep);
+        }
+      }
+      const btn = document.getElementById('onboarding-next-btn');
+      if (btn) btn.textContent = onboardingStep >= 3 ? 'Los geht\'s' : 'Weiter';
     }
 
-    async function completeOnboarding() {
+    function onboardingNext() {
+      if (onboardingStep < 3) {
+        onboardingStep++;
+        renderOnboardingStep();
+        return;
+      }
+      dismissOnboarding();
+    }
+
+    function dismissOnboarding() {
+      localStorage.setItem('ve_onboarding_done', '1');
+      const ob = document.getElementById('onboarding-overlay');
+      if (ob) {
+        ob.classList.add('hidden');
+        ob.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    async function confirmDeleteAccount() {
+      const hasEmail = !!(localStorage.getItem('ve_email') || profileStats?.email);
+      let password = null;
+      if (hasEmail) {
+        password = window.prompt(
+          'Konto dauerhaft löschen?\n\nAlle Daten und dein Guthaben werden unwiderruflich gelöscht.\n\nGib dein Passwort zur Bestätigung ein:'
+        );
+        if (password === null) return;
+        if (!password) {
+          showError('Passwort zur Bestätigung erforderlich.');
+          return;
+        }
+      } else if (!window.confirm('Konto dauerhaft löschen? Alle Daten und dein Guthaben werden unwiderruflich gelöscht.')) {
+        return;
+      }
       try {
-        const data = await api('/users/me/onboarding/complete', { method: 'POST', body: '{}' });
-        localStorage.setItem('ve_onboarding_done', '1');
-        document.getElementById('onboarding-overlay')?.classList.add('hidden');
-        showSuccess('Startbonus: +' + data.usdt_reward + ' USDT, +' + data.xp_reward + ' XP');
-        await refresh({ quiet: true, bustCache: true });
+        const body = password ? JSON.stringify({ password }) : '{}';
+        await api('/users/me/delete-account', { method: 'POST', body });
+        localStorage.removeItem('ve_token');
+        localStorage.removeItem('ve_email');
+        localStorage.removeItem('ve_onboarding_done');
+        token = null;
+        showSuccess('Dein Konto wurde gelöscht.');
+        logout();
       } catch (e) {
-        if (!isAuthError(e)) showError(e.message || 'Onboarding fehlgeschlagen');
+        if (!isAuthError(e)) showError(e.message || 'Konto konnte nicht gelöscht werden.');
       }
     }
 
@@ -4954,6 +5045,7 @@
         showSuccessCelebration(message || 'Willkommen bei VANTAGE!');
       }
       void refresh({ quiet: true, bustCache: true }).catch(() => {});
+      if (data.email) showOnboardingIfNeeded();
     }
 
     function onAuthSubmitTap(e) {
@@ -5759,6 +5851,7 @@
             timeoutMs: 12000,
             maxRetries: 1,
           });
+          showOnboardingIfNeeded();
         } catch (e) {
           if (isAuthError(e)) {
             handleAuthFailure({ silent: true });

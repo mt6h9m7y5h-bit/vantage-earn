@@ -25,6 +25,8 @@ services:
           property: connectionString
       - key: BITLABS_CALLBACK_BASE_URL
         value: https://vantage-earn.onrender.com
+      - key: APP_URL
+        value: https://vantage-earn.onrender.com
       - key: EARLY_ADOPTER_BONUS_USDT
         value: "0.5"
       - key: EARLY_ADOPTER_MAX_USERS
@@ -34,12 +36,13 @@ services:
       # Optional: set to go-live date (YYYY-MM-DD). If omitted, campaign starts at first email signup.
       # - key: EARLY_ADOPTER_START
       #   value: "2026-06-27"
-      # Optional SMTP — without these, welcome emails are skipped in production (logged only in dev)
+      # Optional SMTP (Resend) — ohne diese Variablen werden Willkommens-E-Mails in Production übersprungen
+      # Resend: https://resend.com — SMTP-Relay smtp.resend.com, Port 587, STARTTLS
       # - key: SMTP_HOST
-      #   sync: false
+      #   value: smtp.resend.com
       # - key: SMTP_USER
-      #   sync: false
+      #   value: resend
       # - key: SMTP_PASS
       #   sync: false
       # - key: SMTP_FROM
-      #   value: VANTAGE-EARN <noreply@vantage-earn.onrender.com>
+      #   value: VANTAGE-EARN <onboarding@deine-domain.de>

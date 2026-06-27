@@ -422,6 +422,15 @@
 
     <section id="panel-overview" class="panel active">
       <div class="card">
+        <h2>Kern-Statistiken</h2>
+        <div class="kpi-grid" id="kpi-core-grid">
+          <div class="kpi"><div class="label">Nutzer mit E-Mail</div><div class="value" id="kpi-email-users">—</div></div>
+          <div class="kpi"><div class="label">Registrierungen (7 Tage)</div><div class="value" id="kpi-reg-7d">—</div></div>
+          <div class="kpi"><div class="label">Wallet-Guthaben gesamt</div><div class="value" id="kpi-wallet-sum">—</div></div>
+          <div class="kpi"><div class="label">Early-Bonus vergeben</div><div class="value" id="kpi-early-bonus">—</div></div>
+        </div>
+      </div>
+      <div class="card">
         <h2>Plattform-KPIs</h2>
         <div class="kpi-grid" id="kpi-grid">
           <div class="kpi"><div class="label">Gesamtumsatz</div><div class="value" id="kpi-revenue">—</div></div>
@@ -1644,6 +1653,10 @@
         grid?.querySelectorAll('.value').forEach(el => { el.textContent = '…'; });
         const d = await api('/admin/stats');
         document.getElementById('kpi-revenue').textContent = fmtUsdt(d.total_revenue);
+        document.getElementById('kpi-email-users').textContent = d.users_with_email ?? '—';
+        document.getElementById('kpi-reg-7d').textContent = d.registrations_7d ?? '—';
+        document.getElementById('kpi-wallet-sum').textContent = fmtUsdt(d.total_wallet_balance);
+        document.getElementById('kpi-early-bonus').textContent = d.early_bonus_granted_count ?? '—';
         document.getElementById('kpi-rev24').textContent = fmtUsdt(d.revenue_24h);
         document.getElementById('kpi-rev7').textContent = fmtUsdt(d.revenue_7d);
         document.getElementById('kpi-rev30').textContent = fmtUsdt(d.revenue_30d);

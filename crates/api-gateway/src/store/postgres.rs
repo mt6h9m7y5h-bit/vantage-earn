@@ -723,6 +723,90 @@ impl PgStore {
         Ok(row.0)
     }
 
+    pub async fn users_with_email_count(&self) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE email IS NOT NULL",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn registrations_last_days(&self, days: i64) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM users
+            WHERE created_at >= NOW() - make_interval(days => $1)
+            "#,
+        )
+        .bind(days as i32)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn total_wallet_balance(&self) -> AppResult<Decimal> {
+        let row: (Decimal,) = sqlx::query_as(
+            "SELECT COALESCE(SUM(balance_usdt), 0) FROM wallets",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn early_bonus_granted_count(&self) -> AppResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE early_bonus_granted = true",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(db_err)?;
+        Ok(row.0)
+    }
+
+    pub async fn delete_user(&self, user_id: Uuid) -> AppResult<bool> {
+        let exists: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_err)?;
+        if exists.is_none() {
+            return Ok(false);
+        }
+
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        sqlx::query("DELETE FROM ledger_entries WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        sqlx::query("DELETE FROM payout_requests WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        sqlx::query("DELETE FROM wallets WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        sqlx::query("DELETE FROM trust_scores WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        let result = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(db_err)?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(result.rows_affected() == 1)
+    }
+
     pub async fn recent_payout_count(&self, days: i64) -> AppResult<i64> {
         let row: (i64,) = sqlx::query_as(
             r#"

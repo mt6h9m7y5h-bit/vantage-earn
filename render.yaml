@@ -36,13 +36,15 @@ services:
       # Optional: set to go-live date (YYYY-MM-DD). If omitted, campaign starts at first email signup.
       # - key: EARLY_ADOPTER_START
       #   value: "2026-06-27"
-      # Optional SMTP (Resend) — ohne diese Variablen werden Willkommens-E-Mails in Production übersprungen
-      # Resend: https://resend.com — SMTP-Relay smtp.resend.com, Port 587, STARTTLS
-      # - key: SMTP_HOST
-      #   value: smtp.resend.com
-      # - key: SMTP_USER
-      #   value: resend
-      # - key: SMTP_PASS
-      #   sync: false
-      # - key: SMTP_FROM
-      #   value: VANTAGE-EARN <onboarding@deine-domain.de>
+      # Transactional email (Resend SMTP) — SMTP_PASS manuell im Render Dashboard setzen (API-Key)
+      # Domain in Resend verifizieren, dann SMTP_FROM anpassen.
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: resend
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        value: VANTAGE-EARN <onboarding@deine-domain.de>

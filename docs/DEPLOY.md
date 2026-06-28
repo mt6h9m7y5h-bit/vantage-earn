@@ -42,7 +42,34 @@ Handys brauchen eine **öffentliche HTTPS-URL**. PWA-Installation funktioniert a
 
 ---
 
-## Render.com (morgen — mit PostgreSQL)
+## Fly.io (empfohlen — kostenarm, HTTPS automatisch)
+
+Render-Pipeline-Minuten sind aufgebraucht; Hobby ($25/Monat) ist zu teuer. **Fly.io ist vorbereitet** (`fly.toml`, `docs/FLY.md`).
+
+> **Bis Fly läuft:** `./scripts/dev-with-db.sh` lokal oder bestehende Render-URL (Service `34e4941` läuft noch).
+
+```bash
+cd vantage-earn
+./scripts/deploy-fly.sh
+```
+
+Oder Schritt für Schritt: **[docs/FLY.md](FLY.md)** (deutsch, inkl. Postgres + Secrets).
+
+Kurzversion:
+
+```bash
+curl -L https://fly.io/install.sh | sh
+export PATH="$HOME/.fly/bin:$PATH"
+fly auth login
+fly launch --no-deploy --copy-config --name vantage-earn-DEINNAME --region fra
+fly secrets set JWT_SECRET="$(openssl rand -hex 32)" ADMIN_SECRET="$(openssl rand -hex 32)" \
+  APP_URL="https://vantage-earn-DEINNAME.fly.dev" --app vantage-earn-DEINNAME
+fly deploy --app vantage-earn-DEINNAME
+```
+
+---
+
+## Render.com (pausiert — Pipeline-Minuten aufgebraucht)
 
 Repo auf GitHub pushen, dann im [Render Dashboard](https://dashboard.render.com):
 
@@ -65,47 +92,6 @@ Demo-URL: `https://DEIN-SERVICE.onrender.com/demo`
 Migrationen laufen beim ersten API-Start automatisch (`sqlx::migrate!` in `PgStore::connect`).
 
 **Hinweis:** Free-Tier-Postgres und Web-Service schlafen nach Inaktivität — erster Request kann ~30 s dauern.
-
----
-
-## Empfohlen: Fly.io (kostenlos starten, HTTPS automatisch)
-
-### Schnell (ein Befehl)
-
-```bash
-cd vantage-earn
-./scripts/deploy-fly.sh
-```
-
-Beim ersten Mal: Browser öffnet sich für **Fly.io Login** (kostenloser Account).
-
-Danach bekommst du z.B. `https://vantage-earn-deinname.fly.dev/demo` — **funktioniert auf jedem Handy weltweit**.
-
----
-
-### Manuell
-
-```bash
-curl -L https://fly.io/install.sh | sh
-export PATH="$HOME/.fly/bin:$PATH"
-fly auth login
-
-cd vantage-earn
-fly launch --no-deploy
-fly secrets set JWT_SECRET="$(openssl rand -hex 32)"
-fly deploy
-fly open /demo
-```
-
-Du bekommst z.B. `https://vantage-earn.fly.dev/demo` — diese URL auf **jedem Handy** öffnen oder zum Home-Bildschirm hinzufügen.
-
-### PostgreSQL (empfohlen für echte Nutzer)
-
-```bash
-fly postgres create --name vantage-earn-db --region fra
-fly postgres attach vantage-earn-db
-fly deploy
-```
 
 ---
 

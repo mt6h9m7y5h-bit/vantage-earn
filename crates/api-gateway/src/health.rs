@@ -46,6 +46,7 @@ pub struct HealthComponents {
     pub jobs_queue: ComponentStatus,
     pub ads_provider: ComponentStatus,
     pub payouts: ComponentStatus,
+    pub email: ComponentStatus,
 }
 
 pub async fn build_health(state: &AppState) -> HealthResponse {
@@ -58,8 +59,10 @@ pub async fn build_health(state: &AppState) -> HealthResponse {
         .pending_payout_request_count()
         .await
         .unwrap_or(0);
+    let (email_provider, email_ok, email_note) = state.email.health_status();
+    let email_affects_overall = release_info::is_production();
 
-    let overall_ok = db_ok && ads_ok;
+    let overall_ok = db_ok && ads_ok && (!email_affects_overall || email_ok);
     HealthResponse {
         status: if overall_ok { "ok" } else { "degraded" },
         service: "vantage-earn",
@@ -129,6 +132,14 @@ pub async fn build_health(state: &AppState) -> HealthResponse {
                 provider: None,
                 configured: None,
                 pending_count: Some(pending_count),
+            },
+            email: ComponentStatus {
+                status: if email_ok { "ok" } else { "error" },
+                latency_ms: None,
+                note: email_note,
+                provider: Some(email_provider.into()),
+                configured: Some(email_ok),
+                pending_count: None,
             },
         },
     }

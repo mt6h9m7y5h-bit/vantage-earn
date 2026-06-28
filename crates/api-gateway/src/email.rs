@@ -16,6 +16,13 @@ use shared::AppResult;
 /// Other:
 /// - `APP_URL` — origin for reset links (default `https://vantage-earn.onrender.com`)
 /// - `EMAIL_TEMPLATES_DIR` — override template folder (default `templates/email`)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmailTransport {
+    ResendApi,
+    Smtp,
+    Disabled,
+}
+
 #[derive(Clone)]
 pub struct EmailService {
     templates_dir: PathBuf,
@@ -46,8 +53,39 @@ fn non_empty_env(key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+fn normalize_secret(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() >= 2 {
+        let bytes = trimmed.as_bytes();
+        if (bytes[0] == b'"' && bytes[trimmed.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[trimmed.len() - 1] == b'\'')
+        {
+            return trimmed[1..trimmed.len() - 1].trim().to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+fn extract_resend_api_key(value: &str) -> Option<String> {
+    let normalized = normalize_secret(value);
+    if normalized.starts_with("re_") {
+        return Some(normalized);
+    }
+    let idx = normalized.find("re_")?;
+    let rest = &normalized[idx..];
+    let end = rest
+        .find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+        .unwrap_or(rest.len());
+    let key = rest[..end].to_string();
+    if key.len() > 3 {
+        Some(key)
+    } else {
+        None
+    }
+}
+
 fn looks_like_resend_api_key(value: &str) -> bool {
-    value.starts_with("re_")
+    extract_resend_api_key(value).is_some()
 }
 
 fn smtp_from_address() -> String {
@@ -85,26 +123,55 @@ fn warn_if_suspicious_from_address(from: &str) {
     }
 }
 
+struct ResolvedResendKey {
+    key: String,
+    source: &'static str,
+}
+
 fn resolve_resend_api_key() -> Option<String> {
+    resolve_resend_config().map(|resolved| resolved.key)
+}
+
+fn resolve_resend_config() -> Option<ResolvedResendKey> {
     if let Some(key) = non_empty_env("RESEND_API_KEY") {
-        if looks_like_resend_api_key(&key) {
-            return Some(key);
+        if let Some(normalized) = extract_resend_api_key(&key) {
+            return Some(ResolvedResendKey {
+                key: normalized,
+                source: "RESEND_API_KEY",
+            });
         }
-        tracing::warn!("RESEND_API_KEY set but does not start with re_ — ignoring");
+        tracing::warn!("RESEND_API_KEY set but no re_ API key found — ignoring");
     }
-    non_empty_env("SMTP_PASS").filter(|pass| looks_like_resend_api_key(pass))
+    if let Some(pass) = non_empty_env("SMTP_PASS") {
+        if let Some(normalized) = extract_resend_api_key(&pass) {
+            return Some(ResolvedResendKey {
+                key: normalized,
+                source: "SMTP_PASS",
+            });
+        }
+    }
+    None
 }
 
 fn resend_from_env() -> Option<ResendConfig> {
-    let api_key = resolve_resend_api_key()?;
+    let resolved = resolve_resend_config()?;
     Some(ResendConfig {
-        api_key,
+        api_key: resolved.key,
         from: smtp_from_address(),
     })
 }
 
 fn smtp_from_env() -> Option<SmtpConfig> {
     if resolve_resend_api_key().is_some() {
+        return None;
+    }
+
+    if crate::release_info::is_production() {
+        if non_empty_env("SMTP_HOST").is_some() {
+            tracing::warn!(
+                "SMTP_HOST ignored in production — Render blocks outbound SMTP; use RESEND_API_KEY or SMTP_PASS (re_…)"
+            );
+        }
         return None;
     }
 
@@ -124,11 +191,19 @@ fn smtp_from_env() -> Option<SmtpConfig> {
         return None;
     }
 
+    let pass = pass.unwrap();
+    if looks_like_resend_api_key(&pass) {
+        tracing::error!(
+            "SMTP_PASS looks like a Resend API key (re_…) — SMTP relay disabled; Resend HTTP API is used instead"
+        );
+        return None;
+    }
+
     Some(SmtpConfig {
         host,
         port,
         user: user.unwrap(),
-        pass: pass.unwrap(),
+        pass,
         from,
     })
 }
@@ -140,6 +215,8 @@ impl EmailService {
             .unwrap_or_else(|_| PathBuf::from("templates/email"));
         let app_url = std::env::var("APP_URL")
             .unwrap_or_else(|_| "https://vantage-earn.onrender.com".into());
+        let resolved = resolve_resend_config();
+        let resend_key_source = resolved.as_ref().map(|r| r.source);
         let resend = resend_from_env();
         let smtp = if resend.is_some() {
             None
@@ -148,15 +225,51 @@ impl EmailService {
         };
         if let Some(resend) = &resend {
             warn_if_suspicious_from_address(&resend.from);
-            tracing::info!(from = %resend.from, "transactional email: Resend HTTP API configured");
+            tracing::info!(
+                from = %resend.from,
+                key_source = resend_key_source.unwrap_or("unknown"),
+                "transactional email: Resend HTTP API configured"
+            );
         } else if smtp.is_some() {
             tracing::info!("transactional email: SMTP relay configured (local dev fallback)");
+        } else if crate::release_info::is_production() {
+            tracing::error!(
+                has_resend_api_key = non_empty_env("RESEND_API_KEY").is_some(),
+                has_smtp_pass = non_empty_env("SMTP_PASS").is_some(),
+                has_smtp_host = non_empty_env("SMTP_HOST").is_some(),
+                smtp_pass_looks_like_re = non_empty_env("SMTP_PASS")
+                    .is_some_and(|p| looks_like_resend_api_key(&p)),
+                "transactional email NOT configured in production — set RESEND_API_KEY or SMTP_PASS (re_…); SMTP blocked on Render"
+            );
         }
         Self {
             templates_dir,
             app_url,
             resend,
             smtp,
+        }
+    }
+
+    pub fn transport_mode(&self) -> EmailTransport {
+        if self.resend.is_some() {
+            EmailTransport::ResendApi
+        } else if self.smtp.is_some() {
+            EmailTransport::Smtp
+        } else {
+            EmailTransport::Disabled
+        }
+    }
+
+    pub fn health_status(&self) -> (&'static str, bool, Option<String>) {
+        match self.transport_mode() {
+            EmailTransport::ResendApi => ("resend_api", true, None),
+            EmailTransport::Smtp => ("smtp", true, Some("local dev only".into())),
+            EmailTransport::Disabled if crate::release_info::is_production() => (
+                "none",
+                false,
+                Some("set RESEND_API_KEY or SMTP_PASS (re_…)".into()),
+            ),
+            EmailTransport::Disabled => ("none", false, None),
         }
     }
 
@@ -247,12 +360,23 @@ impl EmailService {
             return Ok(());
         }
 
+        if crate::release_info::is_production() && self.smtp.is_some() {
+            tracing::error!(
+                to = %to,
+                subject = %subject,
+                "email blocked — SMTP must not be used in production; configure RESEND_API_KEY or SMTP_PASS (re_…)"
+            );
+            return Err(shared::AppError::InvalidInput(
+                "email not configured for production (Resend API key required)".into(),
+            ));
+        }
+
         let Some(smtp) = &self.smtp else {
             if crate::release_info::is_production() {
-                tracing::info!(
+                tracing::warn!(
                     to = %to,
                     subject = %subject,
-                    "email skipped (no Resend API key or SMTP configured in production)"
+                    "email skipped (no Resend API key configured in production)"
                 );
             } else {
                 tracing::info!(
@@ -433,9 +557,39 @@ mod tests {
     fn looks_like_resend_api_key_requires_re_prefix() {
         assert!(looks_like_resend_api_key("re_abc123"));
         assert!(looks_like_resend_api_key("re_live_xyz"));
+        assert!(looks_like_resend_api_key("\"re_quoted_key\""));
+        assert!(looks_like_resend_api_key("  re_trimmed  "));
         assert!(!looks_like_resend_api_key("password"));
         assert!(!looks_like_resend_api_key("smtp-secret"));
         assert!(!looks_like_resend_api_key(""));
+    }
+
+    #[test]
+    fn extract_resend_key_from_quoted_value() {
+        assert_eq!(
+            extract_resend_api_key("\"re_abc123\"").as_deref(),
+            Some("re_abc123")
+        );
+    }
+
+    #[test]
+    fn smtp_blocked_in_production_even_with_host_set() {
+        let prev_env = std::env::var("RUST_ENV").ok();
+        let prev_host = std::env::var("SMTP_HOST").ok();
+        let prev_user = std::env::var("SMTP_USER").ok();
+        let prev_pass = std::env::var("SMTP_PASS").ok();
+        let prev_resend = std::env::var("RESEND_API_KEY").ok();
+        std::env::set_var("RUST_ENV", "production");
+        std::env::remove_var("RESEND_API_KEY");
+        std::env::set_var("SMTP_HOST", "smtp.resend.com");
+        std::env::set_var("SMTP_USER", "resend");
+        std::env::set_var("SMTP_PASS", "plain-smtp-password");
+        assert!(smtp_from_env().is_none());
+        restore_env("RUST_ENV", prev_env);
+        restore_env("SMTP_HOST", prev_host);
+        restore_env("SMTP_USER", prev_user);
+        restore_env("SMTP_PASS", prev_pass);
+        restore_env("RESEND_API_KEY", prev_resend);
     }
 
     #[test]

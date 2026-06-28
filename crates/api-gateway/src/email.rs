@@ -52,7 +52,37 @@ fn looks_like_resend_api_key(value: &str) -> bool {
 
 fn smtp_from_address() -> String {
     non_empty_env("SMTP_FROM")
-        .unwrap_or_else(|| "VANTAGE-EARN <noreply@vantage-earn.onrender.com>".into())
+        .unwrap_or_else(|| "VANTAGE-EARN <onboarding@resend.dev>".into())
+}
+
+/// Domains that Resend will reject or that indicate an unset production config.
+fn is_unverified_sender_domain(from: &str) -> bool {
+    let lower = from.to_ascii_lowercase();
+    [
+        "deine-domain.de",
+        "vantage-earn.onrender.com",
+        "example.com",
+        "your-domain",
+    ]
+    .iter()
+    .any(|d| lower.contains(d))
+}
+
+fn warn_if_suspicious_from_address(from: &str) {
+    let lower = from.to_ascii_lowercase();
+    if lower.contains("onboarding@resend.dev") {
+        tracing::warn!(
+            from = %from,
+            "SMTP_FROM uses onboarding@resend.dev — Resend only delivers to your account email; verify a domain for real users"
+        );
+        return;
+    }
+    if is_unverified_sender_domain(from) {
+        tracing::warn!(
+            from = %from,
+            "SMTP_FROM uses an unverified/placeholder domain — Resend will return 403; set a verified domain in Render env"
+        );
+    }
 }
 
 fn resolve_resend_api_key() -> Option<String> {
@@ -116,8 +146,9 @@ impl EmailService {
         } else {
             smtp_from_env()
         };
-        if resend.is_some() {
-            tracing::info!("transactional email: Resend HTTP API configured");
+        if let Some(resend) = &resend {
+            warn_if_suspicious_from_address(&resend.from);
+            tracing::info!(from = %resend.from, "transactional email: Resend HTTP API configured");
         } else if smtp.is_some() {
             tracing::info!("transactional email: SMTP relay configured (local dev fallback)");
         }
@@ -274,6 +305,14 @@ async fn send_via_resend_api(cfg: &ResendConfig, to: &str, subject: &str, html: 
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
+        tracing::error!(
+            to = %to,
+            from = %cfg.from,
+            subject = %subject,
+            status = %status,
+            resend_response = %text,
+            "Resend API rejected transactional email"
+        );
         return Err(shared::AppError::InvalidInput(format!(
             "Resend API error {status}: {text}"
         )));
@@ -380,6 +419,14 @@ mod tests {
         assert!(html.contains(&reset_url));
         assert!(html.contains("Passwort zurücksetzen"));
         assert!(html.contains("Diese E-Mail kann nicht beantwortet werden"));
+    }
+
+    #[test]
+    fn suspicious_from_detects_placeholder_domains() {
+        assert!(is_unverified_sender_domain("VANTAGE-EARN <noreply@deine-domain.de>"));
+        assert!(is_unverified_sender_domain("noreply@vantage-earn.onrender.com"));
+        assert!(!is_unverified_sender_domain("VANTAGE-EARN <noreply@myapp.de>"));
+        assert!(!is_unverified_sender_domain("VANTAGE-EARN <onboarding@resend.dev>"));
     }
 
     #[test]

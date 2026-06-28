@@ -41,5 +41,7 @@ services:
       # Verify domain in Resend, then set SMTP_FROM to your no-reply address.
       - key: SMTP_PASS
         sync: false
+      # Required: verified sender on your Resend domain, e.g. VANTAGE-EARN <noreply@yourdomain.de>
+      # Test-only (account email only): VANTAGE-EARN <onboarding@resend.dev>
       - key: SMTP_FROM
-        value: VANTAGE-EARN <noreply@deine-domain.de>
+        sync: false

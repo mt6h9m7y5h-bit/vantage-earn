@@ -757,7 +757,7 @@ impl AppState {
         let reset_token = reset_token.to_string();
         tokio::spawn(async move {
             if let Err(e) = email.send_password_reset(&to, &reset_token).await {
-                tracing::warn!(to = %to, error = %e, "password reset email failed");
+                tracing::error!(to = %to, error = %e, "password reset email failed");
             }
         });
     }

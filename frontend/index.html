@@ -2136,6 +2136,125 @@
       clip: rect(0,0,0,0);
       border: 0;
     }
+    .consent-banner {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 10050;
+      padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+      background: linear-gradient(180deg, rgba(7, 11, 20, 0) 0%, rgba(7, 11, 20, 0.92) 24%, #070B14 100%);
+      pointer-events: none;
+    }
+    .consent-banner:not(.hidden) { pointer-events: auto; }
+    .consent-banner-inner {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 1rem 1.1rem;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+    }
+    .consent-banner h2 {
+      margin: 0 0 0.5rem;
+      font-size: var(--heading-md);
+      font-weight: 600;
+    }
+    .consent-banner p {
+      margin: 0 0 0.75rem;
+      font-size: var(--text-sm);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .consent-banner a { color: var(--primary); text-decoration: none; }
+    .consent-banner a:hover { text-decoration: underline; }
+    .consent-options {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin: 0.75rem 0;
+      font-size: var(--text-sm);
+    }
+    .consent-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      padding: 0.55rem 0.65rem;
+      border-radius: var(--radius);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+    }
+    .consent-option strong { display: block; font-weight: 600; color: var(--text); }
+    .consent-option span { color: var(--muted); font-size: 0.8rem; }
+    .consent-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.85rem;
+    }
+    .consent-actions button {
+      flex: 1 1 auto;
+      min-width: 8rem;
+      padding: 0.6rem 0.85rem;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface-elevated);
+      color: var(--text);
+    }
+    .consent-actions .consent-accept {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+    .consent-actions .consent-accept:hover { background: var(--primary-hover); }
+    .consent-note {
+      margin: 0.65rem 0 0;
+      font-size: var(--text-xs);
+      color: var(--muted);
+    }
+    .earnings-calc { margin-top: 0; }
+    .calc-slider-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      font-size: var(--text-sm);
+    }
+    .calc-slider-row output {
+      font-weight: 700;
+      color: var(--success);
+      font-variant-numeric: tabular-nums;
+    }
+    .earnings-calc input[type="range"] {
+      width: 100%;
+      margin: 0.25rem 0 1rem;
+      accent-color: var(--primary);
+    }
+    .calc-results {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+    }
+    .calc-disclaimer {
+      margin: 0.85rem 0 0;
+      font-size: var(--text-xs);
+      line-height: 1.45;
+    }
+    #consent-limited-hint.hidden { display: none; }
+    #consent-limited-hint {
+      margin-top: 0.75rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: var(--radius);
+      background: var(--warning-soft);
+      border: 1px solid var(--warning-border);
+      font-size: var(--text-xs);
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -2346,6 +2465,7 @@
               <div class="top-offers" id="top-offers" role="list" aria-label="Top-Angebote"></div>
             </section>
             <p class="reward-hint" id="reward-hint">Wähle ein Video-Angebot — Provision wird automatisch berechnet.</p>
+            <p id="consent-limited-hint" class="hidden" role="status">Ohne Einwilligung für Analyse/Werbung sind Offerwall und Live-Werbung eingeschränkt — du kannst trotzdem Mock-Videos nutzen.</p>
             <p class="offer-pick-hint">Du wählst selbst, wie lange du schaust.</p>
             <div class="video-offers" id="video-offers" role="list" aria-label="Video-Angebote"></div>
             <div class="progress-wrap" style="margin-top:1.25rem">
@@ -2359,6 +2479,26 @@
               <div class="progress-pct" id="challenge-progress-pct">0%</div>
               <p class="payout-hint" id="challenge-hint">5 Videos heute = Extra-Bonus!</p>
             </div>
+          </section>
+          <section class="card earnings-calc" id="earnings-calculator" aria-labelledby="earnings-calc-title">
+            <h2 class="section-title" id="earnings-calc-title">Realistische Schätzung</h2>
+            <p class="payout-hint">Basierend auf ca. 0,001&nbsp;USDT pro Kurzvideo (30&nbsp;s) — ohne Streak-Boni oder Sonderaktionen.</p>
+            <div class="calc-slider-row">
+              <label for="calc-videos-slider">Videos pro Tag</label>
+              <output id="calc-videos-value" for="calc-videos-slider">5</output>
+            </div>
+            <input type="range" id="calc-videos-slider" min="1" max="30" value="5" aria-valuemin="1" aria-valuemax="30" aria-valuenow="5" />
+            <div class="calc-results">
+              <div class="stat-tile">
+                <span class="stat-label">Geschätzt pro Tag</span>
+                <span class="stat-value success" id="calc-daily-usdt">—</span>
+              </div>
+              <div class="stat-tile">
+                <span class="stat-label">Geschätzt pro Monat</span>
+                <span class="stat-value" id="calc-monthly-eur">—</span>
+              </div>
+            </div>
+            <p class="calc-disclaimer muted">Schätzung, keine Garantie. Tatsächliche Einnahmen hängen von Werbe-CPM, Nutzerverhalten und Tageslimits ab.</p>
           </section>
         </section>
 
@@ -2772,6 +2912,29 @@
     </div>
   </div>
 
+  <div id="consent-banner" class="consent-banner hidden" role="dialog" aria-labelledby="consent-title" aria-describedby="consent-desc">
+    <div class="consent-banner-inner">
+      <h2 id="consent-title">Cookies &amp; Datenschutz</h2>
+      <p id="consent-desc">Wir verwenden notwendige Cookies für Login und Sicherheit. Mit deiner Einwilligung laden wir zudem Analyse- und Werbe-Dienste (z.&nbsp;B. Offerwall, Video-Werbung). Details in unserer <a href="/legal/datenschutz">Datenschutzerklärung</a>.</p>
+      <div class="consent-options" role="group" aria-label="Cookie-Kategorien">
+        <div class="consent-option">
+          <input type="checkbox" id="consent-essential" checked disabled aria-label="Notwendig" />
+          <div><strong>Notwendig</strong><span>Login, Sicherheit, App-Funktion — immer aktiv</span></div>
+        </div>
+        <div class="consent-option">
+          <input type="checkbox" id="consent-analytics" aria-label="Analyse und Werbung" />
+          <div><strong>Analyse &amp; Werbung</strong><span>Offerwall, Video-Werbung, Nutzungsstatistik (opt-in)</span></div>
+        </div>
+      </div>
+      <div class="consent-actions">
+        <button type="button" class="consent-accept" id="consent-accept-all">Alle akzeptieren</button>
+        <button type="button" id="consent-save">Auswahl speichern</button>
+        <button type="button" id="consent-essential-only">Nur Notwendige</button>
+      </div>
+      <p class="consent-note">Du kannst die App auch ohne Werbe-Cookies nutzen — Offerwall und Live-Werbung sind dann eingeschränkt.</p>
+    </div>
+  </div>
+
   <script>
     const API = window.location.origin;
     let adConfig = {
@@ -2812,6 +2975,88 @@
     const REFERRER_BONUS = '0.001';
     const REFEREE_BONUS = '0.001';
     const MIN_WATCH_SECS = 15;
+    const CONSENT_STORAGE_KEY = 've_consent_v1';
+    const CALC_REWARD_PER_VIDEO_USDT = 0.001;
+    const CALC_MONTH_DAYS = 30;
+
+    function loadConsent() {
+      try {
+        const raw = localStorage.getItem(CONSENT_STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function saveConsent(analytics) {
+      const payload = { essential: true, analytics: !!analytics, ts: Date.now() };
+      try {
+        localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(payload));
+      } catch (_) { /* private mode */ }
+      applyConsent(payload);
+      const banner = document.getElementById('consent-banner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function hasAnalyticsConsent() {
+      const c = loadConsent();
+      return !!(c && c.analytics);
+    }
+
+    function applyConsent(consent) {
+      window.veConsent = consent || { essential: true, analytics: false };
+      const hint = document.getElementById('consent-limited-hint');
+      if (hint) hint.classList.toggle('hidden', !!window.veConsent.analytics);
+      if (typeof updateTopOffersBadge === 'function') updateTopOffersBadge();
+      if (typeof updateAdProviderUi === 'function') updateAdProviderUi();
+    }
+
+    function initConsentBanner() {
+      const existing = loadConsent();
+      if (existing) {
+        applyConsent(existing);
+        return;
+      }
+      const banner = document.getElementById('consent-banner');
+      if (!banner) return;
+      banner.classList.remove('hidden');
+      applyConsent({ essential: true, analytics: false });
+      const analyticsCb = document.getElementById('consent-analytics');
+      document.getElementById('consent-accept-all')?.addEventListener('click', () => {
+        if (analyticsCb) analyticsCb.checked = true;
+        saveConsent(true);
+      });
+      document.getElementById('consent-save')?.addEventListener('click', () => {
+        saveConsent(!!analyticsCb?.checked);
+      });
+      document.getElementById('consent-essential-only')?.addEventListener('click', () => {
+        if (analyticsCb) analyticsCb.checked = false;
+        saveConsent(false);
+      });
+    }
+
+    function updateEarningsCalculator(videosPerDay) {
+      const daily = videosPerDay * CALC_REWARD_PER_VIDEO_USDT;
+      const monthlyEur = daily * CALC_MONTH_DAYS * USDT_TO_EUR_UI;
+      const dailyEl = document.getElementById('calc-daily-usdt');
+      const monthlyEl = document.getElementById('calc-monthly-eur');
+      const valueEl = document.getElementById('calc-videos-value');
+      const slider = document.getElementById('calc-videos-slider');
+      if (valueEl) valueEl.textContent = String(videosPerDay);
+      if (slider) slider.setAttribute('aria-valuenow', String(videosPerDay));
+      if (dailyEl) dailyEl.textContent = '≈ ' + window.veForceDeDecimal(daily, 3) + ' USDT';
+      if (monthlyEl) monthlyEl.textContent = '≈ ' + window.veForceDeDecimal(monthlyEur, 2) + ' EUR';
+    }
+
+    function initEarningsCalculator() {
+      const slider = document.getElementById('calc-videos-slider');
+      if (!slider) return;
+      const render = () => updateEarningsCalculator(parseInt(slider.value, 10) || 1);
+      slider.addEventListener('input', render);
+      render();
+    }
+
     const USDT_TO_EUR_UI = 0.92;
     const FALLBACK_OFFER_TIERS = [
       { tier: 'quick', duration_secs: 30, label_de: 'Schnell' },
@@ -3397,6 +3642,7 @@
     }
 
     function offerwallEnabled() {
+      if (!hasAnalyticsConsent()) return false;
       return !!(adConfig.offerwall?.enabled && adConfig.offerwall?.bitlabs_app_token);
     }
 
@@ -4126,6 +4372,7 @@
       },
 
       getProviderName() {
+        if (!hasAnalyticsConsent()) return 'mock';
         const p = adConfig.ad_provider;
         if (p === 'adinplay' && adConfig.adinplay_tag_url) return 'adinplay';
         if (p === 'applixir' && adConfig.applixir_app_id) return 'applixir';
@@ -5935,6 +6182,8 @@
     initAuthSubmitBtn();
     setAuthMode('login');
     syncAuthButtonState();
+    initConsentBanner();
+    initEarningsCalculator();
     document.getElementById('refresh-btn')?.addEventListener('click', () => refresh({ quiet: true, bustCache: true, showLoading: true }));
 
     (function initPullToRefresh() {

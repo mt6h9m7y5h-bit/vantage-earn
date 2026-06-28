@@ -43,6 +43,7 @@ pub fn router() -> Router<AppState> {
         .route("/admin/users/{user_id}/debit", post(admin_debit))
         .route("/admin/users/{user_id}/trust-score", post(admin_trust_score))
         .route("/admin/users/{user_id}/ban", post(admin_ban))
+        .route("/admin/users/{user_id}/delete", post(admin_delete_user))
         .route("/admin/users/{user_id}/notes", get(admin_user_notes).post(admin_add_user_note))
         .route("/admin/users/{user_id}/timeline", get(admin_user_timeline))
         .route("/admin/audit-log", get(admin_audit_log))
@@ -641,6 +642,43 @@ async fn admin_ban(
     Ok(Json(BanResponse {
         user_id,
         banned: body.banned,
+    }))
+}
+
+#[derive(Serialize)]
+struct AdminDeleteUserResponse {
+    user_id: Uuid,
+    deleted: bool,
+    message: &'static str,
+}
+
+const ADMIN_DELETE_USER_MESSAGE: &str = "Nutzer wurde gelöscht.";
+
+async fn admin_delete_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<AdminDeleteUserResponse>, ApiError> {
+    verify_admin(&headers)?;
+    state.prepare_admin_user(user_id).await?;
+    let email = state.user_email(user_id).await;
+    let balance = state.balance(user_id).await.ok();
+    state.delete_user_account(user_id).await?;
+    state
+        .admin_log_enriched(
+            &headers,
+            "delete_user",
+            Some(user_id),
+            serde_json::json!({
+                "email": email,
+                "balance_at_delete": balance.map(|b| b.to_string()),
+            }),
+        )
+        .await?;
+    Ok(Json(AdminDeleteUserResponse {
+        user_id,
+        deleted: true,
+        message: ADMIN_DELETE_USER_MESSAGE,
     }))
 }
 

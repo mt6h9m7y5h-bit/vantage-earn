@@ -2377,6 +2377,83 @@ async fn admin_stats_core_metrics() {
 }
 
 #[tokio::test]
+async fn admin_delete_user_hard_deletes_with_audit() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    let state = AppState::new();
+    let app = app(state.clone());
+    let (user_id, _token) = register(&app).await;
+
+    let del = app
+        .clone()
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/users/{user_id}/delete"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(del.status(), StatusCode::OK);
+    let del_json = body_json(del).await;
+    assert_eq!(del_json["deleted"], true);
+    assert_eq!(del_json["user_id"], user_id.to_string());
+
+    assert!(!state.user_exists(user_id).await);
+
+    let audit = app
+        .oneshot(admin_req("GET", "/admin/audit-log?limit=10", None))
+        .await
+        .unwrap();
+    assert_eq!(audit.status(), StatusCode::OK);
+    let audit_json = body_json(audit).await;
+    assert!(audit_json["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e["action"] == "delete_user" && e["user_id"] == user_id.to_string()));
+}
+
+#[tokio::test]
+async fn admin_delete_user_blocks_open_payouts() {
+    std::env::set_var("ADMIN_SECRET", "test-admin-secret");
+    std::env::set_var("PAYOUT_DEMO_MODE", "true");
+    let state = AppState::new();
+    let app = app(state.clone());
+    let (user_id, token) = register(&app).await;
+
+    let min = state.min_payout_usdt().await;
+    state.credit(user_id, min).await.unwrap();
+    state
+        .add_revenue(Decimal::from_str_exact("1000.0").unwrap())
+        .await
+        .unwrap();
+    state.set_trust_score(user_id, 20).await.unwrap();
+
+    let body = format!(r#"{{"amount_usdt":"{min}","payout_method":"crypto"}}"#);
+    let payout_res = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/users/me/payout/request",
+            &token,
+            Some(&body),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(payout_res.status(), StatusCode::OK);
+
+    let del = app
+        .oneshot(admin_req(
+            "POST",
+            &format!("/admin/users/{user_id}/delete"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(del.status(), StatusCode::BAD_REQUEST);
+    assert!(state.user_exists(user_id).await);
+}
+
+#[tokio::test]
 async fn delete_account_requires_password_for_email_users() {
     let app = app(AppState::new());
     let email = format!("del-{}@example.com", Uuid::new_v4());

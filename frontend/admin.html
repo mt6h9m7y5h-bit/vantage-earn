@@ -564,6 +564,11 @@
               <button class="btn-danger" id="ban-btn" onclick="toggleBan()">Sperren</button>
             </div>
           </div>
+          <div class="action-form card" style="background:var(--surface); border-color:rgba(239,68,68,0.35)">
+            <strong>Nutzer löschen</strong>
+            <p class="muted" style="margin:0.35rem 0 0.65rem;font-size:0.82rem">Hard-Delete: Konto, Wallet und zugehörige Daten werden unwiderruflich entfernt. Blockiert bei offenen Auszahlungen.</p>
+            <button class="btn-danger" type="button" onclick="openDeleteUserModal()">Konto endgültig löschen</button>
+          </div>
         </div>
         <p id="user-action-msg" class="success hidden"></p>
       </div>
@@ -750,6 +755,18 @@
       <div class="modal-actions">
         <button class="btn-ghost" onclick="closeRejectModal()">Abbrechen</button>
         <button class="btn-danger" onclick="confirmReject()">Ablehnen</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="delete-user-modal" class="modal-backdrop hidden" onclick="if(event.target===this)closeDeleteUserModal()">
+    <div class="modal">
+      <h3>Nutzer endgültig löschen?</h3>
+      <p class="muted" id="delete-user-modal-hint">Dieser Vorgang kann nicht rückgängig gemacht werden.</p>
+      <p class="muted" style="font-size:0.82rem;margin-top:0.75rem">Alle Daten (Wallet, Ledger, Trust-Score) werden gelöscht. Offene Auszahlungen müssen zuerst bearbeitet werden.</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" type="button" onclick="closeDeleteUserModal()">Abbrechen</button>
+        <button class="btn-danger" type="button" onclick="confirmDeleteUser()">Endgültig löschen</button>
       </div>
     </div>
   </div>
@@ -1788,6 +1805,34 @@
         });
         userMsg(banned ? 'Nutzer gesperrt.' : 'Nutzer entsperrt.');
         loadUser(selectedUserId);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    function openDeleteUserModal() {
+      if (!selectedUserId) return;
+      const hint = document.getElementById('delete-user-modal-hint');
+      if (hint) hint.textContent = `Nutzer ${selectedUserId} wird unwiderruflich gelöscht.`;
+      document.getElementById('delete-user-modal')?.classList.remove('hidden');
+    }
+
+    function closeDeleteUserModal() {
+      document.getElementById('delete-user-modal')?.classList.add('hidden');
+    }
+
+    async function confirmDeleteUser() {
+      if (!selectedUserId) return;
+      const userId = selectedUserId;
+      try {
+        const d = await api(`/admin/users/${userId}/delete`, { method: 'POST', body: '{}' });
+        closeDeleteUserModal();
+        closeUserDrawer();
+        document.getElementById('user-detail')?.classList.add('hidden');
+        selectedUserId = null;
+        userMsg(d.message || 'Nutzer gelöscht.');
+        loadUsersTable();
+        showError('');
       } catch (e) {
         showError(e.message);
       }

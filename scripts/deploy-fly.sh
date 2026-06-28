@@ -3,6 +3,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+PRIMARY_REGION="${FLY_PRIMARY_REGION:-fra}"
+
+# Leere FLY_REGION führt zu: "region  not found"
+if [ -n "${FLY_REGION+x}" ] && [ -z "$FLY_REGION" ]; then
+  unset FLY_REGION
+fi
+
 export PATH="${HOME}/.fly/bin:${PATH}"
 
 if ! command -v flyctl &>/dev/null; then
@@ -23,7 +30,7 @@ echo "Vollständige Anleitung: docs/FLY.md"
 echo ""
 
 if ! flyctl apps list 2>/dev/null | grep -q "$APP_NAME"; then
-  flyctl launch --yes --copy-config --name "$APP_NAME" --region fra --no-deploy
+  flyctl launch --yes --copy-config --name "$APP_NAME" --region "$PRIMARY_REGION" --no-deploy
 fi
 
 FLY_URL="https://${APP_NAME}.fly.dev"
@@ -45,8 +52,8 @@ flyctl secrets set \
   --app "$APP_NAME"
 
 echo ""
-echo "Deploy startet (dauert ~5–10 Min beim ersten Mal)..."
-flyctl deploy --app "$APP_NAME"
+echo "Deploy startet (Region: $PRIMARY_REGION, dauert ~5–10 Min beim ersten Mal)..."
+flyctl deploy --app "$APP_NAME" --primary-region "$PRIMARY_REGION"
 
 echo ""
 echo "Fertig!"
@@ -54,7 +61,7 @@ echo "  Demo:  ${FLY_URL}/demo"
 echo "  Health: ${FLY_URL}/health"
 echo ""
 echo "Optional — Postgres (persistent):"
-echo "  fly postgres create --name ${APP_NAME}-db --region fra"
+echo "  fly postgres create --name ${APP_NAME}-db --region $PRIMARY_REGION"
 echo "  fly postgres attach ${APP_NAME}-db --app $APP_NAME"
 echo "  fly deploy --app $APP_NAME"
 echo ""

@@ -175,6 +175,7 @@ DNS: CNAME `earn` → `<app-name>.fly.dev`, danach `APP_URL` und `BITLABS_CALLBA
 | E-Mail nur in Logs | `SMTP_PASS`/`RESEND_API_KEY` + `SMTP_FROM` setzen |
 | Health check failed | `fly logs`; Postgres-URL prüfen wenn `DATABASE_URL` gesetzt |
 | App-Name vergeben | Anderen `--name` bei `fly launch` wählen |
+| `region  not found` (leere Region) | `export PATH="$HOME/.fly/bin:$PATH"` (nicht `exportPATH`); `unset FLY_REGION` falls gesetzt; `./scripts/deploy-fly.sh` nutzt `--region fra` / `--primary-region fra` |
 
 ---
 

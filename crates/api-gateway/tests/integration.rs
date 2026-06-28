@@ -141,6 +141,41 @@ async fn root_redirects_to_demo_not_health_json() {
 }
 
 #[tokio::test]
+async fn legal_pages_return_html() {
+    let app = app(AppState::new());
+    for path in ["/legal/impressum", "/legal/datenschutz", "/legal/agb"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header("accept", "text/html")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK, "GET {path}");
+        let ct = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(
+            ct.contains("text/html"),
+            "expected HTML for {path}, got {ct}"
+        );
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&bytes);
+        assert!(
+            html.contains("VANTAGE"),
+            "expected VANTAGE branding in {path}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn health_returns_ok() {
     let app = app(AppState::new());
     let response = app

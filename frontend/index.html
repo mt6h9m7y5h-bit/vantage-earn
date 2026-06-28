@@ -2245,6 +2245,57 @@
       font-size: var(--text-xs);
       line-height: 1.45;
     }
+    .calc-hours-hint {
+      margin: 0 0 0.75rem;
+      font-size: var(--text-sm);
+      color: var(--muted);
+    }
+    .calc-hours-hint strong {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .calc-pace-highlight {
+      margin: 0.85rem 0 0;
+      padding: 0.75rem 0.85rem;
+      border-radius: var(--radius);
+      background: var(--primary-soft);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--primary);
+      text-align: center;
+      line-height: 1.45;
+    }
+    .combo-hint-card {
+      margin-bottom: 0.75rem;
+      padding: 0.85rem 1rem;
+      border-left: 3px solid var(--success);
+    }
+    .combo-hint-card .combo-hint-label {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--success);
+      margin: 0 0 0.35rem;
+    }
+    .combo-hint-card p {
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .payout-milestones-card .payout-timeline { margin-top: 0.5rem; }
+    .wallet-milestone-strip {
+      margin-top: 0.85rem;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+    .wallet-milestone-strip .payout-timeline { margin: 0.5rem 0; }
+    #payout-milestone-status {
+      margin: 0.65rem 0 0;
+      font-size: var(--text-sm);
+    }
     #consent-limited-hint.hidden { display: none; }
     #consent-limited-hint {
       margin-top: 0.75rem;
@@ -2420,6 +2471,17 @@
               <button class="primary" id="watch-btn" onclick="startWatch()">Video ansehen</button>
             </div>
           </section>
+          <section class="card payout-milestones-card" id="payout-milestones-card" aria-labelledby="payout-milestones-title">
+            <h2 class="section-title" id="payout-milestones-title">Auszahlungs-Meilensteine</h2>
+            <p class="payout-hint">Fortschritt Richtung 170&nbsp;€ Mindestauszahlung — jedes Ziel bringt dich näher zur Auszahlung.</p>
+            <div class="payout-timeline" id="payout-milestones-timeline" role="list" aria-label="Auszahlungs-Meilensteine">
+              <div class="timeline-step" data-milestone="5" role="listitem">5&nbsp;€</div>
+              <div class="timeline-step" data-milestone="20" role="listitem">20&nbsp;€</div>
+              <div class="timeline-step" data-milestone="50" role="listitem">50&nbsp;€</div>
+              <div class="timeline-step" data-milestone="170" role="listitem">170&nbsp;€</div>
+            </div>
+            <p class="payout-hint" id="payout-milestone-status">Lade Guthaben…</p>
+          </section>
           <div class="kpi-strip">
             <div class="stat-tile">
               <span class="stat-label">Heute geschaut</span>
@@ -2480,25 +2542,36 @@
               <p class="payout-hint" id="challenge-hint">5 Videos heute = Extra-Bonus!</p>
             </div>
           </section>
+          <section class="card combo-hint-card" aria-label="Tages-Tipp">
+            <p class="combo-hint-label">Tages-Tipp</p>
+            <p><strong>2 Offerwall-Tasks + 10 Videos</strong> = bestes Tempo Richtung Auszahlung — Videos für Streak, Offerwall für den größeren Sprung.</p>
+          </section>
           <section class="card earnings-calc" id="earnings-calculator" aria-labelledby="earnings-calc-title">
-            <h2 class="section-title" id="earnings-calc-title">Realistische Schätzung</h2>
-            <p class="payout-hint">Basierend auf ca. 0,001&nbsp;USDT pro Kurzvideo (30&nbsp;s) — ohne Streak-Boni oder Sonderaktionen.</p>
+            <h2 class="section-title" id="earnings-calc-title">Verdienst-Rechner</h2>
+            <p class="payout-hint">Konservative Schätzung: ca. 0,001&nbsp;USDT pro Kurzvideo (30&nbsp;s) · Offerwall ~1&nbsp;€ pro Task (0,50–2,00&nbsp;€ möglich).</p>
             <div class="calc-slider-row">
               <label for="calc-videos-slider">Videos pro Tag</label>
               <output id="calc-videos-value" for="calc-videos-slider">5</output>
             </div>
             <input type="range" id="calc-videos-slider" min="1" max="30" value="5" aria-valuemin="1" aria-valuemax="30" aria-valuenow="5" />
+            <div class="calc-slider-row">
+              <label for="calc-offerwall-slider">Offerwall-Tasks pro Tag</label>
+              <output id="calc-offerwall-value" for="calc-offerwall-slider">2</output>
+            </div>
+            <input type="range" id="calc-offerwall-slider" min="0" max="5" value="2" aria-valuemin="0" aria-valuemax="5" aria-valuenow="2" />
+            <p class="calc-hours-hint" id="calc-hours-hint">Zeitaufwand: <strong>≈ — Std./Tag</strong> (Videos + Offerwall)</p>
             <div class="calc-results">
               <div class="stat-tile">
                 <span class="stat-label">Geschätzt pro Tag</span>
-                <span class="stat-value success" id="calc-daily-usdt">—</span>
+                <span class="stat-value success" id="calc-daily-eur">—</span>
               </div>
               <div class="stat-tile">
                 <span class="stat-label">Geschätzt pro Monat</span>
                 <span class="stat-value" id="calc-monthly-eur">—</span>
               </div>
             </div>
-            <p class="calc-disclaimer muted">Schätzung, keine Garantie. Tatsächliche Einnahmen hängen von Werbe-CPM, Nutzerverhalten und Tageslimits ab.</p>
+            <p class="calc-pace-highlight" id="calc-weeks-to-goal" role="status">Bei diesem Tempo: —</p>
+            <p class="calc-disclaimer muted">Schätzung, keine Garantie. Offerwall-Einnahmen hängen von Verfügbarkeit und Abschlussrate ab. Streak-Boni und Aktionen nicht eingerechnet.</p>
           </section>
         </section>
 
@@ -2513,6 +2586,15 @@
               <div class="balance" id="wallet-balance">0<span class="currency-suffix">USDT</span></div>
             </div>
             <div class="local" id="wallet-local">≈ 0 EUR</div>
+            <div class="wallet-milestone-strip" id="wallet-milestone-strip">
+              <div class="payout-timeline" id="wallet-milestones-timeline" role="list" aria-label="Auszahlungs-Meilensteine">
+                <div class="timeline-step" data-milestone="5" role="listitem">5&nbsp;€</div>
+                <div class="timeline-step" data-milestone="20" role="listitem">20&nbsp;€</div>
+                <div class="timeline-step" data-milestone="50" role="listitem">50&nbsp;€</div>
+                <div class="timeline-step" data-milestone="170" role="listitem">170&nbsp;€</div>
+              </div>
+              <p class="payout-hint" id="wallet-milestone-status" style="margin:0">—</p>
+            </div>
           </section>
           <script>
             (function vePrimeWalletDom() {
@@ -2978,6 +3060,11 @@
     const CONSENT_STORAGE_KEY = 've_consent_v1';
     const CALC_REWARD_PER_VIDEO_USDT = 0.001;
     const CALC_MONTH_DAYS = 30;
+    const CALC_OFFERWALL_EUR_PER_TASK = 1.0;
+    const CALC_OFFERWALL_MINS_PER_TASK = 12;
+    const CALC_VIDEO_SECS = 30;
+    const PAYOUT_MILESTONES_EUR = [5, 20, 50, 170];
+    const PAYOUT_GOAL_EUR = 170;
 
     function loadConsent() {
       try {
@@ -3036,25 +3123,115 @@
       });
     }
 
-    function updateEarningsCalculator(videosPerDay) {
-      const daily = videosPerDay * CALC_REWARD_PER_VIDEO_USDT;
-      const monthlyEur = daily * CALC_MONTH_DAYS * USDT_TO_EUR_UI;
-      const dailyEl = document.getElementById('calc-daily-usdt');
-      const monthlyEl = document.getElementById('calc-monthly-eur');
+    function formatCalcHours(hours) {
+      if (!isFinite(hours) || hours <= 0) return '0 Std.';
+      if (hours < 1) {
+        const mins = Math.round(hours * 60);
+        return mins + ' Min.';
+      }
+      return window.veForceDeDecimal(hours, hours < 10 ? 1 : 0) + ' Std.';
+    }
+
+    function formatWeeksEstimate(weeks) {
+      if (!weeks || !isFinite(weeks)) return '—';
+      if (weeks >= 52) {
+        const months = Math.round(weeks / 4.33);
+        return '~' + months + ' Monate';
+      }
+      return '~' + weeks + (weeks === 1 ? ' Woche' : ' Wochen');
+    }
+
+    function updateEarningsCalculator(videosPerDay, offerwallTasksPerDay) {
+      const videos = Math.max(1, parseInt(videosPerDay, 10) || 1);
+      const tasks = Math.max(0, parseInt(offerwallTasksPerDay, 10) || 0);
+      const videoEurDaily = videos * CALC_REWARD_PER_VIDEO_USDT * USDT_TO_EUR_UI;
+      const offerwallEurDaily = tasks * CALC_OFFERWALL_EUR_PER_TASK;
+      const dailyEur = videoEurDaily + offerwallEurDaily;
+      const monthlyEur = dailyEur * CALC_MONTH_DAYS;
+      const hoursPerDay = (videos * CALC_VIDEO_SECS + tasks * CALC_OFFERWALL_MINS_PER_TASK * 60) / 3600;
+      const weeksToGoal = dailyEur > 0 ? Math.ceil(PAYOUT_GOAL_EUR / dailyEur / 7) : null;
+
       const valueEl = document.getElementById('calc-videos-value');
-      const slider = document.getElementById('calc-videos-slider');
-      if (valueEl) valueEl.textContent = String(videosPerDay);
-      if (slider) slider.setAttribute('aria-valuenow', String(videosPerDay));
-      if (dailyEl) dailyEl.textContent = '≈ ' + window.veForceDeDecimal(daily, 3) + ' USDT';
-      if (monthlyEl) monthlyEl.textContent = '≈ ' + window.veForceDeDecimal(monthlyEur, 2) + ' EUR';
+      const videosSlider = document.getElementById('calc-videos-slider');
+      const tasksValueEl = document.getElementById('calc-offerwall-value');
+      const tasksSlider = document.getElementById('calc-offerwall-slider');
+      const dailyEl = document.getElementById('calc-daily-eur');
+      const monthlyEl = document.getElementById('calc-monthly-eur');
+      const hoursEl = document.getElementById('calc-hours-hint');
+      const weeksEl = document.getElementById('calc-weeks-to-goal');
+
+      if (valueEl) valueEl.textContent = String(videos);
+      if (videosSlider) videosSlider.setAttribute('aria-valuenow', String(videos));
+      if (tasksValueEl) tasksValueEl.textContent = String(tasks);
+      if (tasksSlider) tasksSlider.setAttribute('aria-valuenow', String(tasks));
+      if (dailyEl) dailyEl.textContent = '≈ ' + window.veForceDeDecimal(dailyEur, 2) + ' €';
+      if (monthlyEl) monthlyEl.textContent = '≈ ' + window.veForceDeDecimal(monthlyEur, 2) + ' €';
+      if (hoursEl) {
+        hoursEl.innerHTML = 'Zeitaufwand: <strong>≈ ' + formatCalcHours(hoursPerDay) + '/Tag</strong> (Videos + Offerwall)';
+      }
+      if (weeksEl) {
+        weeksEl.textContent = dailyEur > 0
+          ? 'Bei diesem Tempo: ' + formatWeeksEstimate(weeksToGoal) + ' bis 170 € Auszahlung'
+          : 'Bei diesem Tempo: — (mindestens 1 Video oder 1 Offerwall-Task nötig)';
+      }
     }
 
     function initEarningsCalculator() {
-      const slider = document.getElementById('calc-videos-slider');
-      if (!slider) return;
-      const render = () => updateEarningsCalculator(parseInt(slider.value, 10) || 1);
-      slider.addEventListener('input', render);
+      const videosSlider = document.getElementById('calc-videos-slider');
+      const tasksSlider = document.getElementById('calc-offerwall-slider');
+      if (!videosSlider) return;
+      const render = () => updateEarningsCalculator(
+        parseInt(videosSlider.value, 10) || 1,
+        tasksSlider ? parseInt(tasksSlider.value, 10) || 0 : 0,
+      );
+      videosSlider.addEventListener('input', render);
+      tasksSlider?.addEventListener('input', render);
       render();
+    }
+
+    function renderPayoutMilestoneTimeline(timelineId, balanceEur) {
+      const timeline = document.getElementById(timelineId);
+      if (!timeline) return;
+      const balance = Math.max(0, parseFloat(balanceEur) || 0);
+      let activeSet = false;
+      timeline.querySelectorAll('.timeline-step').forEach((step) => {
+        const target = parseFloat(step.dataset.milestone) || 0;
+        step.classList.remove('done', 'active');
+        if (balance >= target) {
+          step.classList.add('done');
+        } else if (!activeSet) {
+          step.classList.add('active');
+          activeSet = true;
+        }
+      });
+    }
+
+    function payoutMilestoneStatusText(balanceEur) {
+      const balance = Math.max(0, parseFloat(balanceEur) || 0);
+      const reached = PAYOUT_MILESTONES_EUR.filter((m) => balance >= m);
+      const next = PAYOUT_MILESTONES_EUR.find((m) => balance < m);
+      if (balance >= PAYOUT_GOAL_EUR) {
+        return 'Meilenstein erreicht: 170 € — Auszahlung möglich (sobald Mindestbetrag erfüllt).';
+      }
+      if (reached.length === 0) {
+        return 'Aktuell: ' + formatLocalizedAmount(balance) + ' € — Nächstes Ziel: 5 €';
+      }
+      const current = reached[reached.length - 1];
+      if (!next) {
+        return 'Aktuell: ' + formatLocalizedAmount(balance) + ' € — Alle Meilensteine erreicht';
+      }
+      const remaining = next - balance;
+      return 'Aktuell: ' + formatLocalizedAmount(balance) + ' € (Meilenstein ' + formatLocalizedAmount(current) + ' €) — Nächstes Ziel: ' + formatLocalizedAmount(next) + ' € (noch ' + formatLocalizedAmount(Math.max(0, remaining)) + ' €)';
+    }
+
+    function updatePayoutMilestones(walletData) {
+      if (!walletData) return;
+      const balance = parseFloat(walletData.localized_balance) || 0;
+      renderPayoutMilestoneTimeline('payout-milestones-timeline', balance);
+      renderPayoutMilestoneTimeline('wallet-milestones-timeline', balance);
+      const status = payoutMilestoneStatusText(balance);
+      setText('payout-milestone-status', status);
+      setText('wallet-milestone-status', status);
     }
 
     const USDT_TO_EUR_UI = 0.92;
@@ -3929,6 +4106,7 @@
       document.documentElement.dataset.veWalletApplied = String(w.balance_usdt);
       document.documentElement.dataset.veWalletSrc = opts.fromSnapshot ? 'snapshot' : 'api';
       markWalletReady();
+      updatePayoutMilestones(w);
       requestAnimationFrame(forceLayoutFix);
     }
 
@@ -3958,6 +4136,7 @@
       if (text) {
         text.textContent = formatLocalizedAmount(localized) + ' / ' + formatLocalizedAmount(goalEur) + ' €';
       }
+      updatePayoutMilestones(walletData);
     }
 
     function updateRewardHint(statsData) {

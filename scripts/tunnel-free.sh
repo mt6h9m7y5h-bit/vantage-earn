@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Kostenloser HTTPS-Tunnel — App auf jedem Handy, ohne Fly.io.
+# Kostenloser HTTPS-Tunnel — App auf jedem Handy, ohne Cloud-Deploy.
 # Voraussetzung: Server läuft in Tab 1 (cargo run -p api-gateway)
 
 set -euo pipefail

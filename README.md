@@ -38,7 +38,7 @@ cargo run -p api-gateway
 Für Production ist **HTTPS** erforderlich — dann funktioniert die App auf **jedem Handy weltweit**.
 
 **Kostenlos jetzt:** [docs/FREE_HOSTING.md](./docs/FREE_HOSTING.md) (Cloudflare Tunnel, 0 €)  
-**Später 24/7:** [docs/DEPLOY.md](./docs/DEPLOY.md) (Fly.io / Render)
+**Später 24/7:** [docs/DEPLOY.md](./docs/DEPLOY.md) (Render)
 
 ### DB-Hilfsskripte
 

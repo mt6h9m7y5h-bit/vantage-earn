@@ -132,8 +132,6 @@ git push origin main
 
 Render Blueprint (`render.yaml`) baut Docker-Image, verbindet Postgres, setzt `ADMIN_SECRET` (generateValue). Health-Check: `/health`. Erster Request nach Sleep kann ~30 s dauern (Free Tier).
 
-Alternativ: Fly.io — siehe `docs/DEPLOY.md` und `./scripts/deploy-fly.sh`.
-
 ---
 
 ## Hinweise für die Fortführung

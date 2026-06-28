@@ -42,34 +42,7 @@ Handys brauchen eine **öffentliche HTTPS-URL**. PWA-Installation funktioniert a
 
 ---
 
-## Fly.io (empfohlen — kostenarm, HTTPS automatisch)
-
-Render-Pipeline-Minuten sind aufgebraucht; Hobby ($25/Monat) ist zu teuer. **Fly.io ist vorbereitet** (`fly.toml`, `docs/FLY.md`).
-
-> **Bis Fly läuft:** `./scripts/dev-with-db.sh` lokal oder bestehende Render-URL (Service `34e4941` läuft noch).
-
-```bash
-cd vantage-earn
-./scripts/deploy-fly.sh
-```
-
-Oder Schritt für Schritt: **[docs/FLY.md](FLY.md)** (deutsch, inkl. Postgres + Secrets).
-
-Kurzversion:
-
-```bash
-curl -L https://fly.io/install.sh | sh
-export PATH="$HOME/.fly/bin:$PATH"
-fly auth login
-fly launch --no-deploy --copy-config --name vantage-earn-DEINNAME --region fra
-fly secrets set JWT_SECRET="$(openssl rand -hex 32)" ADMIN_SECRET="$(openssl rand -hex 32)" \
-  APP_URL="https://vantage-earn-DEINNAME.fly.dev" --app vantage-earn-DEINNAME
-fly deploy --app vantage-earn-DEINNAME
-```
-
----
-
-## Render.com (pausiert — Pipeline-Minuten aufgebraucht)
+## Render.com (Production — mit PostgreSQL)
 
 Repo auf GitHub pushen, dann im [Render Dashboard](https://dashboard.render.com):
 
@@ -92,6 +65,8 @@ Demo-URL: `https://DEIN-SERVICE.onrender.com/demo`
 Migrationen laufen beim ersten API-Start automatisch (`sqlx::migrate!` in `PgStore::connect`).
 
 **Hinweis:** Free-Tier-Postgres und Web-Service schlafen nach Inaktivität — erster Request kann ~30 s dauern.
+
+**Pipeline-Minuten aufgebraucht?** Warte bis zum Monatsreset, dann einmal **Manual Deploy** im Dashboard (siehe unten unter Environment-Variablen).
 
 ---
 
@@ -141,8 +116,8 @@ Logs: Render → Logs → `transactional email sent (Resend API)` oder `Resend A
 
 ## Eigene Domain (später)
 
-```bash
-fly certs add earn.deine-domain.de
-```
+Im Render Dashboard → **Settings** → **Custom Domains** → Domain hinzufügen.
 
-DNS: CNAME `earn` → `<app-name>.fly.dev`
+DNS: CNAME `earn` → `dein-service.onrender.com`
+
+Danach `APP_URL` und `BITLABS_CALLBACK_BASE_URL` auf die neue Domain setzen.

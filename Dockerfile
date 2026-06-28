@@ -2,7 +2,7 @@ FROM rust:1-bookworm AS builder
 WORKDIR /app
 ARG GIT_COMMIT=dev
 ENV GIT_COMMIT=$GIT_COMMIT
-# Fly.io / Render: single-job release build avoids OOM on small VMs
+# Render free tier can OOM during parallel release builds
 ENV CARGO_BUILD_JOBS=1
 ENV RUSTFLAGS="-C codegen-units=1"
 COPY Cargo.toml Cargo.lock ./
@@ -20,6 +20,6 @@ COPY --from=builder /app/target/release/vantage-earn /app/vantage-earn
 COPY crates/api-gateway/migrations ./migrations
 COPY templates/email ./templates/email
 ENV EMAIL_TEMPLATES_DIR=/app/templates/email
-# Fly.io and Render inject PORT at runtime; 3000 fallback for local docker-compose
+# Render injects PORT at runtime (default 10000); 3000 fallback for local docker-compose
 ENV PORT=3000
 CMD ["./vantage-earn"]

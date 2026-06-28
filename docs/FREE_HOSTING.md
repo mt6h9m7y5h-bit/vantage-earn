@@ -1,4 +1,4 @@
-# Kostenlos deployen (ohne Fly.io)
+# Kostenlos deployen (ohne Cloud-Deploy)
 
 ## Option 1: Cloudflare Tunnel (empfohlen, 0 €)
 
@@ -49,8 +49,6 @@ Keine Kreditkarte für Free Tier nötig.
 
 ---
 
-## Später: Fly.io / eigene Domain
+## Später: Render / eigene Domain
 
 Wenn du echte Nutzer und 24/7-Betrieb willst → [DEPLOY.md](./DEPLOY.md)
-
-Fly.io hat ein **kostenloses Kontingent** (nicht sofort kostenpflichtig), aber Render/Cloudflare reichen für den Start.

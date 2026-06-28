@@ -1426,6 +1426,18 @@
       min-height: 1.1rem;
     }
     .field-error:empty { display: none; }
+    .auth-success-banner {
+      background: var(--success-soft);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--success);
+      border-radius: var(--radius);
+      padding: 0.85rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      line-height: 1.45;
+      margin: 0 0 0.75rem;
+      text-align: left;
+    }
     .auth-card {
       text-align: center;
       padding: 2rem 1.25rem;
@@ -2166,6 +2178,7 @@
       <p class="auth-hint">Gib deine E-Mail ein — falls ein Konto existiert, senden wir dir einen Link zum Zurücksetzen (1 Stunde gültig).</p>
       <input id="forgot-email" type="email" placeholder="E-Mail" autocomplete="email" inputmode="email" aria-describedby="forgot-email-error" />
       <span id="forgot-email-error" class="field-error" role="alert"></span>
+      <p id="forgot-success-banner" class="auth-success-banner hidden" role="status" aria-live="polite"></p>
       <button type="button" class="link-btn auth-back-link" id="auth-forgot-back">← Zurück zur Anmeldung</button>
     </div>
     <div id="auth-reset-panel" class="hidden">
@@ -4966,6 +4979,17 @@
     let authMode = 'login';
     let authInFlight = false;
     let pendingResetToken = null;
+    let forgotSuccessTimer = null;
+    const FORGOT_SUCCESS_MSG = 'Falls ein Konto mit dieser E-Mail existiert, haben wir dir einen Link zum Zurücksetzen geschickt. Prüfe dein Postfach (auch Spam).';
+
+    function clearForgotSuccessState() {
+      if (forgotSuccessTimer) {
+        clearTimeout(forgotSuccessTimer);
+        forgotSuccessTimer = null;
+      }
+      document.getElementById('forgot-success-banner')?.classList.add('hidden');
+      document.getElementById('forgot-email')?.removeAttribute('disabled');
+    }
 
     function setAuthMode(mode) {
       if (mode === 'register') authMode = 'register';
@@ -4988,6 +5012,7 @@
       document.getElementById('auth-forgot-wrap')?.classList.toggle('hidden', !isLogin);
       document.getElementById('auth-forgot-panel')?.classList.toggle('hidden', !isForgot);
       document.getElementById('auth-reset-panel')?.classList.toggle('hidden', !isReset);
+      if (!isForgot) clearForgotSuccessState();
 
       const hint = document.getElementById('auth-hint');
       if (hint) {
@@ -5082,7 +5107,7 @@
     }
 
     async function doForgotPassword() {
-      if (authInFlight) return;
+      if (authInFlight || forgotSuccessTimer) return;
       const email = document.getElementById('forgot-email')?.value.trim() || '';
       const emailErr = document.getElementById('forgot-email-error');
       if (emailErr) emailErr.textContent = '';
@@ -5100,8 +5125,19 @@
           method: 'POST',
           body: JSON.stringify({ email }),
         });
-        showSuccess('Falls ein Konto existiert, haben wir dir einen Link gesendet. Prüfe dein Postfach.');
-        setAuthMode('login');
+        const banner = document.getElementById('forgot-success-banner');
+        if (banner) {
+          banner.textContent = FORGOT_SUCCESS_MSG;
+          banner.classList.remove('hidden');
+        }
+        document.getElementById('forgot-email')?.setAttribute('disabled', 'true');
+        if (btn) btn.disabled = true;
+        showSuccessCelebration(FORGOT_SUCCESS_MSG, false);
+        forgotSuccessTimer = setTimeout(() => {
+          forgotSuccessTimer = null;
+          clearForgotSuccessState();
+          setAuthMode('login');
+        }, 4000);
       } catch (e) {
         showError(e.message || 'Anfrage fehlgeschlagen');
       } finally {
@@ -5313,7 +5349,7 @@
       const btn = document.getElementById('auth-submit-btn');
       const hint = document.getElementById('register-terms-hint');
       if (authMode === 'login' || authMode === 'forgot' || authMode === 'reset') {
-        if (btn && !authInFlight) {
+        if (btn && !authInFlight && !forgotSuccessTimer) {
           btn.disabled = false;
           btn.removeAttribute('aria-disabled');
           btn.classList.remove('btn-pending-terms');

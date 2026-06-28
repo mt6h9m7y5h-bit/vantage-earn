@@ -2266,6 +2266,10 @@
       text-align: center;
       line-height: 1.45;
     }
+    .calc-pace-example-note {
+      margin: 0.35rem 0 0;
+      text-align: center;
+    }
     .combo-hint-card {
       margin-bottom: 0.75rem;
       padding: 0.85rem 1rem;
@@ -2473,7 +2477,7 @@
           </section>
           <section class="card payout-milestones-card" id="payout-milestones-card" aria-labelledby="payout-milestones-title">
             <h2 class="section-title" id="payout-milestones-title">Auszahlungs-Meilensteine</h2>
-            <p class="payout-hint">Fortschritt Richtung 170&nbsp;€ Mindestauszahlung — jedes Ziel bringt dich näher zur Auszahlung.</p>
+            <p class="payout-hint">Zeigt deinen aktuellen Guthabenstand auf dem Weg zur Mindestauszahlung (170&nbsp;€) — keine Garantie für künftige Einnahmen.</p>
             <div class="payout-timeline" id="payout-milestones-timeline" role="list" aria-label="Auszahlungs-Meilensteine">
               <div class="timeline-step" data-milestone="5" role="listitem">5&nbsp;€</div>
               <div class="timeline-step" data-milestone="20" role="listitem">20&nbsp;€</div>
@@ -2544,7 +2548,7 @@
           </section>
           <section class="card combo-hint-card" aria-label="Tages-Tipp">
             <p class="combo-hint-label">Tages-Tipp</p>
-            <p><strong>2 Offerwall-Tasks + 10 Videos</strong> = bestes Tempo Richtung Auszahlung — Videos für Streak, Offerwall für den größeren Sprung.</p>
+            <p><strong>2 Offerwall-Tasks + 10 Videos</strong> können ein effektives Tempo sein — Videos für Streak, Offerwall für den größeren Sprung. <span class="payout-hint" style="display:block;margin:0.35rem 0 0;">(Schätzung, kein garantierter Verdienst)</span></p>
           </section>
           <section class="card earnings-calc" id="earnings-calculator" aria-labelledby="earnings-calc-title">
             <h2 class="section-title" id="earnings-calc-title">Verdienst-Rechner</h2>
@@ -2571,7 +2575,8 @@
               </div>
             </div>
             <p class="calc-pace-highlight" id="calc-weeks-to-goal" role="status">Bei diesem Tempo: —</p>
-            <p class="calc-disclaimer muted">Schätzung, keine Garantie. Offerwall-Einnahmen hängen von Verfügbarkeit und Abschlussrate ab. Streak-Boni und Aktionen nicht eingerechnet.</p>
+            <p class="payout-hint calc-pace-example-note">Beispielrechnung, kein Versprechen</p>
+            <p class="calc-disclaimer muted">Reine Beispielrechnung — kein Versprechen und keine Garantie auf künftige Einnahmen. Tatsächliche Beträge hängen von Verfügbarkeit, Abschlussrate und Angeboten ab. Streak-Boni und Aktionen sind nicht eingerechnet.</p>
           </section>
         </section>
 
@@ -2587,6 +2592,7 @@
             </div>
             <div class="local" id="wallet-local">≈ 0 EUR</div>
             <div class="wallet-milestone-strip" id="wallet-milestone-strip">
+              <p class="payout-hint" style="margin:0 0 0.5rem;">Aktueller Guthabenstand — keine Garantie für künftige Einnahmen.</p>
               <div class="payout-timeline" id="wallet-milestones-timeline" role="list" aria-label="Auszahlungs-Meilensteine">
                 <div class="timeline-step" data-milestone="5" role="listitem">5&nbsp;€</div>
                 <div class="timeline-step" data-milestone="20" role="listitem">20&nbsp;€</div>
@@ -3171,7 +3177,7 @@
       }
       if (weeksEl) {
         weeksEl.textContent = dailyEur > 0
-          ? 'Bei diesem Tempo: ' + formatWeeksEstimate(weeksToGoal) + ' bis 170 € Auszahlung'
+          ? 'Bei diesem Tempo (Beispiel): ' + formatWeeksEstimate(weeksToGoal) + ' bis 170 € Mindestauszahlung'
           : 'Bei diesem Tempo: — (mindestens 1 Video oder 1 Offerwall-Task nötig)';
       }
     }
